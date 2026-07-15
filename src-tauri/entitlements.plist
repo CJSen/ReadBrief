@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- 预留:notarization 所需。应用沙箱在未启用 App Sandbox 时不需要以下键,
+         如需沙箱可开启,划词(读取其他 App)需关闭沙箱或申请特殊 entitlement。 -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+</dict>
+</plist>
