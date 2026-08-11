@@ -1,0 +1,2574 @@
+/* ============================================================
+   ReadBrief 页面布局样式 —— 严格对应 docs/03-设计/ui-mockups.html
+   ============================================================ */
+
+/* ============================================================
+   浮窗(AppFloat)—— 设计稿 §4 总结结果浮窗
+   ============================================================ */
+.float-root {
+  height: 100vh;
+  padding: 0;
+  background: transparent;
+}
+
+.rb-float.win {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--rb-radius-xl);
+}
+
+.rb-float-tbar {
+  flex-shrink: 0;
+  cursor: grab;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.rb-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.rb-status-brand { background: var(--rb-brand-500); animation: rb-pulse 1.4s ease-in-out infinite; }
+.rb-status-success { background: var(--rb-success); }
+.rb-status-error { background: var(--rb-error); }
+
+.rb-tbar-actions {
+  display: flex;
+  gap: 4px;
+}
+
+/* 钉住启用态:品牌色 + 完全填充,状态明显 */
+.rb-pinned {
+  color: var(--rb-brand-600);
+  fill: currentColor;
+}
+
+/* 总结耗时读秒:浅灰色,等宽数字避免跳动;显示在 AI 展示区右上角,不随内容滚动 */
+.rb-elapsed {
+  position: absolute;
+  top: 8px;
+  right: 18px;
+  z-index: 1;
+  pointer-events: none;
+  font-size: 11px;
+  color: var(--rb-text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 上半段 划词/输入区 */
+.rb-region {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--rb-border-subtle);
+  padding: 12px 16px 10px;
+  background: var(--rb-bg-sunken);
+  flex-shrink: 0;
+}
+
+.rb-region-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.rb-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+  background: var(--rb-marker-400);
+  flex: none;
+}
+
+.rb-region-title {
+  font-size: var(--rb-text-xs);
+  color: var(--rb-marker-600);
+  font-weight: var(--rb-weight-medium);
+  letter-spacing: var(--rb-tracking-wide);
+}
+
+.rb-region-extra {
+  margin-left: auto;
+  font-size: var(--rb-text-2xs);
+  color: var(--rb-text-tertiary);
+}
+
+/* 输入框形态 */
+.rb-input {
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+  padding: 9px 11px;
+  border-radius: var(--rb-radius-sm);
+  border: 1px solid var(--rb-border-default);
+  background: var(--rb-bg-surface);
+  color: var(--rb-text-primary);
+  font: inherit;
+  font-size: var(--rb-text-sm);
+  line-height: 1.6;
+  transition: all var(--rb-duration-fast) var(--rb-ease-out);
+}
+
+.rb-input:focus {
+  outline: none;
+  border-color: var(--rb-border-focus);
+  box-shadow: var(--rb-shadow-focus);
+}
+
+.rb-input::placeholder {
+  color: var(--rb-text-tertiary);
+}
+
+.rb-input-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+
+.rb-region-min {
+  font-size: var(--rb-text-2xs);
+  color: var(--rb-text-tertiary);
+}
+
+/* 下半段 AI 输出区:内容区滚动 + 操作栏沉底 */
+.rb-float-output {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 18px 0;
+  /* 供耗时读秒 absolute 定位 */
+  position: relative;
+}
+
+.rb-float-output-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* 流式态 */
+.rb-streaming {
+  display: flex;
+  flex-direction: column;
+}
+
+.rb-stream-title {
+  font-size: var(--rb-text-lg);
+  font-weight: var(--rb-weight-semibold);
+  line-height: 1.5;
+  margin-bottom: 13px;
+}
+
+.rb-output-text {
+  font-size: var(--rb-text-md);
+  line-height: var(--rb-leading-reading);
+  color: var(--rb-text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.rb-stream-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 15px;
+  background: var(--rb-brand-600);
+  vertical-align: -3px;
+  margin-left: 1px;
+  animation: rb-blink 1s step-end infinite;
+}
+
+.rb-skeleton {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rb-skeleton div {
+  height: 11px;
+  border-radius: 4px;
+  background: var(--rb-bg-sunken);
+}
+
+.rb-stream-footer {
+  margin-top: 16px;
+  padding-top: 13px;
+  border-top: 1px solid var(--rb-border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* 完成态 */
+.rb-done {
+  display: flex;
+  flex-direction: column;
+}
+
+.rb-points {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  font-size: var(--rb-text-md);
+  line-height: 1.7;
+}
+
+.rb-point {
+  display: flex;
+  gap: 8px;
+}
+
+.rb-point-num {
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: var(--rb-bg-sunken);
+  color: var(--rb-text-secondary);
+  font-size: 10px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  margin-top: 3px;
+  font-family: var(--rb-font-mono);
+}
+
+.rb-float-actions {
+  flex: none;
+  margin: 12px -18px 0;
+  padding: 10px 18px;
+  background: var(--rb-bg-sunken);
+  border-top: 1px solid var(--rb-border-subtle);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 操作栏按钮禁用态 */
+.rb-float-actions .btn:disabled,
+.rb-float-actions .iconbtn:disabled {
+  opacity: 0.45;
+  cursor: default;
+  pointer-events: none;
+}
+
+/* 错误态 */
+.rb-error {
+  display: flex;
+  flex-direction: column;
+}
+
+.rb-error-card {
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  background: var(--rb-error-bg);
+  border: 1px solid var(--rb-error-border);
+  border-radius: var(--rb-radius-md);
+  font-size: var(--rb-text-sm);
+}
+
+.rb-error-detail {
+  font-size: var(--rb-text-xs);
+  color: var(--rb-error);
+  opacity: 0.9;
+  line-height: 1.65;
+}
+
+.rb-error-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 13px;
+}
+
+.rb-error-legend {
+  margin-top: 16px;
+  padding-top: 13px;
+  border-top: 1px solid var(--rb-border-subtle);
+  font-size: var(--rb-text-xs);
+  line-height: 1.8;
+  color: var(--rb-text-secondary);
+}
+
+.rb-error-legend > div {
+  display: flex;
+  gap: 6px;
+}
+
+.rb-idle-hint {
+  padding: var(--rb-space-8) var(--rb-space-6);
+  text-align: center;
+  color: var(--rb-text-tertiary);
+  font-size: var(--rb-text-sm);
+}
+
+@keyframes rb-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+@keyframes rb-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* ============================================================
+   主窗口历史(AppMain)—— 设计稿 §5 三栏布局
+   ============================================================ */
+.rb-history-layout {
+  display: flex;
+  height: 100vh;
+  background: var(--rb-bg-app);
+}
+
+/* 左侧导航 208px */
+.rb-sidebar {
+  width: 208px;
+  flex: none;
+  border-right: 1px solid var(--rb-border-subtle);
+  background: var(--rb-bg-sunken);
+  display: flex;
+  flex-direction: column;
+  padding: 10px 8px;
+}
+
+.rb-sidebar-brand {
+  padding: 5px 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: var(--rb-weight-semibold);
+  font-size: var(--rb-text-md);
+}
+
+.rb-logo-mark {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: var(--rb-brand-600);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.rb-logo-icon {
+  color: var(--rb-text-inverse);
+  width: 14px;
+  height: 14px;
+}
+
+.rb-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.rb-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 9px;
+  border-radius: var(--rb-radius-sm);
+  color: var(--rb-text-secondary);
+  cursor: pointer;
+  font-size: var(--rb-text-sm);
+  transition: background var(--rb-duration-instant) var(--rb-ease-out);
+}
+
+.rb-nav-item:hover {
+  background: var(--rb-bg-hover);
+}
+
+.rb-nav-item.active {
+  background: var(--rb-bg-selected);
+  color: var(--rb-text-brand);
+  font-weight: var(--rb-weight-medium);
+}
+
+.rb-nav-count {
+  margin-left: auto;
+  font-size: var(--rb-text-2xs);
+  font-family: var(--rb-font-mono);
+  opacity: 0.7;
+}
+
+.rb-nav-kbd {
+  margin-left: auto;
+  font-family: var(--rb-font-mono);
+  font-size: 10px;
+  opacity: 0.6;
+}
+
+.rb-nav-section {
+  margin-top: 16px;
+  padding: 0 9px 7px;
+  font-size: 11px;
+  color: var(--rb-text-secondary);
+  letter-spacing: var(--rb-tracking-wide);
+  font-weight: 500;
+}
+
+.rb-tag-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  flex: none;
+}
+
+.rb-tag-dot-brand { background: var(--rb-brand-400); }
+.rb-tag-dot-marker { background: var(--rb-marker-400); }
+
+/* 标签列表:固定高度滚动(不随标签数量伸缩),超出滚动 */
+.rb-tag-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  height: 250px;
+  overflow-y: auto;
+  padding-right: 1px;
+  flex: none;
+}
+
+.rb-tag-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+
+.rb-tag-scroll::-webkit-scrollbar-thumb {
+  background: var(--rb-neutral-300);
+  border-radius: 5px;
+}
+
+.rb-tag-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--rb-neutral-400);
+}
+
+.rb-tag-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 标签行:29px 高,行尾 编辑+x 删除(半透明, hover 变实) */
+.rb-tag-nav-item {
+  height: 29px;
+  position: relative;
+  flex: none;
+}
+
+.rb-tag-del {
+  width: 16px;
+  height: 16px;
+  margin-left: auto;
+  opacity: 0.45;
+  flex: none;
+}
+
+.rb-tag-del:hover {
+  opacity: 1;
+}
+
+.rb-tag-edit {
+  margin-left: 0;
+}
+
+/* 删除二次确认浮层:fixed 渲染于 body,滚动容器 overflow 不裁剪 */
+.rb-confirm-fixed {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 100;
+  width: 168px;
+  padding: 8px;
+}
+
+.rb-confirm-msg {
+  font-size: var(--rb-text-xs);
+  color: var(--rb-text-secondary);
+  line-height: 1.6;
+  margin-bottom: 8px;
+}
+
+.rb-confirm-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.rb-confirm-del {
+  background: var(--rb-error);
+  color: #fff;
+  border: none;
+  height: 24px;
+  padding: 0 10px;
+}
+
+.rb-confirm-cancel {
+  height: 24px;
+  padding: 0 10px;
+}
+
+.rb-sidebar-footer {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.rb-pro-card {
+  background: var(--rb-bg-surface);
+  border: 1px solid var(--rb-border-default);
+  border-radius: var(--rb-radius-md);
+  padding: 11px 12px;
+  margin-bottom: 8px;
+}
+
+.rb-pro-desc {
+  font-size: var(--rb-text-xs);
+  color: var(--rb-text-secondary);
+  line-height: 1.6;
+  margin: 5px 0 9px;
+}
+
+.rb-pro-btn {
+  width: 100%;
+}
+
+/* 中间列表 296px */
+.rb-list-col {
+  width: 296px;
+  flex: none;
+  border-right: 1px solid var(--rb-border-subtle);
+  display: flex;
+  flex-direction: column;
+}
+
+.rb-list-toolbar {
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--rb-border-subtle);
+}
+
+.rb-search-wrap {
+  position: relative;
+}
+
+.rb-search-icon {
+  position: absolute;
+  left: 9px;
+  top: 9px;
+  color: var(--rb-text-tertiary);
+}
+
+.inp.rb-search-input {
+  padding-left: 29px;
+  padding-right: 28px;
+  height: 30px;
+  background: var(--rb-bg-sunken);
+}
+
+/* 搜索框右侧清空按钮:有输入时才出现,点击清空关键词 */
+.rb-search-clear {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  color: var(--rb-text-tertiary);
+  opacity: 0.75;
+  flex: none;
+}
+
+.rb-search-clear:hover {
+  color: var(--rb-text-primary);
+  opacity: 1;
+}
+
+.rb-search-clear .ic {
+  width: 11px;
+  height: 11px;
+}
+
+.rb-seg {
+  margin-top: 9px;
+  width: 100%;
+}
+
+.rb-seg span {
+  flex: 1;
+  text-align: center;
+}
+
+.rb-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* 历史列表「回到顶部」浮动按钮:固定悬浮于列表右下角,对所有时间筛选(全部/今天/本周)生效
+   锚定 .rb-list-col(cancel 默认固态),不随列表内滚动而移动 */
+.rb-list-col {
+  position: relative;
+}
+
+.rb-totop {
+  position: absolute;
+  right: var(--rb-space-5);
+  bottom: var(--rb-space-5);
+  width: 36px;
+  height: 36px;
+  border-radius: var(--rb-radius-full);
+  border: 1px solid var(--rb-border-subtle);
+  background: var(--rb-bg-surface);
+  color: var(--rb-text-brand);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  box-shadow: var(--rb-shadow-lg);
+  z-index: var(--rb-z-sticky);
+  transition:
+    transform var(--rb-duration-fast) var(--rb-ease-out),
+    box-shadow var(--rb-duration-fast) var(--rb-ease-out),
+    background var(--rb-duration-fast) var(--rb-ease-out),
+    color var(--rb-duration-fast) var(--rb-ease-out);
+}
+
+.rb-totop:hover {
+  background: var(--rb-bg-selected);
+  color: var(--rb-brand-700);
+  box-shadow: var(--rb-shadow-float);
+  transform: translateY(-2px);
+}
+
+.rb-totop:active {
+  transform: translateY(0);
+  box-shadow: var(--rb-shadow-md);
+}
+
+.rb-totop .ic {
+  width: var(--rb-icon-md);
+  height: var(--rb-icon-md);
+}
+
+/* 触屏设备:放大到 44px 最小可点区(遵循 tokens 契约,组件无需感知) */
+@media (pointer: coarse) {
+  .rb-totop {
+    width: var(--rb-control-touch);
+    height: var(--rb-control-touch);
+  }
+}
+
+.rb-list-more {
+  padding: 10px 0 14px;
+  text-align: center;
+  font-size: var(--rb-text-2xs);
+  color: var(--rb-text-tertiary);
+}
+
+.rb-list-card {
+  margin: 0 8px;
+  padding: 10px 11px;
+  border-radius: var(--rb-radius-md);
+  cursor: pointer;
+}
+
+.rb-list-card:hover {
+  background: var(--rb-bg-hover);
+}
+
+.rb-list-card.selected {
+  background: var(--rb-bg-selected);
+  border: 1px solid var(--rb-brand-200);
+  margin: 0 8px;
+  padding: 9px 10px;
+}
+
+.rb-list-card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.rb-list-title {
+  font-size: var(--rb-text-sm);
+  font-weight: 500;
+  line-height: 1.4;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rb-star {
+  color: var(--rb-marker-500);
+  fill: var(--rb-marker-300);
+  flex: none;
+}
+
+/* 未收藏态:灰色描边星(列表项收藏常显) */
+.rb-star-off {
+  color: var(--rb-text-tertiary);
+  flex: none;
+}
+
+/* 列表卡片右上角操作:收藏常显 + 快捷删除(默认弱色,悬停增强;删除悬停变红) */
+.rb-list-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+
+.rb-list-card-actions .iconbtn {
+  width: 22px;
+  height: 22px;
+  color: var(--rb-text-tertiary);
+}
+
+.rb-list-card-actions .iconbtn:hover {
+  color: var(--rb-text-secondary);
+}
+
+.rb-list-card-actions .rb-list-trash:hover {
+  color: var(--rb-error);
+}
+
+.rb-list-summary {
+  font-size: var(--rb-text-xs);
+  color: var(--rb-text-secondary);
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.rb-list-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 7px;
+  font-size: 11px;
+  color: var(--rb-text-secondary);
+}
+
+.rb-meta-dot {
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: var(--rb-neutral-400);
+}
+
+.rb-list-tag {
+  margin-left: auto;
+  height: 17px;
+}
+
+.rb-empty-list {
+  padding: var(--rb-space-10) var(--rb-space-6);
+  text-align: center;
+  color: var(--rb-text-tertiary);
+  font-size: var(--rb-text-sm);
+}
+
+/* 右侧详情 */
+.rb-detail-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.rb-detail-head {
+  padding: 13px 20px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rb-detail-model {
+  font-size: var(--rb-text-xs);
+}
+
+/* 顶栏第二行标签：小号字 + 底部色块，可多个 */
+.rb-detail-tags-row {
+  padding: 8px 20px 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  flex-wrap: wrap;
+}
+
+/* 浮窗操作栏:已选标签显示在标签功能前方(小号字 + 底部色块) */
+.rb-float-selected-tags {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-right: 2px;
+}
+
+.rb-tag-under {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 10px;
+  line-height: 1.3;
+  cursor: pointer;
+  user-select: none;
+}
+
+.rb-tag-under-dot {
+  display: block;
+  height: 2.5px;
+  border-radius: 2px;
+}
+
+.rb-detail-tag-add {
+  width: 22px;
+  height: 22px;
+  border: 1px dashed var(--rb-border-strong);
+  border-radius: var(--rb-radius-xs);
+}
+
+/* 通用浮层（创建标签 / 添加标签） */
+.rb-popover {
+  position: absolute;
+  padding: 7px;
+  background: var(--rb-bg-raised);
+  border: 1px solid var(--rb-border-default);
+  border-radius: var(--rb-radius-md);
+  box-shadow: var(--rb-shadow-float);
+  z-index: 6;
+}
+
+.rb-popover-title {
+  font-size: var(--rb-text-2xs);
+  color: var(--rb-text-tertiary);
+  padding: 3px 8px 6px;
+  letter-spacing: var(--rb-tracking-wide);
+}
+
+/* 左侧导航「标签」标题行:标题 + 搜索框 + 创建按钮 */
+.rb-nav-section-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rb-nav-section-label {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rb-tag-sel-count {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: var(--rb-brand-600, #6366f1);
+  background: var(--rb-brand-100, #eef2ff);
+}
+
+.rb-nav-section-add {
+  width: 20px;
+  height: 20px;
+  opacity: 0.75;
+}
+
+.rb-nav-section-add:hover {
+  opacity: 1;
+}
+
+/* 标签搜索框 */
+.rb-tag-search {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.rb-tag-search-icon {
+  position: absolute;
+  left: 8px;
+  top: 6px;
+  color: var(--rb-text-tertiary);
+  pointer-events: none;
+}
+
+.inp.rb-tag-search-input {
+  width: 100%;
+  height: 24px;
+  font-size: 11px;
+  padding-left: 24px;
+  padding-right: 24px;
+  background: var(--rb-bg-sunken);
+}
+
+/* 创建标签浮层:从按钮左缘向下展开,避免 right 定位向左溢出窗口被裁剪 */
+.rb-create-tag {
+  top: 24px;
+  left: 0;
+  right: auto;
+  width: 224px;
+}
+
+/* 标签编辑器(创建/编辑):fixed 渲染于 body,滚动容器 overflow 不裁剪 */
+.rb-editor-fixed {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 100;
+  width: 224px;
+}
+
+/* 浮层头部:标题 + 右上角 x 关闭 */
+.rb-create-tag-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1px 1px 5px 8px;
+}
+
+.rb-create-tag-head .rb-popover-title {
+  padding: 0;
+}
+
+.rb-create-tag-close {
+  width: 18px;
+  height: 18px;
+  opacity: 0.75;
+}
+
+.rb-create-tag-close:hover {
+  opacity: 1;
+}
+
+.inp.rb-create-tag-name {
+  height: 28px;
+  font-size: 12px;
+  margin-bottom: 2px;
+}
+
+.rb-create-tag-color-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px 5px;
+}
+
+.rb-color-label {
+  font-size: var(--rb-text-2xs);
+  color: var(--rb-text-secondary);
+  flex: none;
+}
+
+.rb-color-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  flex: none;
+  box-sizing: border-box;
+}
+
+.rb-color-swatch.on {
+  border: 2px solid var(--rb-brand-600);
+}
+
+.rb-create-tag-palette {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+  padding: 0 8px 7px;
+}
+
+.rb-create-tag-palette .rb-color-swatch {
+  width: 100%;
+  height: 16px;
+}
+
+.rb-hue-bar {
+  position: relative;
+  height: 10px;
+  margin: 0 8px 8px;
+  border-radius: 5px;
+  background: linear-gradient(90deg, #EF4444, #F97316, #FACC15, #22C55E, #06B6D4, #3B82F6, #8B5CF6, #EC4899, #EF4444);
+  cursor: pointer;
+}
+
+.rb-hue-thumb {
+  position: absolute;
+  top: -2.5px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--rb-brand-600);
+  box-shadow: var(--rb-shadow-sm);
+  pointer-events: none;
+}
+
+.rb-create-tag-hex {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px 4px;
+}
+
+.inp.rb-hex-input {
+  flex: 1;
+  height: 26px;
+  font-size: 11px;
+  font-family: var(--rb-font-mono);
+}
+
+.rb-color-preview {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1px solid var(--rb-border-default);
+  flex: none;
+}
+
+/* 添加标签浮层 */
+.rb-tag-picker {
+  top: 26px;
+  left: 0;
+  width: 216px;
+}
+
+/* 浮层头部:标题 + 右上角 x 关闭(与左侧「新建标签」浮层同一套样式) */
+.rb-tag-picker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1px 1px 5px 8px;
+}
+
+.rb-tag-picker-head .rb-popover-title {
+  padding: 0;
+}
+
+/* 浮层头部:标签搜索框 + 关闭按钮(替代原标题行,方便查找标签) */
+.rb-tag-picker-search {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 1px 6px 6px;
+}
+
+.rb-tag-picker-search .rb-create-tag-close {
+  flex: none;
+}
+
+/* 标签列表:高度封顶 196px,内部细滚动(复用 .rb-tag-scroll 滚动条样式) */
+.rb-tag-picker-list {
+  max-height: 196px;
+  overflow-y: auto;
+  padding-right: 1px;
+}
+
+.rb-tag-picker-list::-webkit-scrollbar {
+  width: 5px;
+}
+
+.rb-tag-picker-list::-webkit-scrollbar-thumb {
+  background: var(--rb-neutral-300);
+  border-radius: 5px;
+}
+
+.rb-tag-picker-list::-webkit-scrollbar-thumb:hover {
+  background: var(--rb-neutral-400);
+}
+
+.rb-tag-picker-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.rb-tag-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 9px;
+  border-radius: var(--rb-radius-sm);
+  cursor: pointer;
+  font-size: var(--rb-text-sm);
+}
+
+.rb-tag-picker-item:hover {
+  background: var(--rb-bg-hover);
+}
+
+.rb-tag-picker-item.on {
+  color: var(--rb-brand-600);
+}
+
+.rb-tag-picker-item.disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.rb-tag-picker-item.disabled:hover {
+  background: transparent;
+}
+
+.rb-tag-limit {
+  float: right;
+  color: var(--rb-text-tertiary);
+  font-weight: 400;
+}
+
+.rb-tag-picker-new {
+  padding: 6px 2px 1px;
+  border-top: 1px solid var(--rb-border-subtle);
+  margin-top: 4px;
+}
+
+.rb-tag-picker-new .inp {
+  height: 28px;
+  font-size: 12px;
+}
+
+/* 浮窗操作栏内的标签浮层:操作栏沉底,向下展开会超出窗口 → 向上展开 + 右对齐按钮 */
+.rb-tag-picker-up {
+  top: auto;
+  left: auto;
+  right: 0;
+  bottom: 34px;
+}
+
+.rb-detail-head-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+}
+
+.rb-detail-body {
+  flex: 2;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 20px 16px;
+}
+
+.rb-detail-h3 {
+  font-size: var(--rb-text-2xl);
+  font-weight: 600;
+  line-height: 1.4;
+  margin: 0 0 14px;
+}
+
+/* 下方 1/3：原文固定高度，滚动浏览，右上角复制 */
+.rb-original {
+  flex: 1;
+  min-height: 0;
+  border-top: 1px solid var(--rb-border-subtle);
+  background: var(--rb-bg-sunken);
+  display: flex;
+  flex-direction: column;
+}
+
+.rb-original-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 14px 0;
+  flex: none;
+  font-size: var(--rb-text-xs);
+  color: var(--rb-text-secondary);
+  font-weight: 500;
+}
+
+.rb-original-label .iconbtn {
+  margin-left: auto;
+  width: 22px;
+  height: 22px;
+}
+
+.rb-original-text {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 14px 12px;
+  font-size: var(--rb-text-sm);
+  line-height: 1.8;
+  color: var(--rb-text-secondary);
+}
+
+/* ============================================================
+   设置中心(AppSettings)—— 设计稿 §7
+   ============================================================ */
+.rb-settings-layout {
+  display: flex;
+  height: 100vh;
+  background: var(--rb-bg-app);
+}
+
+.rb-settings-nav {
+  width: 180px;
+  flex: none;
+  border-right: 1px solid var(--rb-border-subtle);
+  background: var(--rb-bg-sunken);
+  padding: 10px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.rb-settings-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 31px;
+  padding: 0 9px;
+  border-radius: var(--rb-radius-sm);
+  color: var(--rb-text-secondary);
+  cursor: pointer;
+  font-size: var(--rb-text-sm);
+}
+
+.rb-settings-nav-item:hover {
+  background: var(--rb-bg-hover);
+}
+
+.rb-settings-nav-item.active {
+  background: var(--rb-bg-selected);
+  color: var(--rb-text-brand);
+  font-weight: 500;
+}
+
+.rb-nav-pro-tag {
+  margin-left: auto;
+  height: 16px;
+}
+
+.rb-settings-content {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 20px 24px;
+}
+
+.rb-settings-head {
+  margin-bottom: 16px;
+}
+
+.rb-settings-title {
+  font-size: var(--rb-text-2xl);
+  font-weight: 600;
+  margin-bottom: 3px;
+}
+
+.rb-settings-subtitle {
+  font-size: var(--rb-text-xs);
+}
+
+.rb-protocol-tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--rb-border-default);
+  margin-bottom: 18px;
+}
+
+.rb-protocol-tab {
+  padding: 8px 13px;
+  font-size: var(--rb-text-sm);
+  color: var(--rb-text-secondary);
+  cursor: pointer;
+}
+
+.rb-protocol-tab.active {
+  font-weight: 500;
+  color: var(--rb-text-brand);
+  border-bottom: 2px solid var(--rb-brand-600);
+  margin-bottom: -1px;
+}
+
+.rb-protocol-status {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+}
+
+.rb-settings-card {
+  background: var(--rb-bg-surface);
+  border: 1px solid var(--rb-border-default);
+  border-radius: var(--rb-radius-lg);
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+
+.rb-setting-row {
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--rb-border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.rb-setting-row:last-child {
+  border-bottom: none;
+}
+
+.rb-setting-label {
+  min-width: 118px;
+  font-weight: 500;
+}
+
+.rb-setting-hint {
+  font-size: var(--rb-text-2xs);
+  font-weight: 400;
+  margin-left: 8px;
+}
+
+.rb-setting-input {
+  max-width: 330px;
+  width: 100%;
+  font-size: 12px;
+}
+
+/* 通用输入框(弹窗对话等使用) */
+.inp {
+  height: 32px;
+  padding: 0 10px;
+  font-size: var(--rb-text-sm);
+  font-family: var(--rb-font-sans);
+  border: 1px solid var(--rb-border-default);
+  border-radius: var(--rb-radius-sm);
+  background: var(--rb-bg-surface);
+  color: var(--rb-text-primary);
+  outline: none;
+}
+
+.inp:focus {
+  border-color: var(--rb-border-focus);
+  box-shadow: var(--rb-shadow-focus);
+}
+
+.inp::placeholder {
+  color: var(--rb-text-tertiary);
+}
+
+.rb-key-input {
+  max-width: 330px;
+  width: 100%;
+  position: relative;
+}
+
+.rb-key-input .rb-setting-input {
+  padding-right: 34px;
+}
+
+.rb-key-toggle {
+  position: absolute;
+  right: 3px;
+  top: 2px;
+}
+
+.rb-model-row {
+  display: flex;
+  gap: 6px;
+  max-width: 330px;
+  width: 100%;
+}
+
+.rb-model-row .rb-setting-input {
+  max-width: none;
+}
+
+.rb-model-sync {
+  flex: none;
+}
+
+.rb-test-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.rb-tag-err {
+  background: var(--rb-error-bg);
+  color: var(--rb-error);
+}
+
+.rb-reset-btn {
+  margin-left: auto;
+}
+
+.rb-byok-note {
+  background: var(--rb-warning-bg);
+  border: 1px solid var(--rb-warning-border);
+  border-radius: var(--rb-radius-md);
+  padding: 12px 14px;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: var(--rb-text-xs);
+  color: var(--rb-warning);
+  line-height: 1.7;
+}
+
+.rb-save-bar {
+  margin-top: 16px;
+}
+
+/* ============================================================
+   窄屏响应式(设计稿 §9)
+   ============================================================ */
+@media (max-width: 640px) {
+  .rb-history-layout {
+    flex-direction: column;
+  }
+  .rb-sidebar {
+    display: none;
+  }
+  .rb-list-col {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--rb-border-subtle);
+    max-height: 40vh;
+  }
+}
+
+/* ============================================================
+   未配置横幅(设计稿 §8)
+   ============================================================ */
+.rb-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rb-space-6);
+  width: 100%;
+  padding: var(--rb-space-5) var(--rb-space-6);
+  border-radius: var(--rb-radius-md);
+  border: 1px solid transparent;
+  font-size: var(--rb-text-sm);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+
+.rb-banner-warn {
+  background-color: var(--rb-warning-bg);
+  border-color: var(--rb-warning-border);
+  color: var(--rb-warning);
+}
+
+.rb-banner-action {
+  font-weight: var(--rb-weight-semibold);
+  flex-shrink: 0;
+}
+
+.rb-banner-top {
+  margin-bottom: var(--rb-space-6);
+}
+
+.rb-banner-inline {
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+}
+
+/* ============================================================
+   提示词管理(设计稿 §6)
+   ============================================================ */
+.rb-main-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.rb-main-scroll {
+  overflow-y: auto;
+  padding: 20px 24px 24px;
+  background: var(--rb-bg-app);
+}
+
+.rb-prompt-page {
+  display: flex;
+  flex-direction: column;
+}
+
+.rb-prompt-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.rb-prompt-title {
+  font-size: var(--rb-text-2xl);
+  font-weight: 600;
+}
+
+.rb-prompt-subtitle {
+  font-size: var(--rb-text-xs);
+  margin-top: 3px;
+}
+
+.rb-prompt-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.rb-prompt-card {
+  background: var(--rb-bg-surface);
+  border: 1px solid var(--rb-border-default);
+  border-radius: var(--rb-radius-lg);
+  padding: 12px 14px;
+}
+
+.rb-prompt-card.rb-prompt-card-builtin {
+  border-color: var(--rb-brand-200);
+}
+
+.rb-prompt-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+
+.rb-prompt-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--rb-radius-sm);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.rb-prompt-icon-0 { background: var(--rb-brand-50); color: var(--rb-brand-600); }
+.rb-prompt-icon-1 { background: var(--rb-success-bg); color: var(--rb-success); }
+.rb-prompt-icon-2 { background: var(--rb-marker-50); color: var(--rb-marker-600); }
+
+.rb-prompt-name {
+  font-weight: 600;
+  font-size: var(--rb-text-md);
+}
+
+.rb-prompt-preview {
+  font-size: var(--rb-text-xs);
+  color: var(--rb-text-secondary);
+  line-height: 1.7;
+  background: var(--rb-bg-sunken);
+  border-radius: var(--rb-radius-sm);
+  padding: 7px 10px;
+  font-family: var(--rb-font-mono);
+  margin-bottom: 8px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 64px;
+  overflow: hidden;
+}
+
+.rb-prompt-card-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rb-prompt-actions {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+}
+
+/* 付费墙卡片 */
+.rb-prompt-locked {
+  background: var(--rb-bg-surface);
+  border: 1px dashed var(--rb-border-strong);
+  border-radius: var(--rb-radius-lg);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: 132px;
+  gap: 8px;
+}
+
+.rb-prompt-lock-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--rb-marker-50);
+  color: var(--rb-marker-600);
+  display: grid;
+  place-items: center;
+}
+
+/* 新建/编辑表单（内联，不带模型输入） */
+.rb-prompt-editor {
+  background: var(--rb-bg-surface);
+  border: 1px solid var(--rb-border-default);
+  border-radius: var(--rb-radius-lg);
+  padding: 14px 16px;
+  margin-top: 14px;
+  box-shadow: var(--rb-shadow-sm);
+}
+
+.rb-prompt-editor-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 9px;
+  font-weight: 500;
+  font-size: var(--rb-text-sm);
+}
+
+.rb-prompt-editor .inp {
+  width: 100%;
+  margin-bottom: 9px;
+}
+
+.rb-prompt-editor-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rb-prompt-editor-row .inp { margin-bottom: 0; }
+
+
+.rb-prompt-editor-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 9px;
+  font-weight: 500;
+  font-size: var(--rb-text-sm);
+}
+
+.rb-prompt-editor .inp {
+  width: 100%;
+  margin-bottom: 9px;
+}
+
+.rb-prompt-editor-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rb-prompt-editor-row .inp { margin-bottom: 0; }
+
+/* 提示词卡片的快捷键/模型信息行 */
+.rb-prompt-shortcut-info {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 未绑定快捷键标签 */
+.rb-prompt-noshortcut {
+  font-size: 11px;
+  padding: 2px 7px;
+  border: 1px dashed var(--rb-border-strong);
+  border-radius: var(--rb-radius-xs);
+  color: var(--rb-text-secondary);
+}
+
+/* ============================================================
+   设置中心补充(设计稿 §7 其他分类)
+   ============================================================ */
+.rb-shortcut-row {
+  /* 上下结构:第一行名称,第二行描述+录制区+提示词/模型下拉 */
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 11px 15px; /* 对齐设计稿 set-row */
+}
+
+/* 冲突行:整行浅红背景(设计稿) */
+.rb-shortcut-row.rb-conflict {
+  background: var(--rb-error-bg);
+}
+
+/* 快捷键行说明(设计稿 set-row-d:11px 无左偏移) */
+.rb-shortcut-desc {
+  font-size: 11px;
+  color: var(--rb-text-secondary);
+  line-height: 1.5;
+}
+
+.rb-shortcut-name {
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rb-shortcut-combo {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  height: 28px;
+  padding: 0 11px;
+  border: 1.5px solid var(--rb-border-default);
+  border-radius: var(--rb-radius-sm);
+  background: var(--rb-bg-surface);
+}
+
+.rb-recording {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 13px;
+  border: 1.5px solid var(--rb-brand-500);
+  border-radius: var(--rb-radius-sm);
+  background: var(--rb-brand-50);
+  gap: 6px;
+  box-shadow: var(--rb-shadow-focus);
+  font-size: 12px;
+  color: var(--rb-brand-600);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.rb-recording-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--rb-brand-600);
+  animation: rb-pulse 1.2s ease-in-out infinite;
+}
+
+.rb-recording-combo {
+  font-family: var(--rb-font-mono);
+}
+
+.rb-conflict .rb-shortcut-combo {
+  border-color: var(--rb-error);
+}
+
+/* 冲突态:红框胶囊内完整组合文本(设计稿:mono 12px 红) */
+.rb-sc-conflict-text {
+  font-size: 12px;
+  color: var(--rb-error);
+  white-space: nowrap;
+}
+
+.rb-conflict-note {
+  background: var(--rb-error-bg);
+  border-color: var(--rb-error-border);
+  margin-top: 12px;
+}
+
+.rb-sub-page {
+  max-width: 360px;
+}
+
+.rb-sub-card {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+}
+
+.rb-sub-title {
+  font-size: var(--rb-text-xl);
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+.rb-sub-desc {
+  font-size: var(--rb-text-xs);
+  color: var(--rb-text-secondary);
+  line-height: 1.6;
+}
+
+.rb-sub-btn {
+  margin-top: 8px;
+  width: 100%;
+}
+
+/* ---------- 浮窗完成态操作条补充 ---------- */
+.rb-action-kbd {
+  font-family: var(--rb-font-mono);
+  opacity: 0.75;
+  font-size: 10px;
+}
+
+.rb-toast {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--rb-neutral-800);
+  color: var(--rb-text-inverse);
+  border-radius: var(--rb-radius-md);
+  padding: 9px 13px;
+  box-shadow: var(--rb-shadow-lg);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: var(--rb-text-sm);
+  z-index: var(--rb-z-toast);
+  animation: rb-toast-in var(--rb-duration-normal) var(--rb-ease-out);
+}
+
+@keyframes rb-toast-in {
+  from { opacity: 0; transform: translate(-50%, 8px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* ============================================================
+   设置中心 · AI 服务列表(设计稿 §7 新版)
+   ============================================================ */
+.svc-list {
+  background: var(--rb-bg-surface);
+  border: 1px solid var(--rb-border-default);
+  border-radius: var(--rb-radius-lg);
+  overflow: hidden;
+}
+
+.svc-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 13px;
+  border-bottom: 1px solid var(--rb-border-subtle);
+  cursor: pointer;
+  transition: background var(--rb-duration-fast) var(--rb-ease-out);
+}
+
+.svc-row:last-child {
+  border-bottom: none;
+}
+
+.svc-row:hover {
+  background: var(--rb-bg-hover);
+}
+
+.svc-grip {
+  width: 10px;
+  flex: none;
+  color: var(--rb-neutral-300);
+  letter-spacing: -1px;
+  font-size: 11px;
+  line-height: 1;
+  user-select: none;
+  cursor: grab;
+}
+
+.svc-mark {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--rb-font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  background: var(--rb-bg-sunken);
+  color: var(--rb-text-secondary);
+}
+
+.svc-mark.pri {
+  background: var(--rb-brand-50);
+  color: var(--rb-brand-600);
+}
+
+.svc-name {
+  font-weight: 500;
+  font-size: var(--rb-text-sm);
+}
+
+.svc-meta {
+  font-size: 11px;
+  color: var(--rb-text-secondary);
+  margin-top: 3px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.svc-sep {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--rb-neutral-300);
+  flex: none;
+}
+
+.svc-add {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--rb-radius-sm);
+  flex: none;
+  border: 1px solid var(--rb-border-default);
+  background: var(--rb-bg-surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--rb-text-primary);
+  cursor: pointer;
+  transition: all var(--rb-duration-fast) var(--rb-ease-out);
+}
+
+.svc-add:hover {
+  background: var(--rb-bg-hover);
+  border-color: var(--rb-border-strong);
+}
+
+.svc-add.act {
+  background: var(--rb-brand-600);
+  border-color: var(--rb-brand-600);
+  color: var(--rb-text-inverse);
+}
+
+/* 弹窗内下拉浮层(格式/模型共用):绝对定位于触发器下方 */
+.rb-svc-drop,
+.rb-svc-model {
+  position: relative;
+  max-width: 300px;
+  width: 100%;
+}
+
+.rb-svc-drop-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  padding: 5px;
+  background: var(--rb-bg-raised);
+  border: 1px solid var(--rb-border-default);
+  border-radius: var(--rb-radius-md);
+  box-shadow: var(--rb-shadow-float);
+  z-index: 12;
+}
+
+/* 格式下拉选中项高亮 */
+.svc-mi {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 7px 9px;
+  border-radius: var(--rb-radius-sm);
+  cursor: pointer;
+}
+
+.svc-mi:hover {
+  background: var(--rb-bg-hover);
+}
+
+.svc-mi.on {
+  background: var(--rb-bg-hover);
+}
+
+.svc-mi-icon {
+  flex: none;
+  margin-top: 3px;
+  color: var(--rb-text-tertiary);
+}
+
+.svc-mi-t {
+  font-size: var(--rb-text-sm);
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.svc-mi-d {
+  font-size: 11px;
+  color: var(--rb-text-secondary);
+  margin-top: 2px;
+  line-height: 1.4;
+}
+
+/* 模型组合框:输入框 + 右侧下拉箭头 + 下拉列表 */
+.rb-svc-model-input {
+  padding-right: 32px;
+  font-size: 12px;
+}
+
+.rb-svc-model-caret {
+  position: absolute;
+  right: 4px;
+  top: 2px;
+  color: var(--rb-text-tertiary);
+}
+
+.rb-svc-model-menu {
+  /* 定位由 portal + inline style 控制(fixed),本类只含外观与内部滚动 */
+  padding: 4px;
+  /* 最多展示约 6 项,多余滚动(细滚动条与 .rb-tag-picker-list 一致) */
+  max-height: 196px;
+  overflow-y: auto;
+  background: var(--rb-bg-raised);
+  border: 1px solid var(--rb-border-default);
+  border-radius: var(--rb-radius-md);
+  box-shadow: var(--rb-shadow-float);
+}
+
+/* portal 到 body 的 fixed 定位:脱离 .rb-svc-form-body 的 overflow 裁剪 */
+.rb-svc-model-menu-fixed {
+  position: fixed;
+  z-index: 400; /* 高于 modal overlay(--rb-z-modal:300) */
+}
+
+/* 加载中:固定占满 6 项高度,避免高度跳动/割裂;内容垂直居中 */
+.rb-svc-model-menu-loading {
+  height: 196px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rb-svc-model-menu::-webkit-scrollbar {
+  width: 5px;
+}
+
+.rb-svc-model-menu::-webkit-scrollbar-thumb {
+  background: var(--rb-neutral-300);
+  border-radius: 5px;
+}
+
+.rb-svc-model-menu::-webkit-scrollbar-thumb:hover {
+  background: var(--rb-neutral-400);
+}
+
+.rb-svc-model-menu::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.rb-svc-model-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--rb-radius-sm);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.rb-svc-model-item:hover {
+  background: var(--rb-bg-hover);
+}
+
+.rb-svc-model-item.on {
+  color: var(--rb-brand-600);
+}
+
+/* 删除服务二次确认:居中卡片(覆盖在 scrim 之上) */
+.rb-svc-confirm {
+  width: 260px;
+  padding: 14px 16px;
+  background: var(--rb-bg-raised);
+  border: 1px solid var(--rb-border-default);
+  border-radius: var(--rb-radius-md);
+  box-shadow: var(--rb-shadow-float);
+}
+
+.rb-svc-save-err {
+  font-size: var(--rb-text-xs);
+  color: var(--rb-error);
+}
+
+.rb-svc-subtitle {
+  font-size: var(--rb-text-xs);
+  margin: 3px 0 14px;
+}
+
+.rb-svc-failed {
+  background: var(--rb-error-bg);
+}
+
+.rb-svc-failed .svc-mark {
+  background: var(--rb-bg-surface);
+  color: var(--rb-error);
+}
+
+.rb-svc-failed .svc-name {
+  color: var(--rb-error);
+}
+
+.rb-svc-failed .svc-meta {
+  color: var(--rb-error);
+}
+
+.rb-svc-failed .svc-sep {
+  background: var(--rb-error);
+}
+
+.rb-svc-failed-tag {
+  background: var(--rb-bg-surface);
+  color: var(--rb-error);
+}
+
+.rb-svc-last {
+  font-size: 11px;
+}
+
+/* 新增/编辑服务表单 */
+.rb-svc-form-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--rb-bg-scrim);
+  z-index: var(--rb-z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.rb-svc-form {
+  width: 498px;
+  max-width: 100%;
+  background: var(--rb-bg-surface);
+  border: 1px solid var(--rb-border-default);
+  border-radius: var(--rb-radius-lg);
+  /* 注意:不能 overflow:hidden —— 弹窗内格式/模型下拉浮层为绝对定位,会被卡片裁掉 */
+  box-shadow: var(--rb-shadow-float);
+}
+
+.rb-svc-form-hd {
+  padding: 12px 15px;
+  border-bottom: 1px solid var(--rb-border-subtle);
+  background: var(--rb-bg-sunken);
+  border-radius: var(--rb-radius-lg) var(--rb-radius-lg) 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.rb-svc-form-mark {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.rb-svc-form-hint {
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.rb-svc-form-body {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.rb-svc-form-foot {
+  padding: 11px 15px;
+  background: var(--rb-bg-sunken);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rb-svc-input {
+  max-width: 300px;
+  width: 100%;
+  font-size: 12px;
+}
+
+.rb-svc-key {
+  position: relative;
+  max-width: 300px;
+  width: 100%;
+}
+
+.rb-svc-key .rb-svc-input {
+  padding-right: 34px;
+}
+
+.rb-pick-chevron {
+  color: var(--rb-text-tertiary);
+}
+
+.rb-row-link-icon {
+  color: var(--rb-text-tertiary);
+}
+
+.rb-font-pct {
+  font-size: 12px;
+  color: var(--rb-text-secondary);
+  min-width: 36px;
+  text-align: center;
+}
+
+.rb-about-logo {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  margin: 0 auto 11px;
+}
+
+/* ============================================================
+   设置中心 · 分组卡片(set-row / set-card / set-pick / set-danger)
+   ============================================================ */
+.set-card-hd {
+  font-size: var(--rb-text-xs);
+  color: var(--rb-text-secondary);
+  font-weight: 500;
+  letter-spacing: var(--rb-tracking-wide);
+  margin: 14px 2px 6px;
+}
+
+.rb-settings-content .set-card-hd:first-child {
+  margin-top: 0;
+}
+
+.set-card {
+  background: var(--rb-bg-surface);
+  border: 1px solid var(--rb-border-default);
+  border-radius: var(--rb-radius-lg);
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.set-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 11px 15px;
+  border-bottom: 1px solid var(--rb-border-subtle);
+}
+
+.set-row:last-child {
+  border-bottom: none;
+}
+
+.set-row-t {
+  font-weight: 500;
+  font-size: var(--rb-text-sm);
+  line-height: 1.35;
+}
+
+.set-row-d {
+  font-size: 11px;
+  color: var(--rb-text-secondary);
+  margin-top: 2px;
+  line-height: 1.5;
+}
+
+.set-row-label {
+  min-width: 112px;
+  font-weight: 500;
+  font-size: var(--rb-text-sm);
+}
+
+.set-pick {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--rb-radius-sm);
+  flex: none;
+  border: 1px solid var(--rb-border-default);
+  background: var(--rb-bg-surface);
+  font-size: 12px;
+  color: var(--rb-text-primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.set-pick:hover {
+  border-color: var(--rb-border-strong);
+  background: var(--rb-bg-hover);
+}
+
+.set-link {
+  font-size: 12px;
+  color: var(--rb-text-brand);
+  cursor: pointer;
+  flex: none;
+}
+
+.set-link:hover {
+  text-decoration: underline;
+}
+
+.set-danger {
+  height: 28px;
+  padding: 0 11px;
+  border-radius: var(--rb-radius-sm);
+  flex: none;
+  border: 1px solid var(--rb-error);
+  background: var(--rb-bg-surface);
+  color: var(--rb-error);
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: inherit;
+}
+
+.set-danger:hover {
+  background: var(--rb-error-bg);
+}
+
+.set-pro {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 0;
+  font-size: var(--rb-text-sm);
+}
+
+/* 输出语言下拉选择 */
+.rb-lang-select-wrap {
+  position: relative;
+  flex: none;
+}
+
+/* 语言卡需允许下拉菜单向下溢出,否则被 .set-card 的 overflow:hidden 裁剪 */
+.set-card--lang {
+  overflow: visible;
+}
+
+.rb-lang-select {
+  height: 28px;
+  min-width: 116px;
+  padding: 0 8px 0 10px;
+  border-radius: var(--rb-radius-sm);
+  border: 1px solid var(--rb-border-default);
+  background: var(--rb-bg-surface);
+  color: var(--rb-text-primary);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.rb-lang-select:hover {
+  border-color: var(--rb-border-strong);
+  background: var(--rb-bg-hover);
+}
+
+.rb-lang-caret {
+  color: var(--rb-text-tertiary);
+  flex: none;
+}
+
+.rb-lang-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 100%;
+  z-index: 20;
+  padding: 4px;
+  background: var(--rb-bg-raised);
+  border: 1px solid var(--rb-border-default);
+  border-radius: var(--rb-radius-md);
+  box-shadow: var(--rb-shadow-float);
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.rb-lang-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--rb-radius-sm);
+  font-size: 12px;
+  color: var(--rb-text-primary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.rb-lang-option:hover {
+  background: var(--rb-bg-hover);
+}
+
+.rb-lang-option.on {
+  color: var(--rb-brand-600);
+}
+
+.rb-lang-option.on .ic {
+  color: var(--rb-brand-600);
+}
+
+/* ============================================================
+   字体缩放覆盖(设置中心「外观与语言」A-/A+)
+   ============================================================ */
+.font-sm {
+  --rb-text-2xs: 10px;
+  --rb-text-xs: 11px;
+  --rb-text-sm: 12px;
+  --rb-text-md: 13px;
+  --rb-text-lg: 14px;
+  --rb-text-xl: 16px;
+  --rb-text-2xl: 17px;
+}
+
+.font-lg {
+  --rb-text-2xs: 12px;
+  --rb-text-xs: 13px;
+  --rb-text-sm: 14px;
+  --rb-text-md: 15px;
+  --rb-text-lg: 16px;
+  --rb-text-xl: 18px;
+  --rb-text-2xl: 20px;
+}
+
+/* 浮窗捕获来源模式标签(划词 / 剪贴板 / 历史) */
+.rb-capture-mode {
+  margin-left: auto;
+}
+
+/* 设置页静态 toast(导出 / 清空结果) */
+.rb-toast-static {
+  position: static;
+  transform: none;
+  margin-top: 12px;
+  display: inline-flex;
+  animation: none;
+}
+
+/* 快捷键页:锁定项置灰(免费额度用尽 / Pro 功能) */
+.rb-locked-row {
+  opacity: 0.55;
+}
+
+/* 快捷键录制区:键盘焦点态(设计稿 §2.5 focus-visible 3px 主色外扩) */
+.rb-recording:focus-visible {
+  outline: 2px solid var(--rb-brand-300);
+  outline-offset: 2px;
+}
+
+/* ─── 通用弹窗(快捷键新增等) ─── */
+.rb-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--rb-bg-scrim);
+  z-index: var(--rb-z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.rb-dialog {
+  width: 420px;
+  max-width: 100%;
+  background: var(--rb-bg-surface);
+  border: 1px solid var(--rb-border-default);
+  border-radius: var(--rb-radius-lg);
+  overflow: hidden;
+  box-shadow: var(--rb-shadow-float);
+}
+
+.rb-dialog-hd {
+  padding: 12px 15px;
+  border-bottom: 1px solid var(--rb-border-subtle);
+  background: var(--rb-bg-sunken);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.rb-dialog-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--rb-radius-sm);
+  background: var(--rb-brand-50);
+  color: var(--rb-brand-600);
+}
+
+.rb-dialog-body {
+  padding: 14px 16px;
+}
+
+.rb-dialog-body .set-row {
+  padding: 8px 0;
+}
+
+.rb-dialog-foot {
+  padding: 11px 15px;
+  background: var(--rb-bg-sunken);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* 快捷键绑定提示词下拉 */
+.rb-sc-prompt-select {
+  height: 28px;
+  padding: 0 24px 0 10px;
+  font-size: 12px;
+  font-family: var(--rb-font-sans);
+  border: 1px solid var(--rb-border-default);
+  border-radius: var(--rb-radius-sm);
+  background: var(--rb-bg-surface);
+  color: var(--rb-text-primary);
+  cursor: pointer;
+  max-width: 140px;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239AA1B1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'%3E%3C/path%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+}
+
+.rb-sc-prompt-select:hover {
+  border-color: var(--rb-border-strong);
+  background-color: var(--rb-bg-hover);
+}
+
+.rb-sc-prompt-select:focus {
+  border-color: var(--rb-border-focus);
+  box-shadow: var(--rb-shadow-focus);
+}
+
+/* AI 服务模型下拉（稍宽） */
+.rb-sc-model-select {
+  max-width: 200px;
+}
+
+/* AI 服务列表:拖动排序中态 */
+.rb-svc-dragging {
+  opacity: 0.4;
+  border-color: var(--rb-brand-500);
+}
+.rb-svc-dragging .svc-grip {
+  cursor: grabbing;
+}
+
+/* 完成态:小标题 + 一次性正文(替代原「结论块 + 编号要点」二次解析,避免重复展示) */
+.rb-summary-title {
+  margin-bottom: 12px;
+  word-break: break-all;
+}
+
+.rb-summary-body {
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding-bottom: 2px;
+}

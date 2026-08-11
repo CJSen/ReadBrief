@@ -1,0 +1,289 @@
+/* ==========================================================================
+   ReadBrief — Design Tokens v1.0
+   划词 AI 总结桌面软件 · Tauri + React
+   所有对比度数值均经过 WCAG 2.1 相对亮度公式实测，标注见注释
+   ========================================================================== */
+
+:root {
+  /* ---------------------------------------------------------------------
+     1. 色彩 · 品牌主色 (Iris) —— 用于主操作、选中态、焦点环、流式光标
+     --------------------------------------------------------------------- */
+  --rb-brand-50:  #F2F2FD;
+  --rb-brand-100: #E4E4FA;
+  --rb-brand-200: #C9C9F4;
+  --rb-brand-300: #A9A9EC;
+  --rb-brand-400: #8383E2;
+  --rb-brand-500: #6262D9;   /* 4.92:1 on white · AA */
+  --rb-brand-600: #4B4BC8;   /* 6.69:1 on white · AA  ← 主按钮底色 / 主文本链接 */
+  --rb-brand-700: #3C3CA6;   /* 8.79:1 on white · AAA ← hover 加深 */
+  --rb-brand-800: #303080;
+  --rb-brand-900: #24245E;
+
+  /* ---------------------------------------------------------------------
+     2. 色彩 · 荧光笔黄 (Marker) —— "划词"隐喻专用，仅用于选区高亮/Pro 徽标
+        克制使用：每屏不超过一处，避免与品牌主色争夺注意力
+     --------------------------------------------------------------------- */
+  --rb-marker-50:  #FEF7E7;
+  --rb-marker-100: #FCEBC4;
+  --rb-marker-200: #F9D98C;
+  --rb-marker-300: #F3C36B;
+  --rb-marker-400: #E5A733;
+  --rb-marker-500: #C98A12;
+  --rb-marker-600: #8A5804;   /* 6.04:1 on white · AA ← 荧光笔黄的文本安全色 */
+  --rb-marker-highlight: rgba(249, 217, 140, 0.55); /* 正文划词高亮底 */
+
+  /* ---------------------------------------------------------------------
+     3. 色彩 · 中性色 (Slate) —— 界面骨架
+     --------------------------------------------------------------------- */
+  --rb-neutral-0:   #FFFFFF;
+  --rb-neutral-25:  #FCFCFD;
+  --rb-neutral-50:  #F8F9FB;
+  --rb-neutral-100: #F1F3F7;
+  --rb-neutral-200: #E4E7EE;
+  --rb-neutral-300: #CFD4DF;
+  --rb-neutral-400: #9AA1B1;   /* 2.59:1 · 禁止承载正文，仅限禁用态/装饰图标 */
+  --rb-neutral-500: #656C7A;   /* 5.28:1 on white, 4.75:1 on neutral-100 · AA */
+  --rb-neutral-600: #4B5261;
+  --rb-neutral-700: #3D434E;
+  --rb-neutral-800: #272B33;   /* 14.19:1 · AAA ← 正文主色 */
+  --rb-neutral-900: #16181D;
+  --rb-neutral-950: #0E1014;
+
+  /* ---------------------------------------------------------------------
+     4. 色彩 · 语义色
+     --------------------------------------------------------------------- */
+  --rb-success:     #0F7A55;   /* 5.34:1 · AA */
+  --rb-success-bg:  #E8F7F0;
+  --rb-success-border: #A8E0C9;
+
+  --rb-warning:     #8A5804;   /* 6.04:1 · AA */
+  --rb-warning-bg:  #FEF7E7;
+  --rb-warning-border: #F3D9A0;
+
+  --rb-error:       #C42B2B;   /* 5.63:1 · AA */
+  --rb-error-bg:    #FDECEC;
+  --rb-error-border: #F3B9B9;
+
+  --rb-info:        var(--rb-brand-600);
+  --rb-info-bg:     var(--rb-brand-50);
+  --rb-info-border: var(--rb-brand-200);
+
+  /* ---------------------------------------------------------------------
+     5. 语义化表面层 (Light Theme)
+     --------------------------------------------------------------------- */
+  --rb-bg-app:        #F1F3F7;   /* 主窗口最底层 */
+  --rb-bg-surface:    #FFFFFF;   /* 卡片、列表、面板 */
+  --rb-bg-raised:     #FFFFFF;   /* 浮窗、弹层 */
+  --rb-bg-sunken:     #F8F9FB;   /* 输入框、代码块、原文区 */
+  --rb-bg-hover:      rgba(101, 108, 122, 0.06);
+  --rb-bg-active:     rgba(101, 108, 122, 0.10);
+  --rb-bg-selected:   var(--rb-brand-50);
+  --rb-bg-scrim:      rgba(22, 24, 29, 0.32);   /* 移动端 Sheet 遮罩 */
+
+  --rb-text-primary:   var(--rb-neutral-800);
+  --rb-text-secondary: var(--rb-neutral-500);
+  --rb-text-tertiary:  var(--rb-neutral-400);   /* 仅禁用/占位装饰 */
+  --rb-text-inverse:   #FFFFFF;
+  --rb-text-brand:     var(--rb-brand-600);
+
+  --rb-border-subtle: #EDEFF4;   /* 同色系分隔线 */
+  --rb-border-default: var(--rb-neutral-200);
+  --rb-border-strong: var(--rb-neutral-300);
+  --rb-border-focus:  var(--rb-brand-500);
+
+  /* ---------------------------------------------------------------------
+     6. 字体
+     --------------------------------------------------------------------- */
+  --rb-font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text",
+                  "Segoe UI", "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei UI",
+                  "Noto Sans SC", sans-serif;
+  --rb-font-reading: "Inter", -apple-system, "PingFang SC", "Source Han Serif SC",
+                     "Noto Sans SC", sans-serif;
+  --rb-font-mono: "JetBrains Mono", "SF Mono", "Cascadia Code", Consolas,
+                  "PingFang SC", monospace;
+
+  /* 字号阶梯 —— 桌面工具型软件偏紧凑，正文 14 保证中文可读 */
+  --rb-text-2xs: 11px;   /* 角标、快捷键提示 */
+  --rb-text-xs:  12px;   /* 辅助说明、时间戳 */
+  --rb-text-sm:  13px;   /* 界面默认文本、按钮、菜单 */
+  --rb-text-md:  14px;   /* 正文、总结内容 */
+  --rb-text-lg:  15px;   /* 列表主标题 */
+  --rb-text-xl:  16px;   /* 卡片标题 */
+  --rb-text-2xl: 18px;   /* 页面标题 */
+  --rb-text-3xl: 22px;   /* 主标题 */
+  --rb-text-4xl: 28px;   /* 引导页大标题 */
+
+  --rb-leading-tight:   1.3;    /* 标题 */
+  --rb-leading-ui:      1.45;   /* 界面文本 */
+  --rb-leading-reading: 1.75;   /* 中文长文阅读 */
+
+  --rb-weight-regular: 400;
+  --rb-weight-medium:  500;
+  --rb-weight-semibold: 600;    /* 中文不用 700，避免过重糊字 */
+
+  --rb-tracking-tight: -0.01em;  /* 大标题收紧 */
+  --rb-tracking-wide:  0.02em;   /* 全大写小标签 */
+
+  /* ---------------------------------------------------------------------
+     7. 间距 —— 4px 基准栅格
+     --------------------------------------------------------------------- */
+  --rb-space-0:  0;
+  --rb-space-1:  2px;
+  --rb-space-2:  4px;
+  --rb-space-3:  6px;
+  --rb-space-4:  8px;
+  --rb-space-5:  12px;
+  --rb-space-6:  16px;
+  --rb-space-7:  20px;
+  --rb-space-8:  24px;
+  --rb-space-9:  32px;
+  --rb-space-10: 40px;
+  --rb-space-11: 48px;
+  --rb-space-12: 64px;
+
+  /* ---------------------------------------------------------------------
+     8. 圆角
+     --------------------------------------------------------------------- */
+  --rb-radius-xs:   4px;    /* 标签、角标 */
+  --rb-radius-sm:   6px;    /* 输入框、小按钮 */
+  --rb-radius-md:   8px;    /* 按钮、列表项、卡片 */
+  --rb-radius-lg:   10px;   /* 面板分区 */
+  --rb-radius-xl:   12px;   /* 浮窗、模态框（贴合 macOS 视觉） */
+  --rb-radius-2xl:  16px;   /* 移动端底部 Sheet */
+  --rb-radius-full: 999px;
+
+  /* ---------------------------------------------------------------------
+     9. 阴影 —— 分层递进，浮窗使用双层阴影模拟真实景深
+     --------------------------------------------------------------------- */
+  --rb-shadow-xs: 0 1px 2px rgba(22, 24, 29, 0.05);
+  --rb-shadow-sm: 0 1px 3px rgba(22, 24, 29, 0.07), 0 1px 2px rgba(22, 24, 29, 0.04);
+  --rb-shadow-md: 0 4px 12px rgba(22, 24, 29, 0.08), 0 1px 3px rgba(22, 24, 29, 0.05);
+  --rb-shadow-lg: 0 12px 28px rgba(22, 24, 29, 0.12), 0 2px 6px rgba(22, 24, 29, 0.06);
+  --rb-shadow-float: 0 16px 40px rgba(22, 24, 29, 0.16), 0 2px 8px rgba(22, 24, 29, 0.08),
+                     0 0 0 0.5px rgba(22, 24, 29, 0.08);   /* 划词浮窗专用 */
+  --rb-shadow-focus: 0 0 0 3px rgba(98, 98, 217, 0.22);
+
+  /* ---------------------------------------------------------------------
+     10. 动效 —— 全部走 macOS 风格缓动，工具软件必须"快"
+     --------------------------------------------------------------------- */
+  --rb-ease-out:   cubic-bezier(0.32, 0.72, 0, 1);
+  --rb-ease-inout: cubic-bezier(0.65, 0, 0.35, 1);
+  --rb-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  --rb-duration-instant: 80ms;    /* hover 变色 */
+  --rb-duration-fast:    140ms;   /* 按钮反馈、勾选 */
+  --rb-duration-normal:  200ms;   /* 面板展开、Tab 切换 */
+  --rb-duration-slow:    280ms;   /* 浮窗出现、Sheet 上滑 */
+
+  /* ---------------------------------------------------------------------
+     11. 尺寸契约 —— 组件高度与窗口规格
+     --------------------------------------------------------------------- */
+  --rb-control-xs: 24px;
+  --rb-control-sm: 28px;   /* 工具栏图标按钮 */
+  --rb-control-md: 32px;   /* 默认按钮、输入框（桌面） */
+  --rb-control-lg: 40px;   /* 主 CTA、移动端控件 */
+  --rb-control-touch: 44px; /* 移动端最小可点区 */
+
+  --rb-icon-sm: 14px;
+  --rb-icon-md: 16px;
+  --rb-icon-lg: 20px;
+
+  --rb-bubble-h: 32px;         /* 划词气泡高度 */
+  --rb-panel-w: 630px;         /* 总结浮窗默认宽（420 × 1.5） */
+  --rb-panel-w-min: 360px;
+  --rb-panel-w-max: 640px;
+  --rb-panel-h-min: 200px;
+  --rb-panel-h-max: 560px;
+  --rb-titlebar-h: 38px;       /* 自绘拖拽条 */
+  --rb-sidebar-w: 208px;
+  --rb-sidebar-w-collapsed: 56px;
+  --rb-settings-nav-w: 180px;
+
+  --rb-z-content: 1;
+  --rb-z-sticky: 10;
+  --rb-z-dropdown: 100;
+  --rb-z-scrim: 200;
+  --rb-z-modal: 300;
+  --rb-z-toast: 400;
+  --rb-z-tooltip: 500;
+}
+
+/* ==========================================================================
+   Dark Theme —— 跟随系统 / 手动切换
+   深色下降低纯度、提高亮度，避免高饱和紫在暗底上"发光"刺眼
+   ========================================================================== */
+:root[data-theme="dark"] {
+  --rb-bg-app:      #0E1014;
+  --rb-bg-surface:  #16181D;
+  --rb-bg-raised:   #1C1F26;
+  --rb-bg-sunken:   #101318;
+  --rb-bg-hover:    rgba(255, 255, 255, 0.06);
+  --rb-bg-active:   rgba(255, 255, 255, 0.10);
+  --rb-bg-selected: rgba(98, 98, 217, 0.18);
+  --rb-bg-scrim:    rgba(0, 0, 0, 0.55);
+
+  --rb-text-primary:   #F1F3F7;   /* 15.99:1 · AAA */
+  --rb-text-secondary: #9AA1B1;   /* 6.86:1  · AA  */
+  --rb-text-tertiary:  #6B7280;
+  --rb-text-inverse:   #16181D;
+  --rb-text-brand:     #A9A9EC;   /* 8.10:1  · AAA */
+
+  --rb-border-subtle:  rgba(255, 255, 255, 0.06);
+  --rb-border-default: rgba(255, 255, 255, 0.12);
+  --rb-border-strong:  rgba(255, 255, 255, 0.20);
+  --rb-border-focus:   #8383E2;
+
+  --rb-brand-600: #6E6EE0;        /* 深色下主按钮底提亮一档 */
+  --rb-brand-700: #8383E2;
+
+  --rb-success:    #5FD3A8;  --rb-success-bg: rgba(15, 122, 85, 0.18);
+  --rb-warning:    #F3C36B;  --rb-warning-bg: rgba(138, 88, 4, 0.20);
+  --rb-error:      #F08A8A;  --rb-error-bg:   rgba(196, 43, 43, 0.18);
+  --rb-info:       #A9A9EC;  --rb-info-bg:    rgba(98, 98, 217, 0.16);
+
+  --rb-marker-highlight: rgba(229, 167, 51, 0.28);
+
+  --rb-shadow-float: 0 16px 40px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.4),
+                     0 0 0 0.5px rgba(255, 255, 255, 0.10);
+  --rb-shadow-lg: 0 12px 28px rgba(0, 0, 0, 0.45);
+  --rb-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35);
+  --rb-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* ==========================================================================
+   响应式断点契约（供 JS / CSS 共用）
+   ========================================================================== */
+/*
+  compact  : < 640px   单栏 + 底部 Tab，浮窗降级为底部 Sheet
+  medium   : 640–1023  两栏（列表 + 详情抽屉），侧栏折叠为图标
+  expanded : ≥ 1024    三栏（导航 + 列表 + 详情）
+  wide     : ≥ 1280    三栏 + 详情区放宽至 720px 阅读宽度
+*/
+
+/* 触控设备统一放大控件，满足 44px 最小点击区 */
+@media (pointer: coarse) {
+  :root {
+    --rb-control-sm: 36px;
+    --rb-control-md: 44px;
+    --rb-control-lg: 48px;
+    --rb-text-sm: 14px;
+    --rb-text-md: 15px;
+  }
+}
+
+/* 尊重系统减弱动效偏好 */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --rb-duration-instant: 0ms;
+    --rb-duration-fast: 0ms;
+    --rb-duration-normal: 0ms;
+    --rb-duration-slow: 0ms;
+  }
+}
+
+/* 焦点可见性 —— 键盘导航必须始终可见，鼠标点击不显示 */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--rb-border-focus);
+  outline-offset: 2px;
+  border-radius: var(--rb-radius-sm);
+}

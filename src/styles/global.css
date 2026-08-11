@@ -1,0 +1,39 @@
+@import "./tokens.css";
+@import "../components/design-system.css";
+@import "../App.css";
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--rb-font-sans);
+  font-size: var(--rb-text-sm);
+  line-height: var(--rb-leading-ui);
+  color: var(--rb-text-primary);
+  background-color: var(--rb-bg-app);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+/* 浮窗背景透明 */
+.float-root {
+  background: transparent;
+}
+
+:focus {
+  outline: none;
+}
+
+button {
+  font-family: inherit;
+}
