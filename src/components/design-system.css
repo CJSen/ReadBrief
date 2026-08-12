@@ -1,0 +1,277 @@
+/* ============================================================
+   ReadBrief 设计稿基础组件样式
+   取自 design/ui-mockups.html 通用部分 + 页面专属样式
+   一律引用 tokens.css 变量
+   ============================================================ */
+
+/* ---- 窗口外壳 ---- */
+.rb-float.win {
+  background: var(--rb-bg-surface);
+  border-radius: var(--rb-radius-xl);
+  box-shadow: var(--rb-shadow-float);
+  overflow: hidden;
+  border: 1px solid var(--rb-border-subtle);
+}
+
+.rb-float .tbar {
+  height: var(--rb-titlebar-h);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--rb-border-subtle);
+  background: var(--rb-bg-surface);
+}
+
+.rb-float .tbar-title {
+  font-size: var(--rb-text-xs);
+  color: var(--rb-text-secondary);
+  font-weight: var(--rb-weight-medium);
+}
+
+/* ---- 按钮(设计稿 btn) ---- */
+.btn {
+  height: var(--rb-control-md);
+  padding: 0 13px;
+  border-radius: var(--rb-radius-md);
+  border: 1px solid transparent;
+  font: inherit;
+  font-size: var(--rb-text-sm);
+  font-weight: var(--rb-weight-medium);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+  transition: all var(--rb-duration-fast) var(--rb-ease-out);
+}
+
+.btn-primary {
+  background: var(--rb-brand-600);
+  color: var(--rb-text-inverse);
+}
+
+.btn-primary:hover {
+  background: var(--rb-brand-700);
+}
+
+.btn-secondary {
+  background: var(--rb-bg-surface);
+  border-color: var(--rb-border-default);
+  color: var(--rb-text-primary);
+}
+
+.btn-secondary:hover {
+  background: var(--rb-bg-hover);
+  border-color: var(--rb-border-strong);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--rb-text-secondary);
+}
+
+.btn-ghost:hover {
+  background: var(--rb-bg-hover);
+  color: var(--rb-text-primary);
+}
+
+.btn-sm {
+  height: var(--rb-control-sm);
+  padding: 0 10px;
+  font-size: var(--rb-text-xs);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ---- 图标按钮 ---- */
+.iconbtn {
+  width: var(--rb-control-sm);
+  height: var(--rb-control-sm);
+  border-radius: var(--rb-radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--rb-text-secondary);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: all var(--rb-duration-fast) var(--rb-ease-out);
+  flex: none;
+}
+
+.iconbtn:hover {
+  background: var(--rb-bg-hover);
+  color: var(--rb-text-primary);
+}
+
+.iconbtn .ic {
+  width: 16px;
+  height: 16px;
+}
+
+/* ---- 快捷键键帽 ---- */
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: var(--rb-radius-xs);
+  background: var(--rb-bg-sunken);
+  border: 1px solid var(--rb-border-default);
+  border-bottom-width: 2px;
+  font-family: var(--rb-font-mono);
+  font-size: var(--rb-text-2xs);
+  color: var(--rb-text-secondary);
+  font-weight: var(--rb-weight-medium);
+}
+
+/* ---- 标签 ---- */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: var(--rb-radius-xs);
+  font-size: var(--rb-text-2xs);
+  font-weight: var(--rb-weight-medium);
+}
+
+.tag-brand {
+  background: var(--rb-brand-50);
+  color: var(--rb-brand-600);
+}
+
+.tag-pro {
+  background: var(--rb-marker-50);
+  color: var(--rb-marker-600);
+}
+
+.tag-ok {
+  background: var(--rb-success-bg);
+  color: var(--rb-success);
+}
+
+.tag-gray {
+  background: var(--rb-bg-sunken);
+  color: var(--rb-text-secondary);
+}
+
+:root[data-theme="dark"] .tag-brand {
+  background: var(--rb-bg-selected);
+  color: var(--rb-text-brand);
+}
+
+/* ---- 输入框 ---- */
+.inp {
+  height: var(--rb-control-md);
+  width: 100%;
+  padding: 0 11px;
+  border-radius: var(--rb-radius-sm);
+  border: 1px solid var(--rb-border-default);
+  background: var(--rb-bg-surface);
+  color: var(--rb-text-primary);
+  font: inherit;
+  font-size: var(--rb-text-sm);
+  transition: all var(--rb-duration-fast) var(--rb-ease-out);
+}
+
+.inp:focus {
+  outline: none;
+  border-color: var(--rb-border-focus);
+  box-shadow: var(--rb-shadow-focus);
+}
+
+.inp::placeholder {
+  color: var(--rb-text-tertiary);
+}
+
+/* ---- 开关 ---- */
+.sw {
+  width: 38px;
+  height: 22px;
+  border-radius: var(--rb-radius-full);
+  background: var(--rb-neutral-300);
+  position: relative;
+  flex: none;
+  transition: background var(--rb-duration-fast) var(--rb-ease-out);
+  cursor: pointer;
+}
+
+.sw::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--rb-neutral-0);
+  box-shadow: var(--rb-shadow-xs);
+  transition: transform var(--rb-duration-fast) var(--rb-ease-out);
+}
+
+.sw.on {
+  background: var(--rb-brand-600);
+}
+
+.sw.on::after {
+  transform: translateX(16px);
+}
+
+/* ---- 分段选择 ---- */
+.seg {
+  display: inline-flex;
+  padding: 2px;
+  background: var(--rb-bg-sunken);
+  border-radius: var(--rb-radius-md);
+  border: 1px solid var(--rb-border-subtle);
+  gap: 2px;
+}
+
+.seg span {
+  padding: 5px 12px;
+  border-radius: var(--rb-radius-sm);
+  font-size: var(--rb-text-xs);
+  color: var(--rb-text-secondary);
+  cursor: pointer;
+  font-weight: var(--rb-weight-medium);
+}
+
+.seg span.on {
+  background: var(--rb-bg-surface);
+  color: var(--rb-text-primary);
+  box-shadow: var(--rb-shadow-xs);
+}
+
+/* ---- 图标 ---- */
+.ic {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex: none;
+}
+
+/* ---- 通用工具类 ---- */
+.flex { display: flex; }
+.ac { align-items: center; }
+.jb { justify-content: space-between; }
+.g4 { gap: 4px; }
+.g6 { gap: 6px; }
+.g8 { gap: 8px; }
+.g12 { gap: 12px; }
+.g16 { gap: 16px; }
+.muted { color: var(--rb-text-secondary); }
+.mono { font-family: var(--rb-font-mono); }
+.grow { flex: 1; min-width: 0; }
+.trunc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
