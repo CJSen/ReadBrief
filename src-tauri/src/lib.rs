@@ -79,6 +79,8 @@ pub fn run() {
             shortcuts::clipboard_write_text,
             shortcuts::accessibility_status,
             shortcuts::request_accessibility,
+            shortcuts::screen_recording_status,
+            shortcuts::request_screen_recording,
             tray::tray_refresh,
             windows::float_show,
             windows::float_hide,
@@ -88,6 +90,7 @@ pub fn run() {
             windows::float_start_drag,
             windows::open_settings,
             windows::open_settings_section,
+            windows::open_privacy_settings,
             windows::show_main,
             windows::hide_main,
         ]);

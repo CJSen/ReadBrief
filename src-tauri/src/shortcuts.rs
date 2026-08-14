@@ -332,11 +332,58 @@ pub fn accessibility_status() -> AppResult<bool> {
 #[tauri::command]
 pub fn request_accessibility() -> AppResult<bool> {
     prompt_accessibility();
-    Ok(true)
+    // 返回弹窗后的真实授权状态:已授权=true;未授权=false(可能因用户取消或曾拒绝而不再弹窗)
+    Ok(accessibility_trusted())
 }
 
 #[cfg(not(target_os = "macos"))]
 #[tauri::command]
 pub fn request_accessibility() -> AppResult<bool> {
+    Ok(true)
+}
+
+/// 屏幕录制授权:用于截图 OCR 总结等功能读取屏幕内容。
+/// 注意:macOS 在授权后需要重启应用才能生效(系统限制),授权状态为尽力检测。
+#[cfg(target_os = "macos")]
+fn screen_capture_trusted() -> bool {
+    unsafe extern "C" {
+        fn CGPreflightScreenCaptureAccess() -> bool;
+    }
+    unsafe { CGPreflightScreenCaptureAccess() }
+}
+
+#[cfg(target_os = "macos")]
+fn prompt_screen_capture() {
+    unsafe extern "C" {
+        fn CGRequestScreenCaptureAccess() -> bool;
+    }
+    unsafe {
+        CGRequestScreenCaptureAccess();
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+pub fn screen_recording_status() -> AppResult<bool> {
+    Ok(screen_capture_trusted())
+}
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+pub fn screen_recording_status() -> AppResult<bool> {
+    Ok(true)
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+pub fn request_screen_recording() -> AppResult<bool> {
+    prompt_screen_capture();
+    // 返回弹窗后的真实授权状态(屏幕录制授权后需重启生效,此处仅尽力检测)
+    Ok(screen_capture_trusted())
+}
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+pub fn request_screen_recording() -> AppResult<bool> {
     Ok(true)
 }

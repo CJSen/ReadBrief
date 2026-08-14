@@ -2,7 +2,7 @@
 
 export type ApiConfig = { id?: string | null, name?: string | null, protocol: string, apiKey: string, baseUrl: string, model: string, isDefault: boolean, stream: boolean, };
 
-export type AppConfig = { api: ApiConfig, services: Array<ApiConfig>, prompts: Array<PromptConfig>, shortcuts: Array<ShortcutConfig>, language: string, theme: string, launchOnStart: boolean, minToTray: boolean, selectionOn: boolean, escClose: boolean, clickOutside: boolean, summaryLanguage: string, diagnostics: boolean, fontScale: number, };
+export type AppConfig = { api: ApiConfig, services: Array<ApiConfig>, prompts: Array<PromptConfig>, shortcuts: Array<ShortcutConfig>, language: string, theme: string, launchOnStart: boolean, minToTray: boolean, selectionOn: boolean, escClose: boolean, clickOutside: boolean, summaryLanguage: string, diagnostics: boolean, fontScale: number, onboardingDone: boolean, };
 
 export type PromptConfig = { id: string, name: string, content: string, model: string, shortcut?: string | null, outputFormat: string, 
 /**

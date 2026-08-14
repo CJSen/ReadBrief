@@ -104,6 +104,25 @@ const PATHS: Record<string, React.ReactNode> = {
       <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
     </>
   ),
+  zap: <path d="M13 2L3 14h7l-1 8 10-12h-7z" />,
+  keyboard: (
+    <>
+      <rect x="3" y="6" width="18" height="12" rx="2" />
+      <path d="M7 10h.01M11 10h.01M15 10h.01M8 14h8" />
+    </>
+  ),
+  screen: (
+    <>
+      <rect x="3" y="4" width="18" height="12" rx="2" />
+      <path d="M8 20h8M12 16v4" />
+    </>
+  ),
+  sparkles: (
+    <>
+      <path d="M12 4l1.6 4.4L18 10l-4.4 1.6L12 16l-1.6-4.4L6 10l4.4-1.6z" />
+      <path d="M18 14l.9 2.4L21 17l-2.1.6L18 20l-.9-2.4L15 17l2.1-.6z" />
+    </>
+  ),
 };
 
 export type IconName = keyof typeof PATHS;

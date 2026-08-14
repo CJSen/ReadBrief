@@ -130,6 +130,40 @@ pub fn open_settings_section(app: tauri::AppHandle, section: String) -> AppResul
     Ok(())
 }
 
+/// 打开 macOS 系统设置 → 隐私与安全性 → 指定权限面板。
+/// 用于「去授权」后系统原生弹窗不再弹出时(仅弹一次),引导用户到系统设置手动开启。
+#[cfg(target_os = "macos")]
+#[tauri::command]
+pub fn open_privacy_settings(kind: String) -> AppResult<()> {
+    use std::process::Command;
+    let anchor = match kind.as_str() {
+        "screen" => "Privacy_ScreenCapture",
+        _ => "Privacy_Accessibility",
+    };
+    // 现代(macOS 13+)与旧版方案都尝试,命中其一即可
+    let schemes = [
+        format!("x-apple.systempreferences:com.apple.settings.PrivacySecurity?{anchor}"),
+        format!("x-apple.systempreferences:com.apple.preference.security?{anchor}"),
+    ];
+    for scheme in schemes {
+        if Command::new("open")
+            .arg(&scheme)
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+        {
+            return Ok(());
+        }
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+pub fn open_privacy_settings(_kind: String) -> AppResult<()> {
+    Ok(())
+}
+
 #[tauri::command]
 pub fn show_main(app: tauri::AppHandle) -> AppResult<()> {
     match app.get_webview_window("main") {

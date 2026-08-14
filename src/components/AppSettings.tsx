@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { AppConfig } from "../lib/config/types";
 import { getLanguage, setLanguage, t, type Language } from "../lib/i18n";
 import { applyPreference, applyFontScale, type ThemePreference } from "../lib/theme";
@@ -8,6 +9,7 @@ import { Icon } from "./Icon";
 import { ShortcutsPage } from "./ShortcutsPage";
 import { PromptManager } from "./PromptManager";
 import { AiServicesPage } from "./AiServicesPage";
+import { Onboarding } from "./Onboarding";
 
 type SettingsSection =
   | "general"
@@ -35,6 +37,8 @@ export function AppSettings() {
   const [cfg, setCfg] = useState<AppConfig | null>(null);
   const [lang, setLang] = useState<Language>(() => getLanguage());
   const [theme, setThemeState] = useState<ThemePreference>("system");
+  /** 设置内「打开引导」:渲染首启引导覆盖层(复用现有 cfg,预填已有数据) */
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
     invoke<AppConfig>("config_get")
@@ -109,7 +113,7 @@ export function AppSettings() {
       {/* 右侧内容 */}
       <div className="rb-settings-content">
         {section === "general" && cfg ? (
-          <GeneralPage cfg={cfg} onConfigChange={setCfg} />
+          <GeneralPage cfg={cfg} onConfigChange={setCfg} onOpenOnboarding={() => setShowOnboarding(true)} />
         ) : null}
         {section === "ai" && cfg ? (
           <AiServicesPage cfg={cfg} onConfigChange={setCfg} />
@@ -138,6 +142,15 @@ export function AppSettings() {
         {section === "subscription" ? <SubscriptionPage /> : null}
         {section === "about" ? <AboutPage /> : null}
       </div>
+
+      {/* 设置内「打开引导」:全窗口覆盖层,复用现有 cfg 预填已有数据 */}
+      {showOnboarding && cfg ? (
+        <Onboarding
+          cfg={cfg}
+          onUpdate={(next) => setCfg(next)}
+          onClose={() => setShowOnboarding(false)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -146,30 +159,57 @@ export function AppSettings() {
 function GeneralPage({
   cfg,
   onConfigChange,
+  onOpenOnboarding,
 }: {
   cfg: AppConfig;
   onConfigChange: (c: AppConfig) => void;
+  onOpenOnboarding: () => void;
 }) {
   const [launchOnStart, setLaunchOnStart] = useState(cfg.launchOnStart ?? true);
-  const [minToTray, setMinToTray] = useState(cfg.minToTray ?? true);
   const [escClose, setEscClose] = useState(cfg.escClose ?? true);
   const [clickOutside, setClickOutside] = useState(cfg.clickOutside ?? false);
   // 辅助功能(Accessibility)授权状态:true=已授权 / false=未授权 / null=检测中
   const [accessibility, setAccessibility] = useState<boolean | null>(null);
   const [authing, setAuthing] = useState(false);
+  // 屏幕录制(Screen Recording)授权状态:true=已授权 / false=未授权 / null=检测中
+  const [screenRecording, setScreenRecording] = useState<boolean | null>(null);
+  const [screenAuthing, setScreenAuthing] = useState(false);
 
   // 开机启动读取系统真实状态(LaunchAgent 是否已注册)
   useEffect(() => {
     invoke<boolean>("autostart_status")
       .then(setLaunchOnStart)
       .catch(() => {});
-  }, []);
-
-  // 检测辅助功能授权状态(参考 pot-desktop:启动即检查,此处为设置页实时检测)
-  useEffect(() => {
     invoke<boolean>("accessibility_status")
       .then(setAccessibility)
       .catch(() => setAccessibility(null));
+    invoke<boolean>("screen_recording_status")
+      .then(setScreenRecording)
+      .catch(() => setScreenRecording(null));
+  }, []);
+
+  // 窗口重新聚焦(重新打开设置 / 从系统设置返回)时再检测一次,避免授权状态陈旧
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let disposed = false;
+    void getCurrentWindow()
+      .onFocusChanged(({ payload: focused }) => {
+        if (!focused) return;
+        invoke<boolean>("accessibility_status")
+          .then(setAccessibility)
+          .catch(() => setAccessibility(null));
+        invoke<boolean>("screen_recording_status")
+          .then(setScreenRecording)
+          .catch(() => setScreenRecording(null));
+      })
+      .then((fn) => {
+        if (disposed) fn();
+        else unlisten = fn;
+      });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
   }, []);
 
   /** 持久化通用设置(部分开关同时联动系统能力) */
@@ -197,26 +237,63 @@ function GeneralPage({
     await persist({ selectionOn: v });
   }
 
-  /** 去授权:弹出系统辅助功能授权窗口,授权后轮询刷新状态(授权即时生效) */
+  /** 去授权:先弹系统原生辅助功能授权窗(仅首次出现);后端返回弹窗后真实状态,已授权即结束,否则打开系统设置引导手动开启 */
   async function requestAuth() {
     setAuthing(true);
     try {
-      await invoke("request_accessibility");
-      for (let i = 0; i < 12; i++) {
-        await new Promise((r) => setTimeout(r, 500));
-        const ok = await invoke<boolean>("accessibility_status").catch(() => false);
+      const granted = await invoke<boolean>("request_accessibility");
+      setAccessibility(granted);
+      if (granted) return;
+      // 未授权:原生弹窗已出现过/被拒,给极短宽限捕获用户刚点的「允许」,随后直接打开系统设置
+      let ok = false;
+      for (let i = 0; i < 3; i++) {
+        await new Promise((r) => setTimeout(r, 600));
+        ok = await invoke<boolean>("accessibility_status").catch(() => false);
         setAccessibility(ok);
         if (ok) break;
       }
+      if (!ok) await invoke("open_privacy_settings", { kind: "accessibility" });
     } catch {
       setAccessibility(false);
+      await invoke("open_privacy_settings", { kind: "accessibility" }).catch(() => {});
+    } finally {
+      setAuthing(false);
     }
-    setAuthing(false);
+  }
+
+  /** 去授权:先弹系统原生屏幕录制授权窗(仅首次出现);后端返回弹窗后真实状态,已授权即结束,否则打开系统设置引导手动开启 */
+  async function requestScreenRecording() {
+    setScreenAuthing(true);
+    try {
+      const granted = await invoke<boolean>("request_screen_recording");
+      setScreenRecording(granted);
+      if (granted) return;
+      // 未授权:原生弹窗已出现过/被拒,给极短宽限捕获用户刚点的「允许」,随后直接打开系统设置
+      let ok = false;
+      for (let i = 0; i < 3; i++) {
+        await new Promise((r) => setTimeout(r, 600));
+        ok = await invoke<boolean>("screen_recording_status").catch(() => false);
+        setScreenRecording(ok);
+        if (ok) break;
+      }
+      if (!ok) await invoke("open_privacy_settings", { kind: "screen" });
+    } catch {
+      setScreenRecording(false);
+      await invoke("open_privacy_settings", { kind: "screen" }).catch(() => {});
+    } finally {
+      setScreenAuthing(false);
+    }
   }
 
   return (
     <div>
-      <div style={{ fontSize: "var(--rb-text-2xl)", fontWeight: 600, marginBottom: 14 }}>{t("settings.nav.general")}</div>
+      <div className="flex ac jb g16" style={{ marginBottom: 14 }}>
+        <span style={{ fontSize: "var(--rb-text-2xl)", fontWeight: 600 }}>{t("settings.nav.general")}</span>
+        <button className="btn btn-secondary btn-sm" onClick={onOpenOnboarding}>
+          <Icon name="sparkles" size={14} />
+          {t("settings.openOnboarding")}
+        </button>
+      </div>
 
       <div className="set-card-hd">常规</div>
       <div className="set-card">
@@ -232,24 +309,6 @@ function GeneralPage({
         </div>
         <div className="set-row">
           <div>
-            <div className="set-row-t">最小化到托盘</div>
-            <div className="set-row-d">点关闭按钮时隐藏到菜单栏，不退出</div>
-          </div>
-          <div
-            className={`sw${minToTray ? " on" : ""}`}
-            onClick={() => {
-              const v = !minToTray;
-              setMinToTray(v);
-              void persist({ minToTray: v });
-            }}
-          />
-        </div>
-      </div>
-
-      <div className="set-card-hd">划词</div>
-      <div className="set-card">
-        <div className="set-row">
-          <div>
             <div className="set-row-t">启用划词监听</div>
             <div className="set-row-d">选中文本后弹出总结按钮</div>
           </div>
@@ -258,7 +317,7 @@ function GeneralPage({
         <div className="set-row">
           <div>
             <div className="set-row-t">辅助功能授权</div>
-            <div className="set-row-d">划词总结需要读取选中文本，请授予「辅助功能」权限</div>
+            <div className="set-row-d">划词总结需读取选中文本，请授予「辅助功能」权限</div>
           </div>
           {accessibility === true ? (
             <span className="tag tag-ok">
@@ -279,6 +338,33 @@ function GeneralPage({
             <Icon name="alert" style={{ color: "var(--rb-warning)", marginTop: 1, flexShrink: 0 }} />
             <div>
               未获得辅助功能授权时，划词总结无法读取选中文本。点击「去授权」后在弹窗中勾选 ReadBrief，授权即时生效、无需重启。
+            </div>
+          </div>
+        ) : null}
+        <div className="set-row">
+          <div>
+            <div className="set-row-t">屏幕录制授权</div>
+            <div className="set-row-d">截图 OCR 总结需读取屏幕内容，请授予「屏幕录制」权限</div>
+          </div>
+          {screenRecording === true ? (
+            <span className="tag tag-ok">
+              <Icon name="check" size={11} />
+              已授权
+            </span>
+          ) : screenRecording === false ? (
+            <button className="btn btn-sm btn-primary" onClick={() => void requestScreenRecording()} disabled={screenAuthing}>
+              <Icon name="screen" size={14} />
+              {screenAuthing ? "检测中…" : "去授权"}
+            </button>
+          ) : (
+            <span className="tag tag-gray">检测中…</span>
+          )}
+        </div>
+        {screenRecording === false ? (
+          <div className="rb-byok-note" style={{ marginTop: 8 }}>
+            <Icon name="alert" style={{ color: "var(--rb-warning)", marginTop: 1, flexShrink: 0 }} />
+            <div>
+              未获得屏幕录制授权时，截图 OCR 总结无法读取屏幕内容。点击「去授权」后在弹窗中勾选 ReadBrief；授权后需重启应用才能生效（系统限制）。
             </div>
           </div>
         ) : null}

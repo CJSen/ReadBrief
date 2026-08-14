@@ -95,6 +95,9 @@ pub struct AppConfig {
     // 字体缩放:1.0 = 100%
     #[serde(default = "default_font_scale")]
     pub font_scale: f32,
+    // 首启引导:用户完成或跳过四步引导后置 true(旧配置缺失时视为未完成)
+    #[serde(default)]
+    pub onboarding_done: bool,
 }
 
 fn default_language() -> String {
@@ -115,6 +118,10 @@ fn default_summary_lang() -> String {
 
 fn default_font_scale() -> f32 {
     1.0
+}
+
+fn default_onboarding_done() -> bool {
+    false
 }
 
 /// 内置快捷键的默认绑定：开箱即用时即存在，但全部可在设置页修改/删除，
@@ -204,6 +211,7 @@ impl Default for AppConfig {
             summary_language: default_summary_lang(),
             diagnostics: false,
             font_scale: default_font_scale(),
+            onboarding_done: default_onboarding_done(),
         }
     }
 }
@@ -289,6 +297,10 @@ pub fn parse_config(content: &str) -> AppConfig {
         .and_then(|v| v.as_f64())
         .map(|f| f as f32)
         .unwrap_or(1.0);
+    cfg.onboarding_done = value
+        .get("onboardingDone")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
 
     // 迁移:补齐用户从未显式配置过的内置快捷键默认绑定(划词总结默认 ⌘+Shift+Z)。
     // 若 config 中已存在该内置 id(含用户主动清空的情况),则尊重用户选择,不再注入隐藏默认值。

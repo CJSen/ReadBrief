@@ -7,6 +7,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { t } from "../lib/i18n";
 import { Icon } from "./Icon";
+import { Onboarding } from "./Onboarding";
 
 interface HistoryRecord {
   id: number;
@@ -108,6 +109,8 @@ export function AppMain() {
   const [timeFilter, setTimeFilter] = useState<"all" | "today" | "week">("all");
   const [copied, setCopied] = useState(false);
   const [allTags, setAllTags] = useState<TagDef[]>([]);
+  /** 首启引导覆盖层:仅主窗口,config.onboardingDone=false 时显示 */
+  const [showOnboarding, setShowOnboarding] = useState(false);
   // 左侧标签多选(至多 4 个,交集 AND 筛选)
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   // 左侧标签搜索框
@@ -149,7 +152,10 @@ export function AppMain() {
 
   useEffect(() => {
     invoke<AppConfig>("config_get")
-      .then(setCfg)
+      .then((c) => {
+        setCfg(c);
+        if (!c.onboardingDone) setShowOnboarding(true);
+      })
       .catch(() => setCfg(null));
   }, []);
 
@@ -571,6 +577,11 @@ export function AppMain() {
     await invoke("clipboard_write_text", { text: record.summary });
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
+  }
+
+  /** 首启引导:仅同步配置;关闭由 Onboarding 的 onClose(完成/跳过)驱动 */
+  function handleOnboardingUpdate(next: AppConfig) {
+    setCfg(next);
   }
 
   const formatTime = (iso: string) => {
@@ -1032,8 +1043,8 @@ export function AppMain() {
           : null}
 
         {/* 标签编辑器(创建/编辑共用):portal 到 body + fixed 定位,名称 + 快捷色 + 色板 + 色相条 + hex */}
-        {tagEditor && editorPos
-          ? createPortal(
+          {tagEditor && editorPos
+            ? createPortal(
               <div className="rb-popover rb-create-tag rb-editor-fixed" style={{ top: editorPos.top, left: editorPos.left }}>
                 <div className="rb-create-tag-head">
                   <span className="rb-popover-title">
@@ -1119,7 +1130,12 @@ export function AppMain() {
               </div>,
               document.body,
             )
-          : null}
+            : null}
+
+          {/* 首启引导覆盖层(仅主窗口、config.onboardingDone=false 时) */}
+          {showOnboarding && cfg ? (
+            <Onboarding cfg={cfg} onUpdate={handleOnboardingUpdate} onClose={() => setShowOnboarding(false)} />
+          ) : null}
     </div>
   );
 }

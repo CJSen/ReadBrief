@@ -1,0 +1,259 @@
+/* ============================================================
+   ReadBrief 首启引导(四步流程)
+   对齐 design/ui-mockups.html §08 设计 token
+   ============================================================ */
+
+/* 全窗口覆盖层(仅主窗口) */
+.rb-ob-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--rb-bg-overlay, rgba(15, 23, 42, 0.32));
+  backdrop-filter: blur(2px);
+}
+
+.rb-ob-win {
+  width: 548px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+}
+
+/* 红黄绿交通灯 */
+.rb-ob-win .traffic {
+  display: flex;
+  gap: 8px;
+}
+.rb-ob-win .traffic i {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: block;
+}
+
+.rb-ob-body {
+  padding: 18px 22px 16px;
+  display: flex;
+  flex-direction: column;
+  /* 填充窗口高度,使底部条始终定格在底部(内容过长时由 .rb-ob-grid 内部滚动) */
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 进度点 */
+.rb-ob-dots {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.rb-ob-dot {
+  height: 3px;
+  flex: 1;
+  border-radius: 2px;
+  background: var(--rb-neutral-200);
+  transition: background var(--rb-duration-fast) var(--rb-ease-out);
+}
+.rb-ob-dot.on {
+  background: var(--rb-brand-600);
+}
+
+/* 左右栏(可滚动区域,超出窗口高度时内部滚动,底部条保持定格) */
+.rb-ob-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  align-items: stretch;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+.rb-ob-aside {
+  width: 196px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+}
+.rb-ob-mark {
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  background: var(--rb-brand-600);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  margin-bottom: 14px;
+}
+.rb-ob-title {
+  font-size: var(--rb-text-2xl);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+.rb-ob-desc {
+  font-size: var(--rb-text-sm);
+  line-height: 1.7;
+  margin-top: 8px;
+}
+.rb-ob-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-top: 14px;
+  font-size: var(--rb-text-sm);
+}
+.rb-ob-num {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--rb-brand-50);
+  color: var(--rb-brand-600);
+  font-size: 10px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  font-weight: 600;
+}
+
+.rb-ob-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+
+/* 步骤1 服务表单 */
+.rb-ob-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.rb-ob-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 14px;
+}
+.rb-ob-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.rb-ob-field-switch {
+  justify-content: flex-end;
+}
+.rb-ob-field-label {
+  font-size: var(--rb-text-xs);
+  font-weight: 500;
+}
+/* API Key 输入框:为右侧显示/隐藏按钮预留空间,避免长密钥与之重叠 */
+.rb-ob-form .rb-key-input {
+  position: relative;
+}
+.rb-ob-form .rb-key-input .inp {
+  padding-right: 38px;
+  text-overflow: ellipsis;
+}
+.rb-ob-pick {
+  width: 100%;
+}
+.rb-ob-fmt-menu {
+  left: 0;
+  right: auto;
+  width: 100%;
+}
+.rb-ob-test {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rb-ob-hint {
+  font-size: 11px;
+  line-height: 1.5;
+  margin-top: auto;
+}
+
+/* 步骤2 权限 */
+.rb-ob-perms {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  justify-content: center;
+}
+.rb-ob-perm {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--rb-border-default);
+  border-radius: var(--rb-radius-md);
+  padding: 10px 11px;
+}
+.rb-ob-perm-ic {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--rb-brand-50);
+  color: var(--rb-brand-600);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.rb-ob-perm-ic-pro {
+  background: var(--rb-bg-sunken);
+  color: var(--rb-text-secondary);
+}
+.rb-ob-perm-name {
+  font-size: var(--rb-text-sm);
+  font-weight: 500;
+}
+.rb-ob-perm-desc {
+  font-size: 11px;
+  margin-top: 1px;
+}
+
+/* 步骤3 快捷键 */
+.rb-ob-shortcut {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  justify-content: center;
+}
+.rb-ob-conflict {
+  font-size: 11px;
+  color: var(--rb-error);
+}
+
+/* 底部条 */
+.rb-ob-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--rb-border-subtle);
+}
+.rb-ob-skip {
+  padding-left: 0;
+  color: var(--rb-text-tertiary);
+}
+.rb-ob-next {
+  height: 34px;
+  padding: 0 18px;
+}
+
+/* 窄窗口降级:单栏堆叠 */
+@media (max-width: 560px) {
+  .rb-ob-grid {
+    flex-direction: column;
+  }
+  .rb-ob-aside {
+    width: 100%;
+  }
+  .rb-ob-row {
+    grid-template-columns: 1fr;
+  }
+}
