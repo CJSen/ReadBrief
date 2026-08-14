@@ -87,6 +87,7 @@ pub fn run() {
             windows::float_regenerate,
             windows::float_start_drag,
             windows::open_settings,
+            windows::open_settings_section,
             windows::show_main,
             windows::hide_main,
         ]);

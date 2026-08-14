@@ -118,6 +118,18 @@ pub fn open_settings(app: tauri::AppHandle) -> AppResult<()> {
     Ok(())
 }
 
+/// 打开设置窗口并跳转到指定分区(状态栏「关于ReadBrief」等入口使用)。
+/// 显示窗口后向前端 emit `navigate-settings` 事件,由 AppSettings 切换到目标 section。
+#[tauri::command]
+pub fn open_settings_section(app: tauri::AppHandle, section: String) -> AppResult<()> {
+    if let Some(win) = app.get_webview_window("settings") {
+        let _ = win.show();
+        let _ = win.set_focus();
+    }
+    let _ = app.emit("navigate-settings", section);
+    Ok(())
+}
+
 #[tauri::command]
 pub fn show_main(app: tauri::AppHandle) -> AppResult<()> {
     match app.get_webview_window("main") {

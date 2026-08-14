@@ -156,6 +156,10 @@ fn handle_trigger(app: tauri::AppHandle, action: String, prompt_id: Option<Strin
             crate::windows::show_float(&app);
             let _ = app.emit("toggle-float-window", ());
         }
+        // 打开主窗口(状态栏菜单 / 快捷键设置项):仅聚焦主窗口,无需捕获文本
+        "open-main" => {
+            let _ = crate::windows::show_main(app.clone());
+        }
         // 绑定到具体提示词:携带 promptId 触发
         _ if !action.is_empty() => {
             if is_capture_paused() {

@@ -44,9 +44,12 @@ interface BuiltinItem {
   desc: string;
   action: string;
   proOnly?: boolean;
+  /** 无提示词/模型绑定(如「打开主窗口」这类纯窗口动作) */
+  noPrompt?: boolean;
 }
 
 const BUILTINS: BuiltinItem[] = [
+  { id: "open-main", name: "打开主窗口", desc: "显示并聚焦 ReadBrief 主窗口", action: "open-main", noPrompt: true },
   { id: "summarize", name: "划词总结", desc: "选中文本后触发内置总结提示词", action: "summarize" },
   { id: "paste", name: "呼出输入框", desc: "粘贴任意文本进行总结", action: "paste" },
   { id: "translate", name: "翻译并总结", desc: "翻译后总结选中内容", action: "prompt", proOnly: true },
@@ -105,6 +108,7 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
         desc: bi.desc,
         action: bi.action,
         proOnly: bi.proOnly ?? false,
+        noPrompt: bi.noPrompt ?? false,
         accelerator: sc?.accelerator ?? "",
         promptId: sc?.promptId ?? BUILTIN_DEFAULT_PROMPT[bi.id] ?? null,
         model: sc?.model ?? "",
@@ -119,6 +123,7 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
         desc: s.description ?? "",
         action: s.action,
         proOnly: false,
+        noPrompt: false,
         accelerator: s.accelerator ?? "",
         promptId: s.promptId ?? "builtin-summarize",
         model: s.model ?? "",
@@ -500,34 +505,39 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
                 </div>
 
                 <div className="flex ac g6">
-                  {/* 提示词绑定下拉(始终显示,默认绑定内置提示词,均可在下拉中修改) */}
-                  <select
-                    className="rb-sc-prompt-select"
-                    value={item.promptId ?? ""}
-                    onChange={(e) => handlePromptChange(item.id, e.target.value || null)}
-                  >
-                    {allPrompts.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
+                  {/* 提示词绑定 / 模型下拉:纯窗口类动作(如「打开主窗口」)无此选项 */}
+                  {!item.noPrompt && (
+                    <>
+                      {/* 提示词绑定下拉(始终显示,默认绑定内置提示词,均可在下拉中修改) */}
+                      <select
+                        className="rb-sc-prompt-select"
+                        value={item.promptId ?? ""}
+                        onChange={(e) => handlePromptChange(item.id, e.target.value || null)}
+                      >
+                        {allPrompts.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
 
-                  {/* AI 服务模型下拉 */}
-                  {models.length > 0 ? (
-                    <select
-                      className="rb-sc-prompt-select rb-sc-model-select"
-                      value={item.model ?? ""}
-                      onChange={(e) => handleModelChange(item.id, e.target.value)}
-                    >
-                      <option value="">默认模型</option>
-                      {models.map((m) => (
-                        <option key={m.value} value={m.value}>
-                          {m.label}
-                        </option>
-                      ))}
-                    </select>
-                  ) : null}
+                      {/* AI 服务模型下拉 */}
+                      {models.length > 0 ? (
+                        <select
+                          className="rb-sc-prompt-select rb-sc-model-select"
+                          value={item.model ?? ""}
+                          onChange={(e) => handleModelChange(item.id, e.target.value)}
+                        >
+                          <option value="">默认模型</option>
+                          {models.map((m) => (
+                            <option key={m.value} value={m.value}>
+                              {m.label}
+                            </option>
+                          ))}
+                        </select>
+                      ) : null}
+                    </>
+                  )}
                 </div>
               </div>
             </div>

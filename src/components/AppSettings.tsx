@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import type { AppConfig } from "../lib/config/types";
 import { getLanguage, setLanguage, t, type Language } from "../lib/i18n";
 import { applyPreference, applyFontScale, type ThemePreference } from "../lib/theme";
@@ -45,6 +46,28 @@ export function AppSettings() {
         if (c.theme === "dark" || c.theme === "light") setThemeState(c.theme);
       })
       .catch(() => setCfg(null));
+  }, []);
+
+  // 状态栏「关于ReadBrief」等入口:打开设置并跳转到指定分区
+  useEffect(() => {
+    const un = listen<string>("navigate-settings", (e) => {
+      const target = e.payload as SettingsSection;
+      setSection(target);
+    });
+    return () => {
+      void un.then((fn) => fn());
+    };
+  }, []);
+
+  // 状态栏划词监听开关与设置-通用「启用划词监听」双向联动
+  useEffect(() => {
+    const un = listen<boolean>("selection-state-changed", (e) => {
+      const v = e.payload;
+      setCfg((prev) => (prev ? { ...prev, selectionOn: v } : prev));
+    });
+    return () => {
+      void un.then((fn) => fn());
+    };
   }, []);
 
   async function saveConfig(next: AppConfig) {
@@ -129,7 +152,6 @@ function GeneralPage({
 }) {
   const [launchOnStart, setLaunchOnStart] = useState(cfg.launchOnStart ?? true);
   const [minToTray, setMinToTray] = useState(cfg.minToTray ?? true);
-  const [selectionOn, setSelectionOn] = useState(cfg.selectionOn ?? true);
   const [escClose, setEscClose] = useState(cfg.escClose ?? true);
   const [clickOutside, setClickOutside] = useState(cfg.clickOutside ?? false);
   // 辅助功能(Accessibility)授权状态:true=已授权 / false=未授权 / null=检测中
@@ -170,7 +192,6 @@ function GeneralPage({
   }
 
   async function toggleSelection(v: boolean) {
-    setSelectionOn(v);
     // 划词监听开关 ↔ Rust 暂停标志(快捷键总结 / 托盘状态同步)
     await invoke("set_capture_paused", { paused: !v });
     await persist({ selectionOn: v });
@@ -232,7 +253,7 @@ function GeneralPage({
             <div className="set-row-t">启用划词监听</div>
             <div className="set-row-d">选中文本后弹出总结按钮</div>
           </div>
-          <div className={`sw${selectionOn ? " on" : ""}`} onClick={() => void toggleSelection(!selectionOn)} />
+          <div className={`sw${cfg.selectionOn ? " on" : ""}`} onClick={() => void toggleSelection(!cfg.selectionOn)} />
         </div>
         <div className="set-row">
           <div>

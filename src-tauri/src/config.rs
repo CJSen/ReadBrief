@@ -124,6 +124,10 @@ fn default_shortcuts() -> Vec<ShortcutConfig> {
     let summarize_accel = "Cmd+Shift+Z".to_string();
     #[cfg(not(target_os = "macos"))]
     let summarize_accel = "Ctrl+Shift+Z".to_string();
+    #[cfg(target_os = "macos")]
+    let open_main_accel = "Cmd+Shift+H".to_string();
+    #[cfg(not(target_os = "macos"))]
+    let open_main_accel = "Ctrl+Shift+H".to_string();
     vec![
         ShortcutConfig {
             id: "summarize".to_string(),
@@ -132,6 +136,16 @@ fn default_shortcuts() -> Vec<ShortcutConfig> {
             action: "summarize".to_string(),
             name: Some("划词总结".to_string()),
             description: Some("选中文本后触发内置总结提示词".to_string()),
+            is_default: true,
+            model: None,
+        },
+        ShortcutConfig {
+            id: "open-main".to_string(),
+            accelerator: open_main_accel,
+            prompt_id: None,
+            action: "open-main".to_string(),
+            name: Some("打开主窗口".to_string()),
+            description: Some("显示并聚焦 ReadBrief 主窗口".to_string()),
             is_default: true,
             model: None,
         },
