@@ -73,14 +73,17 @@ pub fn dispatch_capture(app: &tauri::AppHandle, captured: CapturedText) {
     }
 }
 
-/// 启动时注册快捷键:优先读取 config.json 中用户配置,
-/// 未配置任何快捷键时回退到默认 ⌘+Shift+Z → summarize
+/// 启动时按 config.json 注册全局快捷键。
+/// 划词总结的默认绑定(⌘+Shift+Z)以 config 中的默认项存在,用户可在设置页修改/删除,
+/// 不再由后端无条件「注入」一个隐藏且无法修改的全局快捷键。
 pub fn register_default_shortcut(app: &tauri::AppHandle) -> AppResult<()> {
     reload_shortcuts(app)
 }
 
 /// 从 config.json 读取快捷键并全量重注册(热更新)。
-/// 无自定义快捷键时注册默认 ⌘+Shift+Z(Ctrl+Shift+Z)。
+/// 只注册 config 中显式绑定(accelerator 非空)的快捷键;
+/// 默认绑定(划词总结 = ⌘+Shift+Z)以 config 默认项的形式存在,用户可在设置页修改/删除。
+/// 若用户清空了所有快捷键,则不再注册任何全局快捷键(不再无条件注入隐藏热键)。
 pub fn reload_shortcuts(app: &tauri::AppHandle) -> AppResult<()> {
     // 1. 注销旧的
     let mut registered = REGISTERED.lock().map_err(|e| AppError::from(e.to_string()))?;
@@ -89,9 +92,9 @@ pub fn reload_shortcuts(app: &tauri::AppHandle) -> AppResult<()> {
     }
     registered.clear();
 
-    // 2. 读取配置
+    // 2. 读取配置:只取显式绑定的快捷键(accelerator 非空)
     let cfg = crate::config::load_config();
-    let custom: Vec<(String, String, Option<String>, Option<String>)> = cfg
+    let bindings: Vec<(String, String, Option<String>, Option<String>)> = cfg
         .shortcuts
         .iter()
         .filter(|s| !s.accelerator.is_empty())
@@ -104,16 +107,6 @@ pub fn reload_shortcuts(app: &tauri::AppHandle) -> AppResult<()> {
             )
         })
         .collect();
-
-    let bindings: Vec<(String, String, Option<String>, Option<String>)> = if custom.is_empty() {
-        #[cfg(target_os = "macos")]
-        let accel = "Cmd+Shift+Z";
-        #[cfg(not(target_os = "macos"))]
-        let accel = "Ctrl+Shift+Z";
-        vec![(accel.to_string(), "summarize".to_string(), None, None)]
-    } else {
-        custom
-    };
 
     // 3. 注册(非法快捷键跳过并打印警告，不阻塞应用启动)
     for (accelerator, action, prompt_id, model) in bindings {
@@ -283,32 +276,21 @@ fn read_clipboard(app: &tauri::AppHandle) -> String {
     app.clipboard().read_text().unwrap_or_default()
 }
 
-/// 当前生效的快捷键绑定列表(供前端设置页展示)
+/// 当前生效的快捷键绑定列表(供前端设置页展示)。
+/// 直接返回 config 中已绑定的快捷键,不再回退注入隐藏的默认 ⌘+Shift+Z。
 #[tauri::command]
 pub fn shortcut_get_bindings() -> AppResult<Vec<ShortcutBinding>> {
     let cfg = crate::config::load_config();
-    let bindings: Vec<ShortcutBinding> = if cfg.shortcuts.is_empty() {
-        #[cfg(target_os = "macos")]
-        let accel = "Cmd+Shift+Z";
-        #[cfg(not(target_os = "macos"))]
-        let accel = "Ctrl+Shift+Z";
-        vec![ShortcutBinding {
-            accelerator: accel.to_string(),
-            action: "summarize".to_string(),
-            prompt_id: None,
-            model: None,
-        }]
-    } else {
-        cfg.shortcuts
-            .iter()
-            .map(|s| ShortcutBinding {
-                accelerator: s.accelerator.clone(),
-                action: s.action.clone(),
-                prompt_id: s.prompt_id.clone(),
-                model: s.model.clone(),
-            })
-            .collect()
-    };
+    let bindings: Vec<ShortcutBinding> = cfg
+        .shortcuts
+        .iter()
+        .map(|s| ShortcutBinding {
+            accelerator: s.accelerator.clone(),
+            action: s.action.clone(),
+            prompt_id: s.prompt_id.clone(),
+            model: s.model.clone(),
+        })
+        .collect();
     Ok(bindings)
 }
 

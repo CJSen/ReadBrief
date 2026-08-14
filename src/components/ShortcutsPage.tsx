@@ -6,9 +6,19 @@ import { useLicense } from "../lib/license/useLicense";
 import { BUILTIN_PROMPT_OPTIONS } from "../lib/prompts/builtins";
 import { Icon } from "./Icon";
 
-const SYSTEM_SHORTCUTS = ["Cmd+Space", "Cmd+Tab", "Ctrl+Space", "Cmd+Shift+Z"];
+const SYSTEM_SHORTCUTS = ["Cmd+Space", "Cmd+Tab", "Ctrl+Space"];
 
-const MODIFIER_KEYS = new Set(["CONTROL", "SHIFT", "ALT", "META", "ESCAPE", "CAPSLOCK", "TAB"]);
+/* 系统快捷键友好名(冲突时说明与什么冲突,设计稿 §3.5) */
+const SYSTEM_SHORTCUT_NAMES: Record<string, string> = {
+  "Cmd+Space": "系统聚焦搜索",
+  "Cmd+Tab": "系统应用切换",
+  "Ctrl+Space": "系统输入法切换",
+};
+
+/* 真正的修饰键(e.key 大写):单独按下时只回显、不提交 */
+const MODIFIER_KEYS = new Set(["CONTROL", "SHIFT", "ALT", "META"]);
+/* 录制中应忽略、不计入组合的键 */
+const IGNORE_KEYS = new Set(["CAPSLOCK", "FN", "FUNCTION", "NUMLOCK"]);
 
 /* ═══ 修饰键符号显示(对齐设计稿:⌥⌘⇧⌃) ═══ */
 const MOD_SYMBOLS: Record<string, string> = {
@@ -21,21 +31,6 @@ const MOD_SYMBOLS: Record<string, string> = {
 function keySymbol(k: string): string {
   if (!k || k === " ") return "Space";
   return MOD_SYMBOLS[k.toUpperCase()] ?? k;
-}
-
-/* 键帽尺寸(设计稿:26×26) */
-const KBD_STYLE = { height: 26, minWidth: 26 } as const;
-
-function parseShortcut(e: React.KeyboardEvent): string {
-  const key = e.key.toUpperCase();
-  if (MODIFIER_KEYS.has(key)) return "";
-  const parts: string[] = [];
-  if (e.metaKey) parts.push("Cmd");
-  if (e.ctrlKey) parts.push("Ctrl");
-  if (e.altKey) parts.push("Alt");
-  if (e.shiftKey) parts.push("Shift");
-  parts.push(key);
-  return parts.join("+");
 }
 
 function newScId(): string {
@@ -52,11 +47,17 @@ interface BuiltinItem {
 }
 
 const BUILTINS: BuiltinItem[] = [
-  { id: "summarize", name: "划词总结", desc: "选中文本后触发默认提示词", action: "summarize" },
+  { id: "summarize", name: "划词总结", desc: "选中文本后触发内置总结提示词", action: "summarize" },
   { id: "paste", name: "呼出输入框", desc: "粘贴任意文本进行总结", action: "paste" },
   { id: "translate", name: "翻译并总结", desc: "翻译后总结选中内容", action: "prompt", proOnly: true },
-  { id: "toggle-float", name: "显示/隐藏浮窗", desc: "快速呼出或关闭总结浮窗", action: "toggle-float" },
 ];
+
+/* 内置快捷键默认绑定的内置提示词（均允许用户修改） */
+const BUILTIN_DEFAULT_PROMPT: Record<string, string> = {
+  summarize: "builtin-summarize",
+  paste: "builtin-summarize",
+  translate: "builtin-translate",
+};
 
 interface ShortcutsPageProps {
   cfg: AppConfig;
@@ -81,9 +82,11 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
   const [recordingId, setRecordingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [conflict, setConflict] = useState<string | null>(null);
+  const [conflictId, setConflictId] = useState<string | null>(null);
   const [showDialog, setShowDialog] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
+  const [confirmDel, setConfirmDel] = useState<{ id: string; name: string } | null>(null);
   const recordRef = useRef<HTMLDivElement | null>(null);
 
   const license = useLicense(cfg);
@@ -103,7 +106,7 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
         action: bi.action,
         proOnly: bi.proOnly ?? false,
         accelerator: sc?.accelerator ?? "",
-        promptId: sc?.promptId ?? null,
+        promptId: sc?.promptId ?? BUILTIN_DEFAULT_PROMPT[bi.id] ?? null,
         model: sc?.model ?? "",
         isDefault: true,
       };
@@ -117,7 +120,7 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
         action: s.action,
         proOnly: false,
         accelerator: s.accelerator ?? "",
-        promptId: s.promptId ?? null,
+        promptId: s.promptId ?? "builtin-summarize",
         model: s.model ?? "",
         isDefault: false,
       }));
@@ -128,6 +131,7 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
 
   useEffect(() => {
     setConflict(null);
+    setConflictId(null);
   }, [cfg.shortcuts]);
 
   /* ═══ 录制区聚焦:Effect 保证在 DOM 提交后才 focus ═══ */
@@ -147,36 +151,86 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
     setRecordingId(id);
     setDraft("");
     setConflict(null);
+    setConflictId(null);
+  }
+
+  /* 取消录制(不提交):Esc 或录制单元失焦,恢复原有组合 */
+  function cancelRecord() {
+    setRecordingId(null);
+    setDraft("");
   }
 
   function handleKeyDown(e: React.KeyboardEvent, id: string) {
     if (recordingId !== id) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const combo = parseShortcut(e);
-    if (!combo) return;
-    setDraft(combo);
-    setRecordingId(null);
+    const key = e.key.toUpperCase();
 
-    if (SYSTEM_SHORTCUTS.includes(combo)) {
-      setConflict(`与系统「${combo}」冲突，请改用其他组合`);
+    // Tab 透传(允许焦点移动,不拦截)
+    if (key === "TAB") return;
+
+    // Cmd+W / Cmd+Q:取消录制并透传(避免误关窗口)
+    if ((e.metaKey || e.ctrlKey) && (key === "W" || key === "Q")) {
+      cancelRecord();
       return;
     }
-    const other = shortcuts.find((s) => s.id !== id && s.accelerator === combo);
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    // 纯 Esc:取消录制(不提交)
+    if (key === "ESCAPE") {
+      cancelRecord();
+      return;
+    }
+
+    // 纯 Delete/Backspace:清除快捷键绑定并退出录制(Bob 范式)
+    if ((key === "DELETE" || key === "BACKSPACE") && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+      clearShortcut(id);
+      return;
+    }
+
+    // 忽略 CapsLock 等无意义键
+    if (IGNORE_KEYS.has(key)) return;
+
+    // 实时构建当前组合(含已按修饰键 + 当前非修饰键),用于录制中即时回显
+    const parts: string[] = [];
+    if (e.metaKey) parts.push("Cmd");
+    if (e.ctrlKey) parts.push("Ctrl");
+    if (e.altKey) parts.push("Alt");
+    if (e.shiftKey) parts.push("Shift");
+    if (!MODIFIER_KEYS.has(key)) parts.push(key);
+    const live = parts.join("+");
+    setDraft(live);
+
+    // 单独修饰键只回显、不提交
+    if (MODIFIER_KEYS.has(key)) return;
+
+    setRecordingId(null);
+    setDraft("");
+
+    if (SYSTEM_SHORTCUTS.includes(live)) {
+      const sysName = SYSTEM_SHORTCUT_NAMES[live] ?? "系统";
+      setConflict(`与「${sysName}」冲突，请改用其他组合`);
+      setConflictId(id);
+      return;
+    }
+    const other = shortcuts.find((s) => s.id !== id && s.accelerator === live);
     if (other) {
       const name = other.name || other.id;
       setConflict(`与「${name}」快捷键冲突，请改用其他组合`);
+      setConflictId(id);
       return;
     }
     setConflict(null);
+    setConflictId(null);
 
     const item = items.find((it) => it.id === id);
     const existing = shortcuts.find((s) => s.id === id);
+    const promptId = existing?.promptId ?? item?.promptId ?? null;
     const entry: ShortcutConfig = {
       id,
-      accelerator: combo,
-      action: item?.action ?? "summarize",
-      promptId: existing?.promptId ?? item?.promptId ?? null,
+      accelerator: live,
+      action: promptId ? "prompt" : (item?.action ?? "summarize"),
+      promptId,
       model: existing?.model,
       name: item?.name,
       description: item?.desc,
@@ -187,6 +241,42 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
         ? shortcuts.map((s) => (s.id === id ? entry : s))
         : [...shortcuts, entry],
     );
+  }
+
+  function handleKeyUp(e: React.KeyboardEvent, id: string) {
+    if (recordingId !== id) return;
+    if (e.key.toUpperCase() === "TAB") return;
+    e.preventDefault();
+    e.stopPropagation();
+    // 松开按键后仅保留当前仍按下的修饰键,回显实时组合
+    const parts: string[] = [];
+    if (e.metaKey) parts.push("Cmd");
+    if (e.ctrlKey) parts.push("Ctrl");
+    if (e.altKey) parts.push("Alt");
+    if (e.shiftKey) parts.push("Shift");
+    setDraft(parts.join("+"));
+  }
+
+  /* 清除快捷键绑定:accelerator 置空,条目保留为空态待录制(内置/自定义均适用) */
+  function clearShortcut(id: string) {
+    setRecordingId(null);
+    setDraft("");
+    setConflict(null);
+    setConflictId(null);
+    const existing = shortcuts.find((s) => s.id === id);
+    if (!existing) return; // 尚未绑定,无需处理
+    const item = items.find((it) => it.id === id);
+    const entry: ShortcutConfig = {
+      id,
+      accelerator: "",
+      action: existing.action ?? item?.action ?? "summarize",
+      promptId: existing.promptId ?? item?.promptId ?? null,
+      model: existing.model,
+      name: item?.name,
+      description: item?.desc,
+      isDefault: item?.isDefault ?? false,
+    };
+    void save(shortcuts.map((s) => (s.id === id ? entry : s)));
   }
 
   function handlePromptChange(id: string, promptId: string | null) {
@@ -212,11 +302,12 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
   function handleModelChange(id: string, model: string) {
     const existing = shortcuts.find((s) => s.id === id);
     const item = items.find((it) => it.id === id);
+    const promptId = existing?.promptId ?? item?.promptId ?? null;
     const entry: ShortcutConfig = {
       id,
       accelerator: existing?.accelerator ?? "",
-      action: existing?.action ?? item?.action ?? "summarize",
-      promptId: existing?.promptId ?? item?.promptId ?? null,
+      action: promptId ? "prompt" : (existing?.action ?? item?.action ?? "summarize"),
+      promptId,
       model: model || undefined,
       name: item?.name,
       description: item?.desc,
@@ -253,13 +344,8 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
     setNewDesc("");
   }
 
-  /* ═══ 冲突态的录制品项 id ═══ */
-  const conflictItemId = conflict
-    ? items.find((it) => {
-        const sc = shortcuts.find((s) => s.id === it.id);
-        return sc?.accelerator && conflict.includes(it.name);
-      })?.id
-    : null;
+  /* ═══ 冲突态的录制品项 id(录制冲突时记为该条目) ═══ */
+  const conflictItemId = conflictId;
 
   return (
     <div>
@@ -270,7 +356,7 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
             快捷键
           </div>
           <div className="muted" style={{ fontSize: "var(--rb-text-xs)", marginTop: 3 }}>
-            点击右侧按键区开始录制，冲突会即时标红
+            点击按键区开始录制，点击已绑定组合可重新录制，冲突会即时标红
           </div>
         </div>
         <button
@@ -325,7 +411,7 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
                   <button
                     className="iconbtn"
                     title="删除快捷键"
-                    onClick={() => handleDelete(item.id)}
+                    onClick={() => setConfirmDel({ id: item.id, name: item.name })}
                     style={{ color: "var(--rb-error)", opacity: 0.65 }}
                   >
                     <Icon name="trash" size={14} />
@@ -336,54 +422,90 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
               {/* 第二行：录制区靠左，提示词/模型下拉靠右 */}
               <div className="flex ac jb g16">
                 <div className="flex ac g4">
-                  {/* 快捷键 / 录制区 */}
-                  {isRecording ? (
-                    <div
-                      ref={recordRef}
-                      className="rb-recording"
-                      tabIndex={0}
-                      onKeyDown={(e) => handleKeyDown(e, item.id)}
-                    >
-                      <span className="rb-recording-dot" />
-                      <span>等待按键</span>
-                      {draft ? <span className="rb-recording-combo">{draft}</span> : null}
-                    </div>
-                  ) : bound ? (
-                    isConflictRow ? (
-                      /* 冲突态:红框胶囊 + 完整组合(设计稿) */
-                      <div className="rb-shortcut-combo">
-                        <span className="mono rb-sc-conflict-text">
-                          {item.accelerator.split("+").map(keySymbol).join(" ")}
-                        </span>
-                      </div>
-                    ) : (
-                      /* 已绑定:散排键帽,符号化(设计稿) */
-                      <div className="flex ac g4">
-                        {item.accelerator.split("+").map((k) => (
-                          <span className="kbd" key={k} style={KBD_STYLE}>
-                            {keySymbol(k)}
-                          </span>
-                        ))}
-                      </div>
-                    )
-                  ) : locked ? (
+                  {/* 单一录制场(Bob/MASShortcut 范式):三态统一,右侧 hint 区常驻 */}
+                  {locked ? (
                     <span className="tag tag-gray">升级 Pro</span>
                   ) : (
-                    <button className="btn btn-sm btn-secondary" onClick={() => startRecord(item.id)}>
-                      <Icon name="plus" size={14} />
-                      录制
-                    </button>
+                    <div
+                      ref={isRecording ? recordRef : undefined}
+                      className={`rb-recorder ${
+                        isRecording
+                          ? "rb-recorder--recording"
+                          : bound
+                            ? "rb-recorder--bound"
+                            : "rb-recorder--empty"
+                      }${isConflictRow ? " rb-recorder--conflict" : ""}`}
+                      tabIndex={0}
+                      role="button"
+                      title={bound ? "点击重新录制" : "点击录制"}
+                      onClick={() => {
+                        if (!isRecording) startRecord(item.id);
+                      }}
+                      onKeyDown={(e) => handleKeyDown(e, item.id)}
+                      onKeyUp={(e) => handleKeyUp(e, item.id)}
+                      onBlur={() => cancelRecord()}
+                    >
+                      {/* 主区:空态 CTA / 绑定态键帽 / 录制态回显 */}
+                      <span className="rb-recorder-main">
+                        {isRecording ? (
+                          <>
+                            <span className="rb-recorder-dot" />
+                            {draft ? (
+                              <span className="rb-recorder-combo">
+                                {draft.split("+").map(keySymbol).join("")}
+                              </span>
+                            ) : (
+                              <span className="rb-recorder-wait">等待按键…</span>
+                            )}
+                          </>
+                        ) : bound ? (
+                          item.accelerator.split("+").map((k) => (
+                            <span className="kbd" key={k}>
+                              {keySymbol(k)}
+                            </span>
+                          ))
+                        ) : (
+                          <>
+                            <Icon name="plus" size={13} />
+                            点击录制
+                          </>
+                        )}
+                      </span>
+                      {/* hint 区:录制态显示 Esc 取消,绑定态显示 ✕ 清除 */}
+                      {isRecording ? (
+                        <span
+                          className="rb-recorder-hint"
+                          title="取消录制 (Esc)"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            cancelRecord();
+                          }}
+                        >
+                          Esc
+                        </span>
+                      ) : bound ? (
+                        <span
+                          className="rb-recorder-hint"
+                          title="清除快捷键"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            clearShortcut(item.id);
+                          }}
+                        >
+                          <Icon name="close" size={12} />
+                        </span>
+                      ) : null}
+                    </div>
                   )}
                 </div>
 
                 <div className="flex ac g6">
-                  {/* 提示词绑定下拉(始终显示) */}
+                  {/* 提示词绑定下拉(始终显示,默认绑定内置提示词,均可在下拉中修改) */}
                   <select
                     className="rb-sc-prompt-select"
                     value={item.promptId ?? ""}
                     onChange={(e) => handlePromptChange(item.id, e.target.value || null)}
                   >
-                    <option value="">默认提示词</option>
                     {allPrompts.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name}
@@ -487,6 +609,51 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
                 disabled={!newName.trim()}
               >
                 添加
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {confirmDel ? (
+        <div className="rb-overlay" onClick={() => setConfirmDel(null)}>
+          <div
+            className="rb-dialog"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setConfirmDel(null);
+            }}
+          >
+            <div className="rb-dialog-hd">
+              <div className="flex ac g9">
+                <span className="rb-dialog-mark">
+                  <Icon name="trash" size={14} />
+                </span>
+                <div>
+                  <div style={{ fontWeight: 500, fontSize: "var(--rb-text-sm)" }}>删除快捷键</div>
+                  <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>此操作不可撤销</div>
+                </div>
+              </div>
+              <button className="iconbtn" onClick={() => setConfirmDel(null)}>
+                <Icon name="close" size={14} />
+              </button>
+            </div>
+            <div className="rb-dialog-body">
+              <div className="rb-confirm-msg">确定删除快捷键「{confirmDel.name}」吗？</div>
+            </div>
+            <div className="rb-dialog-foot">
+              <button className="btn btn-sm btn-ghost" onClick={() => setConfirmDel(null)}>
+                取消
+              </button>
+              <button
+                className="btn btn-sm rb-confirm-del"
+                onClick={() => {
+                  const id = confirmDel.id;
+                  setConfirmDel(null);
+                  handleDelete(id);
+                }}
+              >
+                删除
               </button>
             </div>
           </div>

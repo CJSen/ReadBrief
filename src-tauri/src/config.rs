@@ -117,6 +117,47 @@ fn default_font_scale() -> f32 {
     1.0
 }
 
+/// 内置快捷键的默认绑定：开箱即用时即存在，但全部可在设置页修改/删除，
+/// 不再由后端无条件「注入」到系统。划词总结默认 ⌘+Shift+Z（Windows/Linux 为 Ctrl+Shift+Z）。
+fn default_shortcuts() -> Vec<ShortcutConfig> {
+    #[cfg(target_os = "macos")]
+    let summarize_accel = "Cmd+Shift+Z".to_string();
+    #[cfg(not(target_os = "macos"))]
+    let summarize_accel = "Ctrl+Shift+Z".to_string();
+    vec![
+        ShortcutConfig {
+            id: "summarize".to_string(),
+            accelerator: summarize_accel,
+            prompt_id: Some("builtin-summarize".to_string()),
+            action: "summarize".to_string(),
+            name: Some("划词总结".to_string()),
+            description: Some("选中文本后触发内置总结提示词".to_string()),
+            is_default: true,
+            model: None,
+        },
+        ShortcutConfig {
+            id: "paste".to_string(),
+            accelerator: String::new(),
+            prompt_id: Some("builtin-summarize".to_string()),
+            action: "paste".to_string(),
+            name: Some("呼出输入框".to_string()),
+            description: Some("粘贴任意文本进行总结".to_string()),
+            is_default: true,
+            model: None,
+        },
+        ShortcutConfig {
+            id: "translate".to_string(),
+            accelerator: String::new(),
+            prompt_id: Some("builtin-translate".to_string()),
+            action: "prompt".to_string(),
+            name: Some("翻译并总结".to_string()),
+            description: Some("翻译后总结选中内容".to_string()),
+            is_default: true,
+            model: None,
+        },
+    ]
+}
+
 impl Default for ApiConfig {
     fn default() -> Self {
         Self {
@@ -138,7 +179,7 @@ impl Default for AppConfig {
             api: ApiConfig::default(),
             services: Vec::new(),
             prompts: Vec::new(),
-            shortcuts: Vec::new(),
+            shortcuts: default_shortcuts(),
             language: default_language(),
             theme: default_theme(),
             launch_on_start: default_true(),
@@ -234,6 +275,16 @@ pub fn parse_config(content: &str) -> AppConfig {
         .and_then(|v| v.as_f64())
         .map(|f| f as f32)
         .unwrap_or(1.0);
+
+    // 迁移:补齐用户从未显式配置过的内置快捷键默认绑定(划词总结默认 ⌘+Shift+Z)。
+    // 若 config 中已存在该内置 id(含用户主动清空的情况),则尊重用户选择,不再注入隐藏默认值。
+    let existing_ids: std::collections::HashSet<String> =
+        cfg.shortcuts.iter().map(|s| s.id.clone()).collect();
+    for d in default_shortcuts() {
+        if !existing_ids.contains(&d.id) {
+            cfg.shortcuts.push(d);
+        }
+    }
     cfg
 }
 

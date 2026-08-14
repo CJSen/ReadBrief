@@ -1722,54 +1722,111 @@
   gap: 6px;
 }
 
-.rb-shortcut-combo {
+/* 快捷键录制控件(Bob/MASShortcut 范式:单一录制场,空/绑定/录制三态统一) */
+.rb-recorder {
   display: inline-flex;
-  gap: 4px;
-  align-items: center;
+  align-items: stretch;
   height: 28px;
-  padding: 0 11px;
-  border: 1.5px solid var(--rb-border-default);
   border-radius: var(--rb-radius-sm);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+  overflow: hidden;
+  transition: border-color var(--rb-duration-fast) var(--rb-ease-out),
+    background var(--rb-duration-fast) var(--rb-ease-out),
+    box-shadow var(--rb-duration-fast) var(--rb-ease-out);
+}
+.rb-recorder:focus {
+  outline: none;
+}
+
+/* 主区:空态 CTA / 绑定态键帽 / 录制态回显 */
+.rb-recorder-main {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 11px;
+  min-width: 64px;
+}
+.rb-recorder .kbd {
+  height: 22px;
+  min-width: 22px;
+  font-size: 11px;
+}
+
+/* hint 区(清除/取消):右侧分隔线,常驻显示 */
+.rb-recorder-hint {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  flex: none;
+  border-left: 1px solid var(--rb-border-subtle);
+  color: var(--rb-text-tertiary);
+  font-size: 10px;
+  font-weight: 500;
+  transition: background var(--rb-duration-fast) var(--rb-ease-out),
+    color var(--rb-duration-fast) var(--rb-ease-out);
+}
+.rb-recorder-hint:hover {
+  background: var(--rb-error-bg);
+  color: var(--rb-error);
+}
+
+/* 空态:虚线 + 灰度 CTA */
+.rb-recorder--empty {
+  border: 1px dashed var(--rb-border-strong);
+  background: transparent;
+  color: var(--rb-text-secondary);
+}
+.rb-recorder--empty:hover {
+  border-color: var(--rb-brand-500);
+  color: var(--rb-brand-600);
+  background: var(--rb-brand-50);
+}
+
+/* 绑定态:实线 + 表面底 */
+.rb-recorder--bound {
+  border: 1.5px solid var(--rb-border-default);
   background: var(--rb-bg-surface);
 }
-
-.rb-recording {
-  display: inline-flex;
-  align-items: center;
-  height: 28px;
-  padding: 0 13px;
-  border: 1.5px solid var(--rb-brand-500);
-  border-radius: var(--rb-radius-sm);
+.rb-recorder--bound:hover {
+  border-color: var(--rb-brand-500);
   background: var(--rb-brand-50);
-  gap: 6px;
-  box-shadow: var(--rb-shadow-focus);
-  font-size: 12px;
-  color: var(--rb-brand-600);
-  font-weight: 500;
-  cursor: pointer;
 }
 
-.rb-recording-dot {
+/* 录制态:主色边框 + 呼吸点 */
+.rb-recorder--recording {
+  border: 1.5px solid var(--rb-brand-500);
+  background: var(--rb-brand-50);
+  box-shadow: var(--rb-shadow-focus);
+  color: var(--rb-brand-600);
+  font-weight: 500;
+  cursor: default;
+}
+
+/* 冲突态:红框 */
+.rb-recorder--conflict {
+  border-color: var(--rb-error) !important;
+  background: var(--rb-error-bg);
+}
+
+.rb-recorder-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: var(--rb-brand-600);
   animation: rb-pulse 1.2s ease-in-out infinite;
+  flex: none;
 }
-
-.rb-recording-combo {
+.rb-recorder-combo {
   font-family: var(--rb-font-mono);
+  letter-spacing: 1px;
 }
-
-.rb-conflict .rb-shortcut-combo {
-  border-color: var(--rb-error);
-}
-
-/* 冲突态:红框胶囊内完整组合文本(设计稿:mono 12px 红) */
-.rb-sc-conflict-text {
-  font-size: 12px;
-  color: var(--rb-error);
-  white-space: nowrap;
+.rb-recorder-wait {
+  opacity: 0.85;
 }
 
 .rb-conflict-note {
@@ -2458,12 +2515,6 @@
 /* 快捷键页:锁定项置灰(免费额度用尽 / Pro 功能) */
 .rb-locked-row {
   opacity: 0.55;
-}
-
-/* 快捷键录制区:键盘焦点态(设计稿 §2.5 focus-visible 3px 主色外扩) */
-.rb-recording:focus-visible {
-  outline: 2px solid var(--rb-brand-300);
-  outline-offset: 2px;
 }
 
 /* ─── 通用弹窗(快捷键新增等) ─── */
