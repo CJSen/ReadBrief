@@ -48,6 +48,7 @@ export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
   const [confirmDel, setConfirmDel] = useState<ApiConfig | null>(null);
   const [latency, setLatency] = useState<LatencyMap>({});
   const [testing, setTesting] = useState(false);
+  const [testingIds, setTestingIds] = useState<Set<string>>(new Set());
   const [dragId, setDragId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const idCounter = useRef(1);
@@ -139,13 +140,22 @@ export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
 
   async function handleTestOne(svc: ApiConfig) {
     if (!svc.apiKey) return;
-    const r = await testConnection({
-      type: svc.protocol as ProviderType,
-      apiKey: svc.apiKey,
-      baseUrl: svc.baseUrl,
-      model: svc.model,
-    });
-    setLatency((m) => ({ ...m, [svc.id!]: { ok: r.ok, ms: r.latencyMs ?? 0 } }));
+    setTestingIds((s) => new Set(s).add(svc.id!));
+    try {
+      const r = await testConnection({
+        type: svc.protocol as ProviderType,
+        apiKey: svc.apiKey,
+        baseUrl: svc.baseUrl,
+        model: svc.model,
+      });
+      setLatency((m) => ({ ...m, [svc.id!]: { ok: r.ok, ms: r.latencyMs ?? 0 } }));
+    } finally {
+      setTestingIds((s) => {
+        const n = new Set(s);
+        n.delete(svc.id!);
+        return n;
+      });
+    }
   }
 
   return (
@@ -221,13 +231,13 @@ export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
                 <button
                   className="iconbtn"
                   title="重新测速"
-                  disabled={!svc.apiKey}
+                  disabled={!svc.apiKey || testingIds.has(svc.id!)}
                   onClick={(e) => {
                     e.stopPropagation();
                     void handleTestOne(svc);
                   }}
                 >
-                  <Icon name="refresh" size={14} />
+                  <Icon name="refresh" size={14} className={testingIds.has(svc.id!) ? "rb-spin" : ""} />
                 </button>
                 <button
                   className="iconbtn"
@@ -267,7 +277,7 @@ export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
       {/* 操作条(剪贴板导入已移除,保留导出) */}
       <div className="flex ac g8" style={{ marginBottom: 14 }}>
         <button className="btn btn-secondary btn-sm" onClick={() => void handleTestAll()} disabled={testing}>
-          <Icon name="refresh" size={14} />
+          <Icon name="refresh" size={14} className={testing ? "rb-spin" : ""} />
           {testing ? "测速中…" : "全部重新测速"}
         </button>
         <span className="muted rb-svc-last">上次测速 {services.length ? "刚刚" : "—"}</span>
@@ -319,7 +329,7 @@ export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
           isNew={!services.some((s) => s.id === editing.id)}
           onSave={handleSaveService}
           onCancel={() => setEditing(null)}
-          onTest={(s) => void handleTestOne(s)}
+          onTest={(s) => handleTestOne(s)}
           latency={latency[editing.id!]}
         />
       ) : null}
@@ -333,7 +343,7 @@ interface ServiceFormProps {
   onSave: (svc: ApiConfig) => void;
   onCancel: () => void;
   /** 测试连接:传表单实时值(而非打开弹窗时的快照),确保改完 key/model 再测的是新值 */
-  onTest: (svc: ApiConfig) => void;
+  onTest: (svc: ApiConfig) => Promise<void>;
   latency?: { ok: boolean; ms: number };
 }
 
@@ -347,6 +357,17 @@ function ServiceForm({ svc, isNew, onSave, onCancel, onTest, latency }: ServiceF
   const [loadingModels, setLoadingModels] = useState(false);
   const [modelErr, setModelErr] = useState<string | null>(null);
   const [saveErr, setSaveErr] = useState<string | null>(null);
+  const [testing, setTesting] = useState(false);
+
+  /** 测试连接:本地记录 spinning 状态,完成后恢复(owait onTest 拿到结果) */
+  async function handleTestClick() {
+    setTesting(true);
+    try {
+      await onTest(form);
+    } finally {
+      setTesting(false);
+    }
+  }
   const fmt = FORMAT_META[form.protocol as ProviderType];
   const modelInputRef = useRef<HTMLDivElement>(null);
   const modelMenuRef = useRef<HTMLDivElement>(null);
@@ -589,8 +610,8 @@ function ServiceForm({ svc, isNew, onSave, onCancel, onTest, latency }: ServiceF
         </div>
 
         <div className="rb-svc-form-foot">
-          <button className="btn btn-secondary btn-sm" onClick={() => onTest(form)} disabled={!form.apiKey}>
-            <Icon name="refresh" size={14} />
+          <button className="btn btn-secondary btn-sm" onClick={() => void handleTestClick()} disabled={!form.apiKey || testing}>
+            <Icon name="refresh" size={14} className={testing ? "rb-spin" : ""} />
             测试连接
           </button>
           {latency ? (

@@ -317,6 +317,15 @@
   50% { opacity: 0; }
 }
 
+@keyframes rb-spin {
+  to { transform: rotate(360deg); }
+}
+
+.rb-spin {
+  animation: rb-spin 0.8s linear infinite;
+  transform-origin: center;
+}
+
 /* ============================================================
    主窗口历史(AppMain)—— 设计稿 §5 三栏布局
    ============================================================ */
