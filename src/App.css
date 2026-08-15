@@ -882,9 +882,16 @@
   font-weight: 500;
   line-height: 1;
   padding: 2px 6px;
+  border: none;
   border-radius: 999px;
   color: var(--rb-brand-600, #6366f1);
   background: var(--rb-brand-100, #eef2ff);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.rb-tag-sel-count:hover {
+  background: var(--rb-brand-200, #e0e7ff);
 }
 
 .rb-nav-section-add {

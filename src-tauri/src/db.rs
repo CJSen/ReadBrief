@@ -1,5 +1,5 @@
 use crate::error::{AppError, AppResult};
-use rusqlite::Connection;
+use rusqlite::{params, Connection};
 use std::path::{Path, PathBuf};
 
 /// 当前数据库 schema 版本（递增，用于迁移检测）
@@ -54,6 +54,7 @@ fn try_open(path: &Path) -> AppResult<Connection> {
     conn.pragma_update(None, "foreign_keys", "ON")
         .map_err(|e| AppError::from(e.to_string()))?;
     migrate(&conn)?;
+    seed_default_tags(&conn)?;
     Ok(conn)
 }
 
@@ -126,6 +127,34 @@ fn run_migrations(conn: &Connection, from_version: u32) -> AppResult<()> {
 
 pub fn db_path() -> PathBuf {
     app_data_dir().join("readbrief.db")
+}
+
+/// 默认标签:首次启动(tags 表为空)时种子化,用户可随时删除 / 重命名 / 改色。
+const DEFAULT_TAGS: &[(&str, &str)] = &[
+    ("阅读", "#3B82F6"),
+    ("工作", "#22C55E"),
+    ("学习", "#8B5CF6"),
+    ("新闻", "#F97316"),
+    ("生活", "#EC4899"),
+];
+
+/// 仅当 tags 表为空时种子化默认标签(幂等:已有任意标签则不覆盖,避免抹掉用户自定义)。
+pub fn seed_default_tags(conn: &Connection) -> AppResult<()> {
+    let count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM tags", [], |row| row.get(0))
+        .map_err(|e| AppError::from(e.to_string()))?;
+    if count > 0 {
+        return Ok(());
+    }
+    for (name, color) in DEFAULT_TAGS {
+        conn.execute(
+            "INSERT INTO tags (name, color) VALUES (?1, ?2)
+             ON CONFLICT(name) DO NOTHING",
+            params![name, color],
+        )
+        .map_err(|e| AppError::from(e.to_string()))?;
+    }
+    Ok(())
 }
 
 pub fn ensure_path(p: &Path) {

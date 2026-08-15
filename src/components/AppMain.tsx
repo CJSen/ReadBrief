@@ -653,7 +653,14 @@ export function AppMain() {
           <span className="rb-nav-section-label">
             {t("history.tags")}
             {selectedTags.length > 0 && (
-              <span className="rb-tag-sel-count">已选 {selectedTags.length}/4</span>
+              <button
+                type="button"
+                className="rb-tag-sel-count"
+                title={t("history.clearSelectedTags")}
+                onClick={() => setSelectedTags([])}
+              >
+                已选 {selectedTags.length}/{allTags.length}
+              </button>
             )}
           </span>
           <div className="rb-tag-search">

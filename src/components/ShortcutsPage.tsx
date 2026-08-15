@@ -51,14 +51,14 @@ interface BuiltinItem {
 const BUILTINS: BuiltinItem[] = [
   { id: "open-main", name: "打开主窗口", desc: "显示并聚焦 ReadBrief 主窗口", action: "open-main", noPrompt: true },
   { id: "summarize", name: "划词总结", desc: "选中文本后触发内置总结提示词", action: "summarize" },
-  { id: "paste", name: "呼出输入框", desc: "粘贴任意文本进行总结", action: "paste" },
-  { id: "translate", name: "翻译并总结", desc: "翻译后总结选中内容", action: "prompt", proOnly: true },
+  { id: "paste", name: "呼出输入框", desc: "粘贴任意文本进行问答", action: "paste" },
+  { id: "translate", name: "翻译", desc: "翻译选中内容", action: "prompt", proOnly: true },
 ];
 
 /* 内置快捷键默认绑定的内置提示词（均允许用户修改） */
 const BUILTIN_DEFAULT_PROMPT: Record<string, string> = {
   summarize: "builtin-summarize",
-  paste: "builtin-summarize",
+  paste: "builtin-qa",
   translate: "builtin-translate",
 };
 
