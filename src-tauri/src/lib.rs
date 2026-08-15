@@ -92,6 +92,7 @@ pub fn run() {
             windows::open_settings_section,
             windows::open_privacy_settings,
             windows::show_main,
+            windows::reveal_main_window,
             windows::hide_main,
         ]);
 
@@ -137,7 +138,7 @@ fn setup_app<R: tauri::Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn s
     match db::open_connection() {
         Ok(conn) => {
             app.manage(AppState {
-                db: std::sync::Mutex::new(conn),
+                db: std::sync::Arc::new(std::sync::Mutex::new(conn)),
             });
             Ok(())
         }

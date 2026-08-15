@@ -10,7 +10,9 @@ export type PromptConfig = { id: string, name: string, content: string, model: s
  */
 isBuiltin: boolean, 
 /**
- * 提示词类别:summary(总结)/translate(翻译)/qa(问答)/general(通用)
+ * 提示词类别:summary(总结)/translate(翻译)/qa(问答)/general(通用)。
+ * 决定拼接哪套系统提示词模板与历史标题解析方式。
+ * 旧配置缺该字段时回退 "summary"(行为与改动前一致)。
  */
 tag: string, };
 

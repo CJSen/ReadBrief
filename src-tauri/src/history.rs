@@ -2,11 +2,11 @@ use crate::error::{AppError, AppResult};
 use chrono::Utc;
 use rusqlite::{params, params_from_iter, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tauri::Emitter;
 
 pub struct AppState {
-    pub db: Mutex<Connection>,
+    pub db: Arc<Mutex<Connection>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -71,6 +71,23 @@ fn row_to_record(row: &rusqlite::Row) -> rusqlite::Result<HistoryRecord> {
     })
 }
 
+/// 把一组标签名同步进 tags 定义表(唯一真相源):已存在的保留原色(OR IGNORE 不覆盖),未定义的补空色。
+/// 供 create / history_update_tags 调用,确保 all_tags 只读 tags 表即可覆盖全部标签,
+/// 从而无需再扫 history 表(10w 行全表扫描是首屏慢的元凶)。
+fn ensure_tags_defined(conn: &Connection, tags: &[String]) -> AppResult<()> {
+    for t in tags {
+        let name = t.trim();
+        if !name.is_empty() {
+            conn.execute(
+                "INSERT OR IGNORE INTO tags (name, color) VALUES (?1, '')",
+                params![name],
+            )
+            .map_err(|e| AppError::from(e.to_string()))?;
+        }
+    }
+    Ok(())
+}
+
 pub fn create(
     conn: &Connection,
     source_text: &str,
@@ -88,7 +105,10 @@ pub fn create(
         params![source_text, summary, ai_title, created_at, model, prompt_name, tags_json],
     )
     .map_err(|e| AppError::from(e.to_string()))?;
-    Ok(conn.last_insert_rowid())
+    // 先取 history 的自增 id:ensure_tags_defined 内部的 INSERT 会改写连接的 last_insert_rowid
+    let id = conn.last_insert_rowid();
+    ensure_tags_defined(conn, tags)?;
+    Ok(id)
 }
 
 pub fn list(conn: &Connection, keyword: Option<&str>) -> AppResult<Vec<HistoryRecord>> {
@@ -265,7 +285,7 @@ pub fn toggle_favorite(conn: &Connection, id: i64) -> AppResult<bool> {
 }
 
 #[tauri::command]
-pub fn history_create(
+pub async fn history_create(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
     source_text: String,
@@ -275,24 +295,31 @@ pub fn history_create(
     prompt_name: Option<String>,
     tags: Vec<String>,
 ) -> AppResult<i64> {
-    let conn = state.db.lock().map_err(|e| AppError::from(e.to_string()))?;
-    let id = create(
-        &conn,
-        &source_text,
-        &summary,
-        ai_title.as_deref(),
-        &model,
-        prompt_name.as_deref(),
-        &tags,
-    )?;
-    // 通知各窗口历史已变更:浮窗新增记录后,主窗口无需手动切换即可刷新(P1-修复)
-    let _ = app.emit("history-changed", ());
-    Ok(id)
+    let db = state.db.clone();
+    tauri::async_runtime::spawn_blocking(move || -> AppResult<i64> {
+        let id = {
+            let conn = db.lock().map_err(|e| AppError::from(e.to_string()))?;
+            create(
+                &conn,
+                &source_text,
+                &summary,
+                ai_title.as_deref(),
+                &model,
+                prompt_name.as_deref(),
+                &tags,
+            )?
+        };
+        // 通知各窗口历史已变更:浮窗新增记录后,主窗口无需手动切换即可刷新(P1-修复)
+        let _ = app.emit("history-changed", ());
+        Ok(id)
+    })
+    .await
+    .map_err(|e| AppError::from(e.to_string()))?
 }
 
 /// 分页查询历史(无限滚动数据源),支持搜索/收藏/时间/多标签(交集)过滤,返回当前页 + 总数
 #[tauri::command]
-pub fn history_list(
+pub async fn history_list(
     state: tauri::State<'_, AppState>,
     keyword: Option<String>,
     favorite: Option<bool>,
@@ -301,89 +328,128 @@ pub fn history_list(
     limit: Option<i64>,
     offset: Option<i64>,
 ) -> AppResult<HistoryPage> {
-    let conn = state.db.lock().map_err(|e| AppError::from(e.to_string()))?;
-    list_page(
-        &conn,
-        keyword.as_deref(),
-        favorite.unwrap_or(false),
-        time_filter.as_deref(),
-        tags.as_deref().unwrap_or(&[]),
-        limit.unwrap_or(50).clamp(1, 200),
-        offset.unwrap_or(0).max(0),
-    )
+    let db = state.db.clone();
+    tauri::async_runtime::spawn_blocking(move || -> AppResult<HistoryPage> {
+        let conn = db.lock().map_err(|e| AppError::from(e.to_string()))?;
+        list_page(
+            &conn,
+            keyword.as_deref(),
+            favorite.unwrap_or(false),
+            time_filter.as_deref(),
+            tags.as_deref().unwrap_or(&[]),
+            limit.unwrap_or(50).clamp(1, 200),
+            offset.unwrap_or(0).max(0),
+        )
+    })
+    .await
+    .map_err(|e| AppError::from(e.to_string()))?
 }
 
 /// 历史总数(侧边栏计数;favorite=true 时统计收藏数)
 #[tauri::command]
-pub fn history_count(
+pub async fn history_count(
     state: tauri::State<'_, AppState>,
     favorite: Option<bool>,
 ) -> AppResult<i64> {
-    let conn = state.db.lock().map_err(|e| AppError::from(e.to_string()))?;
-    count(&conn, favorite.unwrap_or(false))
+    let db = state.db.clone();
+    tauri::async_runtime::spawn_blocking(move || -> AppResult<i64> {
+        let conn = db.lock().map_err(|e| AppError::from(e.to_string()))?;
+        count(&conn, favorite.unwrap_or(false))
+    })
+    .await
+    .map_err(|e| AppError::from(e.to_string()))?
 }
 
 #[tauri::command]
-pub fn history_get(
+pub async fn history_get(
     state: tauri::State<'_, AppState>,
     id: i64,
 ) -> AppResult<Option<HistoryRecord>> {
-    let conn = state.db.lock().map_err(|e| AppError::from(e.to_string()))?;
-    get(&conn, id)
+    let db = state.db.clone();
+    tauri::async_runtime::spawn_blocking(move || -> AppResult<Option<HistoryRecord>> {
+        let conn = db.lock().map_err(|e| AppError::from(e.to_string()))?;
+        get(&conn, id)
+    })
+    .await
+    .map_err(|e| AppError::from(e.to_string()))?
 }
 
 #[tauri::command]
-pub fn history_delete(
+pub async fn history_delete(
     state: tauri::State<'_, AppState>,
     id: i64,
 ) -> AppResult<()> {
-    let conn = state.db.lock().map_err(|e| AppError::from(e.to_string()))?;
-    delete(&conn, id)
+    let db = state.db.clone();
+    tauri::async_runtime::spawn_blocking(move || -> AppResult<()> {
+        let conn = db.lock().map_err(|e| AppError::from(e.to_string()))?;
+        delete(&conn, id)
+    })
+    .await
+    .map_err(|e| AppError::from(e.to_string()))?
 }
 
 #[tauri::command]
-pub fn history_toggle_favorite(
+pub async fn history_toggle_favorite(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
     id: i64,
 ) -> AppResult<bool> {
-    let conn = state.db.lock().map_err(|e| AppError::from(e.to_string()))?;
-    let result = toggle_favorite(&conn, id);
-    // 通知各窗口历史已变更(浮窗收藏后主窗口列表/详情即时刷新)
-    let _ = app.emit("history-changed", ());
-    result
+    let db = state.db.clone();
+    tauri::async_runtime::spawn_blocking(move || -> AppResult<bool> {
+        let result = {
+            let conn = db.lock().map_err(|e| AppError::from(e.to_string()))?;
+            toggle_favorite(&conn, id)
+        };
+        // 通知各窗口历史已变更(浮窗收藏后主窗口列表/详情即时刷新)
+        let _ = app.emit("history-changed", ());
+        result
+    })
+    .await
+    .map_err(|e| AppError::from(e.to_string()))?
 }
 
 /// 清空全部历史记录(设置页「清空历史」)
 #[tauri::command]
-pub fn history_clear(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> AppResult<()> {
-    let conn = state.db.lock().map_err(|e| AppError::from(e.to_string()))?;
-    conn.execute("DELETE FROM history", [])
-        .map_err(|e| AppError::from(e.to_string()))?;
-    // 主窗口/统计数字需即时同步清空结果
-    let _ = app.emit("history-changed", ());
-    Ok(())
+pub async fn history_clear(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> AppResult<()> {
+    let db = state.db.clone();
+    tauri::async_runtime::spawn_blocking(move || -> AppResult<()> {
+        {
+            let conn = db.lock().map_err(|e| AppError::from(e.to_string()))?;
+            conn.execute("DELETE FROM history", [])
+                .map_err(|e| AppError::from(e.to_string()))?;
+        }
+        // 主窗口/统计数字需即时同步清空结果
+        let _ = app.emit("history-changed", ());
+        Ok(())
+    })
+    .await
+    .map_err(|e| AppError::from(e.to_string()))?
 }
 
 /// 今日已总结次数(托盘菜单展示)
 #[tauri::command]
-pub fn history_today_count(state: tauri::State<'_, AppState>) -> AppResult<i64> {
-    let conn = state.db.lock().map_err(|e| AppError::from(e.to_string()))?;
-    // created_at 存 UTC RFC3339;以本地时区日期比较,非 UTC 时区下不再恒为 0
-    let count: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM history
-             WHERE DATE(created_at, 'localtime') = DATE('now', 'localtime')",
-            [],
-            |row| row.get(0),
-        )
-        .map_err(|e| AppError::from(e.to_string()))?;
-    Ok(count)
+pub async fn history_today_count(state: tauri::State<'_, AppState>) -> AppResult<i64> {
+    let db = state.db.clone();
+    tauri::async_runtime::spawn_blocking(move || -> AppResult<i64> {
+        let conn = db.lock().map_err(|e| AppError::from(e.to_string()))?;
+        // created_at 存 UTC RFC3339;以本地时区日期比较,非 UTC 时区下不再恒为 0
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM history
+                 WHERE DATE(created_at, 'localtime') = DATE('now', 'localtime')",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|e| AppError::from(e.to_string()))?;
+        Ok(count)
+    })
+    .await
+    .map_err(|e| AppError::from(e.to_string()))?
 }
 
 /// 更新历史记录标签(单条记录最多 4 个,后端兜底校验)
 #[tauri::command]
-pub fn history_update_tags(
+pub async fn history_update_tags(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
     id: i64,
@@ -392,22 +458,32 @@ pub fn history_update_tags(
     if tags.len() > 4 {
         return Err(AppError::from("每条记录最多 4 个标签"));
     }
-    let conn = state.db.lock().map_err(|e| AppError::from(e.to_string()))?;
-    let tags_json = serde_json::to_string(&tags).unwrap_or_else(|_| "[]".to_string());
-    conn.execute(
-        "UPDATE history SET tags = ?1 WHERE id = ?2",
-        params![tags_json, id],
-    )
-    .map_err(|e| AppError::from(e.to_string()))?;
-    // 通知各窗口历史已变更(浮窗打标后主窗口列表/详情即时刷新)
-    let _ = app.emit("history-changed", ());
-    Ok(())
+    let db = state.db.clone();
+    tauri::async_runtime::spawn_blocking(move || -> AppResult<()> {
+        {
+            let conn = db.lock().map_err(|e| AppError::from(e.to_string()))?;
+            let tags_json = serde_json::to_string(&tags).unwrap_or_else(|_| "[]".to_string());
+            conn.execute(
+                "UPDATE history SET tags = ?1 WHERE id = ?2",
+                params![tags_json, id],
+            )
+            .map_err(|e| AppError::from(e.to_string()))?;
+            // 同步维护 tags 定义表(唯一真相源):打上的标签若尚未定义则补空色,
+            // 保证 all_tags 只读 tags 表即可覆盖全部标签,无需再扫 history 表(避免 10w 行全表扫描)。
+            ensure_tags_defined(&conn, &tags)?;
+        }
+        // 通知各窗口历史已变更(浮窗打标后主窗口列表/详情即时刷新)
+        let _ = app.emit("history-changed", ());
+        Ok(())
+    })
+    .await
+    .map_err(|e| AppError::from(e.to_string()))?
 }
 
 /// 更新已有历史记录的总结内容(浮窗「重新生成」场景:同一会话内替换结果,
 /// 保持原文/标签/收藏等属性不变,避免重复记录堆积)。
 #[tauri::command]
-pub fn history_update_summary(
+pub async fn history_update_summary(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
     id: i64,
@@ -416,15 +492,22 @@ pub fn history_update_summary(
     model: String,
     prompt_name: Option<String>,
 ) -> AppResult<()> {
-    let conn = state.db.lock().map_err(|e| AppError::from(e.to_string()))?;
-    conn.execute(
-        "UPDATE history SET summary = ?1, ai_title = ?2, model = ?3, prompt_name = ?4 WHERE id = ?5",
-        params![summary, ai_title, model, prompt_name, id],
-    )
-    .map_err(|e| AppError::from(e.to_string()))?;
-    // 主窗口/统计数字需即时同步更新结果
-    let _ = app.emit("history-changed", ());
-    Ok(())
+    let db = state.db.clone();
+    tauri::async_runtime::spawn_blocking(move || -> AppResult<()> {
+        {
+            let conn = db.lock().map_err(|e| AppError::from(e.to_string()))?;
+            conn.execute(
+                "UPDATE history SET summary = ?1, ai_title = ?2, model = ?3, prompt_name = ?4 WHERE id = ?5",
+                params![summary, ai_title, model, prompt_name, id],
+            )
+            .map_err(|e| AppError::from(e.to_string()))?;
+        }
+        // 主窗口/统计数字需即时同步更新结果
+        let _ = app.emit("history-changed", ());
+        Ok(())
+    })
+    .await
+    .map_err(|e| AppError::from(e.to_string()))?
 }
 
 /// 创建/更新标签定义(名称 + 颜色)。同名已存在则更新颜色(UPSERT,支持补色)。
@@ -442,36 +525,20 @@ pub fn create_tag(conn: &Connection, name: &str, color: &str) -> AppResult<()> {
     Ok(())
 }
 
-/// 获取所有不重复标签及其定义颜色(tags 表优先,历史记录中出现但未定义的补默认色)
+/// 获取所有标签定义(名称 → 颜色)。tags 表为唯一真相源:
+/// 打标路径(history_update_tags)会同步 UPSERT 标签名,故无需再扫 history 表补"野生标签"
+/// (原第二段 `SELECT tags FROM history WHERE tags != '[]'` 全表扫描在 10w 行数据下耗时 ~1s,
+/// 是首屏加载慢的元凶,已删除)。
 pub fn all_tags(conn: &Connection) -> AppResult<Vec<TagDef>> {
     let mut defs: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
-    {
-        let mut stmt = conn
-            .prepare("SELECT name, color FROM tags")
-            .map_err(|e| AppError::from(e.to_string()))?;
-        let mut rows = stmt.query([]).map_err(|e| AppError::from(e.to_string()))?;
-        while let Some(row) = rows.next().map_err(|e| AppError::from(e.to_string()))? {
-            let name: String = row.get(0).map_err(|e| AppError::from(e.to_string()))?;
-            let color: String = row.get(1).map_err(|e| AppError::from(e.to_string()))?;
-            defs.insert(name, color);
-        }
-    }
-    {
-        let mut stmt = conn
-            .prepare("SELECT tags FROM history WHERE tags != '[]'")
-            .map_err(|e| AppError::from(e.to_string()))?;
-        let mut rows = stmt.query([]).map_err(|e| AppError::from(e.to_string()))?;
-        while let Some(row) = rows.next().map_err(|e| AppError::from(e.to_string()))? {
-            let raw: String = row.get(0).map_err(|e| AppError::from(e.to_string()))?;
-            if let Ok(tags) = serde_json::from_str::<Vec<String>>(&raw) {
-                for t in tags {
-                    let name = t.trim().to_string();
-                    if !name.is_empty() && !defs.contains_key(&name) {
-                        defs.insert(name, String::new());
-                    }
-                }
-            }
-        }
+    let mut stmt = conn
+        .prepare("SELECT name, color FROM tags")
+        .map_err(|e| AppError::from(e.to_string()))?;
+    let mut rows = stmt.query([]).map_err(|e| AppError::from(e.to_string()))?;
+    while let Some(row) = rows.next().map_err(|e| AppError::from(e.to_string()))? {
+        let name: String = row.get(0).map_err(|e| AppError::from(e.to_string()))?;
+        let color: String = row.get(1).map_err(|e| AppError::from(e.to_string()))?;
+        defs.insert(name, color);
     }
     Ok(defs
         .into_iter()
@@ -527,14 +594,19 @@ pub fn update_tag(conn: &Connection, old_name: &str, new_name: &str, color: &str
 }
 
 #[tauri::command]
-pub fn history_update_tag(
+pub async fn history_update_tag(
     state: tauri::State<'_, AppState>,
     oldName: String,
     newName: String,
     color: String,
 ) -> AppResult<()> {
-    let conn = state.db.lock().map_err(|e| AppError::from(e.to_string()))?;
-    update_tag(&conn, &oldName, &newName, &color)
+    let db = state.db.clone();
+    tauri::async_runtime::spawn_blocking(move || -> AppResult<()> {
+        let conn = db.lock().map_err(|e| AppError::from(e.to_string()))?;
+        update_tag(&conn, &oldName, &newName, &color)
+    })
+    .await
+    .map_err(|e| AppError::from(e.to_string()))?
 }
 
 /// 删除标签:移除 tags 表定义,并从所有历史记录的 tags 数组中剔除该名称
@@ -576,24 +648,39 @@ pub fn delete_tag(conn: &Connection, name: &str) -> AppResult<()> {
 }
 
 #[tauri::command]
-pub fn history_delete_tag(state: tauri::State<'_, AppState>, name: String) -> AppResult<()> {
-    let conn = state.db.lock().map_err(|e| AppError::from(e.to_string()))?;
-    delete_tag(&conn, &name)
+pub async fn history_delete_tag(state: tauri::State<'_, AppState>, name: String) -> AppResult<()> {
+    let db = state.db.clone();
+    tauri::async_runtime::spawn_blocking(move || -> AppResult<()> {
+        let conn = db.lock().map_err(|e| AppError::from(e.to_string()))?;
+        delete_tag(&conn, &name)
+    })
+    .await
+    .map_err(|e| AppError::from(e.to_string()))?
 }
 
 #[tauri::command]
-pub fn history_create_tag(
+pub async fn history_create_tag(
     state: tauri::State<'_, AppState>,
     name: String,
     color: String,
 ) -> AppResult<()> {
-    let conn = state.db.lock().map_err(|e| AppError::from(e.to_string()))?;
-    create_tag(&conn, &name, &color)
+    let db = state.db.clone();
+    tauri::async_runtime::spawn_blocking(move || -> AppResult<()> {
+        let conn = db.lock().map_err(|e| AppError::from(e.to_string()))?;
+        create_tag(&conn, &name, &color)
+    })
+    .await
+    .map_err(|e| AppError::from(e.to_string()))?
 }
 
 /// 获取所有不重复标签及定义颜色
 #[tauri::command]
-pub fn history_all_tags(state: tauri::State<'_, AppState>) -> AppResult<Vec<TagDef>> {
-    let conn = state.db.lock().map_err(|e| AppError::from(e.to_string()))?;
-    all_tags(&conn)
+pub async fn history_all_tags(state: tauri::State<'_, AppState>) -> AppResult<Vec<TagDef>> {
+    let db = state.db.clone();
+    tauri::async_runtime::spawn_blocking(move || -> AppResult<Vec<TagDef>> {
+        let conn = db.lock().map_err(|e| AppError::from(e.to_string()))?;
+        all_tags(&conn)
+    })
+    .await
+    .map_err(|e| AppError::from(e.to_string()))?
 }

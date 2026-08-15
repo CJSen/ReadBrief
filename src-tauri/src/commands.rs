@@ -3,8 +3,10 @@ use crate::config::{self, AppConfig};
 use tauri::Emitter;
 
 #[tauri::command]
-pub fn config_get() -> AppResult<AppConfig> {
-    Ok(config::load_config())
+pub async fn config_get() -> AppResult<AppConfig> {
+    tauri::async_runtime::spawn_blocking(config::load_config)
+        .await
+        .map_err(|e| AppError::from(e.to_string()))
 }
 
 #[tauri::command]

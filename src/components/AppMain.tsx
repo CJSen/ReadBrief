@@ -111,6 +111,12 @@ export function AppMain() {
   const [allTags, setAllTags] = useState<TagDef[]>([]);
   /** 首启引导覆盖层:仅主窗口,config.onboardingDone=false 时显示 */
   const [showOnboarding, setShowOnboarding] = useState(false);
+  /** 首屏配置是否加载完成(config_get 成功/失败均置 true) */
+  const [cfgLoaded, setCfgLoaded] = useState(false);
+  /** 首屏历史列表是否完成首次加载(翻页/过滤不重置) */
+  const [bootstrapped, setBootstrapped] = useState(false);
+  /** 首屏标签列表是否加载完成 */
+  const [tagsLoaded, setTagsLoaded] = useState(false);
   // 左侧标签多选(至多 4 个,交集 AND 筛选)
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   // 左侧标签搜索框
@@ -140,12 +146,18 @@ export function AppMain() {
   const hasMoreRef = useRef(false);
   // 当前过滤条件的命中总数(仅 reset 时由后端计算一次,追加页复用,避免每次翻页都跑 COUNT)
   const filteredTotalRef = useRef(0);
+  // 主窗自己触发的写操作(收藏/打标)会经后端 emit "history-changed" 广播回本窗口,
+  // 用时间戳屏蔽这段"自回声",避免乐观更新被 history-changed 的全量刷新覆盖(列表/详情闪烁)。
+  const selfMutateUntil = useRef(0);
   // 详情「添加标签」浮层
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerInput, setPickerInput] = useState("");
   const pickerInputRef = useRef<HTMLInputElement>(null);
 
   const hasApiKey = cfg ? getServices(cfg).some((s) => s.apiKey) : false;
+
+  /** 首屏是否已就绪:配置 + 历史列表 + 标签均加载完成,三者一起渲染避免"标签先出、列表后出"的割裂 */
+  const ready = cfgLoaded && bootstrapped && tagsLoaded;
 
   // 每次渲染同步最新过滤条件(供稳定的 loadPage 读取,避免闭包过期)
   filterRef.current = { keyword, view, timeFilter, selectedTags };
@@ -156,7 +168,8 @@ export function AppMain() {
         setCfg(c);
         if (!c.onboardingDone) setShowOnboarding(true);
       })
-      .catch(() => setCfg(null));
+      .catch(() => setCfg(null))
+      .finally(() => setCfgLoaded(true));
   }, []);
 
   // 主窗浮层是否打开(供 Esc 优先关闭浮层,而非直接隐藏主窗)
@@ -240,6 +253,7 @@ export function AppMain() {
       if (seq === seqRef.current) {
         inflightRef.current = false;
         setLoading(false);
+        setBootstrapped(true);
       }
     }
   }, []);
@@ -250,6 +264,8 @@ export function AppMain() {
       setAllTags(tags);
     } catch {
       // ignore
+    } finally {
+      setTagsLoaded(true);
     }
   }, []);
 
@@ -330,10 +346,13 @@ export function AppMain() {
 
   // 历史数据变更(浮窗打标/收藏/重新生成/新增)时:刷新计数/标签/列表数据,并强制重载当前详情。
   // 用 refreshList(不动 selectedId)而非 loadPage(true):保持选中、不跳页,详情经 detailTick 原地刷新。
+  // 注意:主窗自己的收藏/打标已做乐观更新,其后端广播回来的 history-changed 会在此被 selfMutateUntil 屏蔽,
+  // 避免"操作一次→全量刷新一次"的闪烁(只保留浮窗等其它窗口触发的变更)。
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     let disposed = false;
     void listen("history-changed", () => {
+      if (Date.now() < selfMutateUntil.current) return; // 自己操作的广播,乐观更新已覆盖
       void loadCounts();
       void loadTags();
       void refreshList();
@@ -394,6 +413,7 @@ export function AppMain() {
   }
 
   async function handleToggleFavorite(id: number) {
+    selfMutateUntil.current = Date.now() + 500;
     const nextFav = await invoke<boolean>("history_toggle_favorite", { id });
     // 乐观同步列表与详情,不整页重载
     recordsRef.current = recordsRef.current.map((r) =>
@@ -405,6 +425,7 @@ export function AppMain() {
   }
 
   async function handleUpdateTags(id: number, tags: string[]) {
+    selfMutateUntil.current = Date.now() + 500;
     await invoke("history_update_tags", { id, tags });
     recordsRef.current = recordsRef.current.map((r) => (r.id === id ? { ...r, tags } : r));
     setRecords(recordsRef.current);
@@ -613,7 +634,7 @@ export function AppMain() {
           >
             <Icon name="history" size={14} />
             历史记录
-            <span className="rb-nav-count">{totalCount}</span>
+            <span className="rb-nav-count">{ready ? totalCount : "…"}</span>
           </div>
           <div
             className={`rb-nav-item${view === "favorites" ? " active" : ""}`}
@@ -624,7 +645,7 @@ export function AppMain() {
           >
             <Icon name="favorite" size={14} />
             收藏
-            <span className="rb-nav-count">{favCount}</span>
+            <span className="rb-nav-count">{ready ? favCount : "…"}</span>
           </div>
         </div>
 
@@ -665,7 +686,14 @@ export function AppMain() {
         </div>
         {/* 标签列表:可滚动,行尾 编辑+x 删除(浮层均 fixed 渲染于 body,不受容器裁剪) */}
         <div className="rb-tag-scroll" onScroll={() => { setConfirmDeleteTag(null); closeTagEditor(); }}>
-          {filteredTags.length === 0 ? (
+          {!ready ? (
+            <div className="rb-skeleton" style={{ padding: "var(--rb-space-3) var(--rb-space-3)", marginTop: 0 }}>
+              <div style={{ width: "70%" }} />
+              <div style={{ width: "85%" }} />
+              <div style={{ width: "55%" }} />
+              <div style={{ width: "75%" }} />
+            </div>
+          ) : filteredTags.length === 0 ? (
             <div className="rb-nav-item" style={{ color: "var(--rb-text-tertiary)", cursor: "default" }}>
               <span className="rb-tag-dot" style={{ background: "var(--rb-neutral-300)" }} />
               暂无标签
@@ -778,8 +806,19 @@ export function AppMain() {
             </div>
 
             <div className="rb-list" ref={listRef}>
-              {records.length === 0 ? (
-                <div className="rb-empty-list">{loading ? "加载中…" : t("history.empty")}</div>
+              {!ready ? (
+                <div className="rb-skeleton" style={{ padding: "var(--rb-space-4) var(--rb-space-3)", marginTop: 0 }}>
+                  <div style={{ width: "82%" }} />
+                  <div style={{ width: "56%" }} />
+                  <div style={{ width: "32%", marginBottom: 14 }} />
+                  <div style={{ width: "76%" }} />
+                  <div style={{ width: "62%" }} />
+                  <div style={{ width: "38%", marginBottom: 14 }} />
+                  <div style={{ width: "70%" }} />
+                  <div style={{ width: "50%" }} />
+                </div>
+              ) : records.length === 0 ? (
+                <div className="rb-empty-list">{t("history.empty")}</div>
               ) : (
                 records.map((r) => (
                   <div
@@ -862,7 +901,15 @@ export function AppMain() {
 
           {/* 右侧详情 */}
           <div className="rb-detail-col">
-            {detail ? (
+            {!ready || (selectedId != null && !detail) ? (
+              <div className="rb-skeleton" style={{ padding: "24px 20px", marginTop: 0 }}>
+                <div style={{ width: "38%" }} />
+                <div style={{ width: "100%" }} />
+                <div style={{ width: "92%" }} />
+                <div style={{ width: "78%" }} />
+                <div style={{ width: "55%" }} />
+              </div>
+            ) : detail ? (
               <>
                 <div className="rb-detail-head">
                   <span className="tag tag-brand">{detail.promptName || "要点总结"}</span>

@@ -63,6 +63,23 @@ function App() {
     };
   }, []);
 
+  // 主窗口显示:统一交由 Rust(reveal_main_window)在主线程 show + set_focus。
+  // 初始:本 effect 在 React 首帧提交后触发,此时页面已渲染,无白屏;
+  // 重新唤起(托盘/Dock/快捷键)由 Rust 侧 show_main 直接显示(窗口内容已存在,亦无白屏)。
+  // 关键:ReadBrief 是 macOS Accessory 应用,从 JS 回调直接 window.show() 无法激活 App,
+  // 窗口会停在其它应用后方/根本不显示,因此显示动作必须在 Rust 主线程执行(与浮窗一致)。
+  useEffect(() => {
+    if (winLabel !== "main") return;
+    const reveal = () =>
+      invoke("reveal_main_window").catch(() => {
+        // 兜底:命令不可用时退回前端 show(极端情况,正常不应触发)
+        const w = getCurrentWindow();
+        void w.show().catch(() => {});
+        void w.setFocus().catch(() => {});
+      });
+    reveal();
+  }, [winLabel]);
+
   if (winLabel === "float") {
     return <AppFloat />;
   }

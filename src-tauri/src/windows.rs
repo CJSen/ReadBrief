@@ -168,18 +168,39 @@ pub fn open_privacy_settings(_kind: String) -> AppResult<()> {
 pub fn show_main(app: tauri::AppHandle) -> AppResult<()> {
     match app.get_webview_window("main") {
         Some(win) => {
-            let _ = win.show();
-            let _ = win.set_focus();
-        }
-        // 窗口已被销毁(关闭「最小化到托盘」后点红叉):重建再显示
-        None => {
-            if let Ok(win) = rebuild_main_window(&app) {
+            // 窗口已存在:直接在主线程 show + set_focus。
+            // Accessory 应用下从 JS 直接 show 无法激活 App(窗口会停在后台/不显示),
+            // 故显示动作必须在 Rust 主线程执行(与浮窗 show_overlay 同一可靠路径)。
+            // 此时窗口内容此前已渲染完成,直接显示不会白屏。
+            let _ = app.run_on_main_thread(move || {
                 let _ = win.show();
                 let _ = win.set_focus();
+            });
+        }
+        // 窗口已被销毁(关闭「最小化到托盘」后点红叉):重建为 hidden,由前端挂载后 invoke reveal_main_window 显示
+        None => {
+            if rebuild_main_window(&app).is_ok() {
+                // rebuild 出的窗口 visible:false,前端 React 首帧提交后 invoke reveal_main_window,无白屏
             } else {
                 log::error!("重建主窗口失败");
             }
         }
+    }
+    Ok(())
+}
+
+/// 前端在 React 首帧提交后调用:真正显示主窗口(主线程 show + set_focus)。
+/// 主窗在 tauri.conf.json 设 visible:false 创建,避免 WebView 默认白底先闪现;
+/// 待页面渲染完成再由本命令在 Rust 主线程激活显示,用户看到的是已渲染好的页面,既不白屏也不会"打不开"。
+/// 关键:macOS Accessory 形态下 window.show() 必须由 Rust 主线程执行才能激活 App,
+/// 从 JS 回调直接 show 会被系统忽略(窗口停在后台)。
+#[tauri::command]
+pub fn reveal_main_window(app: tauri::AppHandle) -> AppResult<()> {
+    if let Some(win) = app.get_webview_window("main") {
+        let _ = app.run_on_main_thread(move || {
+            let _ = win.show();
+            let _ = win.set_focus();
+        });
     }
     Ok(())
 }
@@ -254,6 +275,7 @@ fn rebuild_main_window(app: &tauri::AppHandle) -> tauri::Result<tauri::WebviewWi
     .min_inner_size(720.0, 480.0)
     .center()
     .resizable(true)
+    .visible(false)
     .build()?;
     setup_main_close_handler(app, &win);
     Ok(win)
