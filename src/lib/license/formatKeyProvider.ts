@@ -8,12 +8,12 @@ const PRO_KEY_PATTERNS: Array<{ name: string; pattern: RegExp }> = [
 ];
 
 export class FormatKeyLicenseProvider implements LicenseProvider {
-  constructor(private readonly getApiKey: () => string) {}
+  // 临时解锁:当前处于开发/免费阶段,解除所有 Pro 限制(后续接真实许可后再恢复按密钥判定)。
+  // 保留构造参数以兼容调用方,暂不使用。
+  constructor(_getApiKey: () => string) {}
 
   check(_usage: Usage): CheckResult {
-    const pro = PRO_KEY_PATTERNS.some(({ pattern }) =>
-      pattern.test(this.getApiKey()),
-    );
+    const pro = true;
     return {
       pro,
       plan: pro ? "pro" : "free",

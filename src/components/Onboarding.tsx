@@ -454,7 +454,6 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
                       <div>
                         <div className="flex ac g6">
                           <span className="rb-ob-perm-name">{t("onboarding.screen")}</span>
-                          <span className="tag tag-pro">PRO</span>
                         </div>
                         <div className="muted rb-ob-perm-desc">{t("onboarding.screenDesc")}</div>
                       </div>

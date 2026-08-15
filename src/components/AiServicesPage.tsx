@@ -288,14 +288,6 @@ export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
 
       {toast ? <div className="rb-toast rb-toast-static">{toast}</div> : null}
 
-      {/* BYOK */}
-      <div className="rb-byok-note">
-        <Icon name="alert" style={{ color: "var(--rb-warning)", marginTop: 1, flexShrink: 0 }} />
-        <div>
-          <b>BYOK 模式</b>：填入自己的密钥后所有功能永久免费，请求直连服务商、不经过我们的服务器。若不想管理密钥，可改用 Pro 的云端模型。
-        </div>
-      </div>
-
       {/* 删除服务二次确认 */}
       {confirmDel ? (
         <div className="rb-svc-form-overlay" onClick={() => setConfirmDel(null)}>

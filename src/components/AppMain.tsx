@@ -741,11 +741,6 @@ export function AppMain() {
         </div>
 
         <div className="rb-sidebar-footer">
-          <div className="rb-pro-card">
-            <div className="tag tag-pro">PRO</div>
-            <div className="rb-pro-desc">解锁截图 OCR、无限提示词与云端模型</div>
-            <button className="btn btn-sm btn-primary rb-pro-btn">了解 Pro</button>
-          </div>
           <div className="rb-nav-item" onClick={() => invoke("open_settings")}>
             <Icon name="settings" size={14} />
             设置

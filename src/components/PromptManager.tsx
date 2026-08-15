@@ -166,7 +166,7 @@ export function PromptManager({ cfg, onConfigChange }: PromptManagerProps) {
         <div>
           <div className="rb-prompt-title">提示词</div>
           <div className="muted rb-prompt-subtitle">
-            3 个内置提示词 · 已使用 {userPrompts.length} / {FREE_PROMPT_LIMIT} 个自定义提示词 · {shortcutCount} / 2 个快捷键
+            3 个内置提示词 · 已创建 {userPrompts.length} 个自定义提示词 · {shortcutCount} 个快捷键
           </div>
         </div>
         <button
@@ -279,20 +279,6 @@ export function PromptManager({ cfg, onConfigChange }: PromptManagerProps) {
       <div className="rb-prompt-grid">
         {BUILTIN_PROMPTS.map((p) => renderCard(p, true))}
         {userPrompts.map((p) => renderCard(p, false))}
-        {atLimit ? (
-          <div className="rb-prompt-card rb-prompt-locked">
-            <span className="rb-prompt-lock-icon">
-              <Icon name="lock" size={16} />
-            </span>
-            <div style={{ fontWeight: 500 }}>已达免费版上限</div>
-            <div className="muted" style={{ fontSize: "var(--rb-text-xs)", lineHeight: 1.6, maxWidth: 230, textAlign: "center" }}>
-              升级 Pro 可创建无限提示词，并为每个提示词绑定独立快捷键
-            </div>
-            <button className="btn btn-sm btn-secondary" style={{ marginTop: 2 }}>
-              升级 Pro
-            </button>
-          </div>
-        ) : null}
       </div>
     </div>
   );

@@ -28,7 +28,6 @@ const NAV_ITEMS: Array<{ id: SettingsSection; icon: string; pro?: boolean }> = [
   { id: "shortcuts", icon: "prompts" },
   { id: "appearance", icon: "settings" },
   { id: "privacy", icon: "shield" },
-  { id: "subscription", icon: "lock", pro: true },
   { id: "about", icon: "question" },
 ];
 
@@ -103,9 +102,6 @@ export function AppSettings() {
           >
             <Icon name={item.icon} size={14} />
             {t(`settings.nav.${item.id}`)}
-            {item.pro ? (
-              <span className="tag tag-pro rb-nav-pro-tag">PRO</span>
-            ) : null}
           </div>
         ))}
       </aside>
@@ -139,7 +135,6 @@ export function AppSettings() {
           />
         ) : null}
         {section === "privacy" && cfg ? <PrivacyPage cfg={cfg} onConfigChange={setCfg} /> : null}
-        {section === "subscription" ? <SubscriptionPage /> : null}
         {section === "about" ? <AboutPage /> : null}
       </div>
 
@@ -681,63 +676,6 @@ function PrivacyPage({
   );
 }
 
-/* ═══ 订阅 ═══ */
-function SubscriptionPage() {
-  return (
-    <div>
-      <div className="flex ac jb g16">
-        <div style={{ fontSize: "var(--rb-text-2xl)", fontWeight: 600 }}>{t("settings.nav.subscription")}</div>
-        <span className="tag tag-gray">当前：免费版</span>
-      </div>
-      <div className="muted rb-svc-subtitle">
-        BYOK 模式下全部核心功能永久免费；Pro 提供免密钥的云端模型与进阶能力
-      </div>
-
-      <div className="set-card" style={{ padding: "4px 15px" }}>
-        <div className="set-pro">
-          <Icon name="check" size={14} style={{ color: "var(--rb-success)" }} />
-          无限提示词，每个可绑定独立快捷键
-        </div>
-        <div className="set-pro">
-          <Icon name="check" size={14} style={{ color: "var(--rb-success)" }} />
-          截图 OCR 总结
-        </div>
-        <div className="set-pro">
-          <Icon name="check" size={14} style={{ color: "var(--rb-success)" }} />
-          云端模型直出，无需管理任何密钥
-        </div>
-        <div className="set-pro">
-          <Icon name="check" size={14} style={{ color: "var(--rb-success)" }} />
-          优先技术支持
-        </div>
-      </div>
-
-      <div className="set-card" style={{ padding: 0 }}>
-        <div style={{ padding: "13px 15px", display: "flex", alignItems: "center", gap: 14 }}>
-          <div className="grow">
-            <div className="flex ac g6">
-              <span style={{ fontWeight: 600, fontSize: "var(--rb-text-md)" }}>Pro 年度版</span>
-              <span className="tag tag-pro">省 40%</span>
-            </div>
-            <div className="muted rb-svc-subtitle" style={{ marginTop: 3 }}>
-              ¥128 / 年 <span style={{ textDecoration: "line-through", opacity: 0.6 }}>¥216</span> · 按月仅 ¥10.7
-            </div>
-          </div>
-          <button className="btn btn-primary" style={{ height: 32, padding: "0 16px" }}>
-            升级 Pro
-          </button>
-        </div>
-        <div className="rb-svc-form-foot" style={{ padding: "9px 15px", background: "var(--rb-bg-sunken)" }}>
-          <span>也可按 ¥18 / 月 订阅</span>
-          <span className="flex g12">
-            <span className="set-link">恢复购买</span>
-            <span className="set-link">管理订阅</span>
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 /* ═══ 关于 ═══ */
 function AboutPage() {

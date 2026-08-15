@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AppConfig, ShortcutConfig } from "../lib/config/types";
 import { invoke } from "@tauri-apps/api/core";
-import { FREE_SHORTCUT_LIMIT } from "../lib/license";
-import { useLicense } from "../lib/license/useLicense";
 import { BUILTIN_PROMPT_OPTIONS } from "../lib/prompts/builtins";
 import { Icon } from "./Icon";
 
@@ -91,12 +89,6 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
   const [newDesc, setNewDesc] = useState("");
   const [confirmDel, setConfirmDel] = useState<{ id: string; name: string } | null>(null);
   const recordRef = useRef<HTMLDivElement | null>(null);
-
-  const license = useLicense(cfg);
-  const pro = license.pro;
-
-  const boundCount = shortcuts.filter((s) => s.accelerator).length;
-  const lockAll = !(pro || boundCount < FREE_SHORTCUT_LIMIT);
 
   /* ═══ 合并列表:内置 + 自定义 ═══ */
   const allItems = useCallback(() => {
@@ -381,14 +373,13 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
       <div className="rb-settings-card">
         {items.map((item) => {
           const bound = Boolean(item.accelerator);
-          const locked = !bound && (lockAll || (item.proOnly && !pro));
           const isRecording = recordingId === item.id;
           const isConflictRow = conflictItemId === item.id;
 
           return (
             <div
               key={item.id}
-              className={`rb-setting-row rb-shortcut-row${isConflictRow ? " rb-conflict" : ""}${locked ? " rb-locked-row" : ""}`}
+              className={`rb-setting-row rb-shortcut-row${isConflictRow ? " rb-conflict" : ""}`}
             >
               {/* 第一行：名称（内置/PRO 标签）+ 说明，行尾固定删除按钮（仅自定义） */}
               <div className="flex ac jb g16">
@@ -400,9 +391,6 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
                       </span>
                     ) : null}
                     {item.name}
-                    {item.proOnly ? (
-                      <span className="tag tag-pro" style={{ marginLeft: 4 }}>PRO</span>
-                    ) : null}
                   </div>
                   <div className="rb-shortcut-desc">
                     {isConflictRow ? (
@@ -428,28 +416,25 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
               <div className="flex ac jb g16">
                 <div className="flex ac g4">
                   {/* 单一录制场(Bob/MASShortcut 范式):三态统一,右侧 hint 区常驻 */}
-                  {locked ? (
-                    <span className="tag tag-gray">升级 Pro</span>
-                  ) : (
-                    <div
-                      ref={isRecording ? recordRef : undefined}
-                      className={`rb-recorder ${
-                        isRecording
-                          ? "rb-recorder--recording"
-                          : bound
-                            ? "rb-recorder--bound"
-                            : "rb-recorder--empty"
-                      }${isConflictRow ? " rb-recorder--conflict" : ""}`}
-                      tabIndex={0}
-                      role="button"
-                      title={bound ? "点击重新录制" : "点击录制"}
-                      onClick={() => {
-                        if (!isRecording) startRecord(item.id);
-                      }}
-                      onKeyDown={(e) => handleKeyDown(e, item.id)}
-                      onKeyUp={(e) => handleKeyUp(e, item.id)}
-                      onBlur={() => cancelRecord()}
-                    >
+                  <div
+                    ref={isRecording ? recordRef : undefined}
+                    className={`rb-recorder ${
+                      isRecording
+                        ? "rb-recorder--recording"
+                        : bound
+                          ? "rb-recorder--bound"
+                          : "rb-recorder--empty"
+                    }${isConflictRow ? " rb-recorder--conflict" : ""}`}
+                    tabIndex={0}
+                    role="button"
+                    title={bound ? "点击重新录制" : "点击录制"}
+                    onClick={() => {
+                      if (!isRecording) startRecord(item.id);
+                    }}
+                    onKeyDown={(e) => handleKeyDown(e, item.id)}
+                    onKeyUp={(e) => handleKeyUp(e, item.id)}
+                    onBlur={() => cancelRecord()}
+                  >
                       {/* 主区:空态 CTA / 绑定态键帽 / 录制态回显 */}
                       <span className="rb-recorder-main">
                         {isRecording ? (
@@ -501,7 +486,6 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
                         </span>
                       ) : null}
                     </div>
-                  )}
                 </div>
 
                 <div className="flex ac g6">
