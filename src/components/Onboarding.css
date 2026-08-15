@@ -187,6 +187,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 10px;
   border: 1px solid var(--rb-border-default);
   border-radius: var(--rb-radius-md);
@@ -213,6 +214,17 @@
 .rb-ob-perm-desc {
   font-size: 11px;
   margin-top: 1px;
+}
+/* 已申请屏幕录制授权但需重启生效的提示 */
+.rb-ob-perm-hint {
+  flex-basis: 100%;
+  font-size: 11px;
+  line-height: 1.4;
+  margin: 2px 2px 0;
+  padding: 6px 8px;
+  border-radius: var(--rb-radius-sm);
+  background: var(--rb-warn-50, #fff7ed);
+  color: var(--rb-text-secondary);
 }
 
 /* 步骤3 快捷键 */

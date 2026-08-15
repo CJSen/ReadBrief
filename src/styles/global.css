@@ -36,4 +36,6 @@ body {
 
 button {
   font-family: inherit;
+  /* 主窗口已开启文本选择,这里禁止按钮文字被选中,避免拖拽误选 */
+  user-select: none;
 }

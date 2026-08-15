@@ -47,7 +47,8 @@ interface OnboardingProps {
 }
 
 export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
-  const [step, setStep] = useState(0);
+  // 从持久化步骤恢复:中途重启软件后引导从该步继续,而非从头再来
+  const [step, setStep] = useState(() => cfg.onboardingStep ?? 0);
 
   /* ═══ 步骤1:AI 服务表单(零配置可跳过) ═══ */
   /* 预填:若已有默认/首个服务,则使用其数据(再次打开引导时不丢配置、不重复新建) */
@@ -94,14 +95,15 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
     }
   }
 
-  /** 离开步骤1:有 API Key 则落库;编辑既有服务时就地更新,避免重复新建 */
-  async function commitServiceIfNeeded() {
-    if (aiSaved) return;
+  /** 离开步骤1:有 API Key 则落库;编辑既有服务时就地更新,避免重复新建。
+   *  返回落库后的完整配置(供步骤持久化复用),无实际写入时返回 null。 */
+  async function commitServiceIfNeeded(): Promise<AppConfig | null> {
+    if (aiSaved) return null;
     const key = form.apiKey.trim();
     // 无密钥:若原本就有服务则保留(标记已处理),否则不落库(零配置可继续)
     if (!key) {
       if (editingId) setAiSaved(true);
-      return;
+      return null;
     }
     const svc: ApiConfig = {
       id: editingId ?? `svc_ob_${Date.now()}`,
@@ -126,6 +128,14 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
     await invoke("config_save", { cfg: next });
     onUpdate(next);
     setAiSaved(true);
+    return next;
+  }
+
+  /** 持久化当前引导步骤:重启软件后可从该步继续 */
+  async function persistStep(nextStep: number, base: AppConfig = cfg) {
+    const next: AppConfig = { ...base, onboardingStep: nextStep };
+    await invoke("config_save", { cfg: next }).catch(() => {});
+    onUpdate(next);
   }
 
   /* ═══ 步骤2:权限 ═══ */
@@ -133,28 +143,31 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
   const [authing, setAuthing] = useState(false);
   const [screenRecording, setScreenRecording] = useState<boolean | null>(null);
   const [screenAuthing, setScreenAuthing] = useState(false);
+  /** 已点击过屏幕录制授权(用于提示"需重启生效"),避免首次未授权时误提示 */
+  const [screenAttempted, setScreenAttempted] = useState(false);
 
   useEffect(() => {
     if (step !== 2) return;
-    invoke<boolean>("accessibility_status")
-      .then(setAccessibility)
-      .catch(() => setAccessibility(null));
-    invoke<boolean>("screen_recording_status")
-      .then(setScreenRecording)
-      .catch(() => setScreenRecording(null));
-
-    // 步骤2 聚焦时(从系统设置返回)再检测一次,保证授权状态最新
+    // 统一检测:读取两项权限状态
+    const check = () => {
+      invoke<boolean>("accessibility_status")
+        .then(setAccessibility)
+        .catch(() => setAccessibility(null));
+      invoke<boolean>("screen_recording_status")
+        .then(setScreenRecording)
+        .catch(() => setScreenRecording(null));
+    };
+    check();
+    // 轮询兜底:macOS 在「系统设置」授权后,窗口焦点事件不一定可靠触发,
+    // 持续检测保证返回软件后授权状态能即时刷新(仅在权限步骤期间运行)。
+    const timer = window.setInterval(check, 1000);
+    // 窗口重新聚焦时也立即检测一次
     let unlisten: (() => void) | undefined;
     let disposed = false;
     void getCurrentWindow()
       .onFocusChanged(({ payload: focused }) => {
         if (!focused) return;
-        invoke<boolean>("accessibility_status")
-          .then(setAccessibility)
-          .catch(() => setAccessibility(null));
-        invoke<boolean>("screen_recording_status")
-          .then(setScreenRecording)
-          .catch(() => setScreenRecording(null));
+        check();
       })
       .then((fn) => {
         if (disposed) fn();
@@ -163,6 +176,7 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
     return () => {
       disposed = true;
       unlisten?.();
+      window.clearInterval(timer);
     };
   }, [step]);
 
@@ -187,6 +201,7 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
   }
 
   async function requestScreenRecording() {
+    setScreenAttempted(true);
     setScreenAuthing(true);
     try {
       await invoke("request_screen_recording");
@@ -291,7 +306,7 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
 
   /* ═══ 完成 / 跳过(统一持久化) ═══ */
   async function finish() {
-    const next: AppConfig = { ...cfg, onboardingDone: true };
+    const next: AppConfig = { ...cfg, onboardingDone: true, onboardingStep: undefined };
     // 步骤3 快捷键若已改则落库
     if (shortcutAccel !== defaultAccel) {
       const shortcuts = (cfg.shortcuts ?? []).map((s) =>
@@ -306,12 +321,18 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
 
   async function goNext() {
     if (step === 0) {
-      setStep(1);
+      const nextStep = 1;
+      setStep(nextStep);
+      await persistStep(nextStep);
     } else if (step === 1) {
-      await commitServiceIfNeeded();
-      setStep(2);
+      const saved = await commitServiceIfNeeded();
+      const nextStep = 2;
+      setStep(nextStep);
+      await persistStep(nextStep, saved ?? cfg);
     } else if (step === 2) {
-      setStep(3);
+      const nextStep = 3;
+      setStep(nextStep);
+      await persistStep(nextStep);
     } else {
       await finish();
     }
@@ -450,6 +471,12 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
                     ) : (
                       <span className="tag tag-gray">{t("onboarding.detecting")}</span>
                     )}
+                    {/* 已申请屏幕录制授权但状态未变:macOS 需重启生效,提示用户且引导可继续 */}
+                    {screenAttempted && screenRecording !== true ? (
+                      <div className="muted rb-ob-perm-hint">
+                        {t("onboarding.screenRestartHint")}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               ) : null}

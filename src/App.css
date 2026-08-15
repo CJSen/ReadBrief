@@ -333,6 +333,8 @@
   display: flex;
   height: 100vh;
   background: var(--rb-bg-app);
+  /* 主窗口允许文本选择(右侧详情区可拖选复制);浮窗用 .float-root 保持不可选 */
+  user-select: text;
 }
 
 /* 左侧导航 208px */

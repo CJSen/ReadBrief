@@ -103,6 +103,11 @@ pub struct AppConfig {
     // 首启引导:用户完成或跳过四步引导后置 true(旧配置缺失时视为未完成)
     #[serde(default)]
     pub onboarding_done: bool,
+    // 首启引导当前步骤(0..3):重启软件后引导可从该步继续,避免中途重启后从头再来。
+    // 仅 onboarding_done=false 时有意义;完成/跳过时置空。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub onboarding_step: Option<u32>,
 }
 
 fn default_language() -> String {
@@ -221,6 +226,7 @@ impl Default for AppConfig {
             diagnostics: false,
             font_scale: default_font_scale(),
             onboarding_done: default_onboarding_done(),
+            onboarding_step: None,
         }
     }
 }
@@ -310,6 +316,10 @@ pub fn parse_config(content: &str) -> AppConfig {
         .get("onboardingDone")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
+    cfg.onboarding_step = value
+        .get("onboardingStep")
+        .and_then(|v| v.as_u64())
+        .map(|n| n as u32);
 
     // 迁移:补齐用户从未显式配置过的内置快捷键默认绑定(划词总结默认 ⌘+Shift+Z)。
     // 若 config 中已存在该内置 id(含用户主动清空的情况),则尊重用户选择,不再注入隐藏默认值。
