@@ -172,6 +172,17 @@ export function AppMain() {
       .finally(() => setCfgLoaded(true));
   }, []);
 
+  // 配置变更(设置窗口改 AI 服务/语言/主题等)时同步到主窗口 cfg,
+  // 避免常驻主窗口持有陈旧配置(如设置里配好 Key 后主窗仍显示「未配置」横幅)。
+  useEffect(() => {
+    const un = listen<AppConfig>("config-changed", (e) => {
+      setCfg(e.payload);
+    });
+    return () => {
+      void un.then((fn) => fn());
+    };
+  }, []);
+
   // 主窗浮层是否打开(供 Esc 优先关闭浮层,而非直接隐藏主窗)
   const popoversOpen = useRef(false);
   useEffect(() => {

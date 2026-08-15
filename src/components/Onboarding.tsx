@@ -104,8 +104,10 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
   async function commitServiceIfNeeded(): Promise<AppConfig | null> {
     if (aiSaved) return null;
     const key = form.apiKey.trim();
-    // 无密钥:若原本就有服务则保留(标记已处理),否则不落库(零配置可继续)
-    if (!key) {
+    // 零配置可继续:无任何用户输入时不落库(避免写入一个与默认空 api 重复的空服务)。
+    // 但只要填了 Base URL / 名称 / Key 任一,即视为有意配置,即便缺 Key 也保留输入(到设置里再补 Key)。
+    const hasInput = Boolean(key || form.baseUrl.trim() || form.name?.trim());
+    if (!hasInput) {
       if (editingId) setAiSaved(true);
       return null;
     }
@@ -327,19 +329,26 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
 
   /* ═══ 完成 / 跳过(统一持久化) ═══ */
   async function finish() {
+    // 收尾前补存 AI 服务:覆盖「第二步填完直接点跳过」「未走 commitServiceIfNeeded」等路径,
+    // 确保引导填写的 AI 配置(含未填 Key 的输入)最终落库,而非仅依赖「下一步」离开第二步。
+    let base: AppConfig = cfg;
+    if (!aiSaved) {
+      const saved = await commitServiceIfNeeded();
+      if (saved) base = saved;
+    }
     const next: AppConfig = {
-      ...cfg,
+      ...base,
       onboardingDone: true,
       onboardingStep: undefined,
       launchOnStart,
     };
-    // 同步开机启动到系统 LaunchAgent(默认开):仅当与当前配置不一致时调用,避免无谓写盘
-    if (launchOnStart !== Boolean(cfg.launchOnStart)) {
-      await invoke("autostart_set", { enabled: launchOnStart }).catch(() => {});
-    }
+    // 同步开机启动到系统 LaunchAgent:无条件按最终值写入。
+    // 此前仅在「与 cfg 不一致」时才写,但全新安装 cfg 默认 true 而系统 LaunchAgent 尚未注册,
+    // 两者相同导致跳过写入 → 引导里显示「开」实际系统并未自启。无条件写入(幂等)保证一致。
+    await invoke("autostart_set", { enabled: launchOnStart }).catch(() => {});
     // 步骤3 快捷键若已改则落库
     if (shortcutAccel !== defaultAccel) {
-      const shortcuts = (cfg.shortcuts ?? []).map((s) =>
+      const shortcuts = (base.shortcuts ?? []).map((s) =>
         s.id === "summarize" ? { ...s, accelerator: shortcutAccel } : s,
       );
       next.shortcuts = shortcuts;

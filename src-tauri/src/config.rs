@@ -173,10 +173,10 @@ fn default_shortcuts() -> Vec<ShortcutConfig> {
         ShortcutConfig {
             id: "paste".to_string(),
             accelerator: String::new(),
-            prompt_id: Some("builtin-summarize".to_string()),
+            prompt_id: Some("builtin-qa".to_string()),
             action: "paste".to_string(),
             name: Some("呼出输入框".to_string()),
-            description: Some("粘贴任意文本进行总结".to_string()),
+            description: Some("粘贴任意文本进行问答".to_string()),
             is_default: true,
             model: None,
         },
@@ -328,6 +328,18 @@ pub fn parse_config(content: &str) -> AppConfig {
     for d in default_shortcuts() {
         if !existing_ids.contains(&d.id) {
             cfg.shortcuts.push(d);
+        }
+    }
+
+    // 迁移(0.1.0):「呼出输入框」默认提示词由「总结提示词」改为「问答提示词」。
+    // 仅当仍处于旧默认态(prompt_id=builtin-summarize 且 action=paste,即从未在设置页改过
+    // —— UI 上改过提示词会把 action 置为 "prompt")时才就地更新,尊重用户的显式选择。
+    for s in cfg.shortcuts.iter_mut() {
+        if s.id == "paste"
+            && s.action == "paste"
+            && s.prompt_id.as_deref() == Some("builtin-summarize")
+        {
+            s.prompt_id = Some("builtin-qa".to_string());
         }
     }
     cfg

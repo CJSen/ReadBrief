@@ -26,7 +26,8 @@ mod tests {
         assert_eq!(cfg.api.api_key, "sk-ant-test");
         assert_eq!(cfg.prompts.len(), 1);
         assert_eq!(cfg.prompts[0].content, "用{{text}}总结");
-        assert_eq!(cfg.shortcuts.len(), 1);
+        // 自定义 s1 + 4 个注入的内置默认快捷键(open-main/summarize/paste/translate)
+        assert_eq!(cfg.shortcuts.len(), 5);
         assert_eq!(cfg.shortcuts[0].accelerator, "CmdOrCtrl+Shift+Z");
         assert_eq!(cfg.theme, "dark");
     }
@@ -90,5 +91,43 @@ mod tests {
         assert_eq!(cfg.summary_language, "en");
         assert!(cfg.diagnostics);
         assert_eq!(cfg.font_scale, 1.1);
+    }
+
+    #[test]
+    fn default_paste_shortcut_uses_qa_prompt() {
+        // 全新配置(无快捷键)→ 注入默认「呼出输入框」应绑定问答提示词
+        let cfg = config::parse_config(r#"{}"#);
+        let paste = cfg.shortcuts.iter().find(|s| s.id == "paste").expect("paste 默认快捷键应存在");
+        assert_eq!(paste.prompt_id.as_deref(), Some("builtin-qa"));
+        assert_eq!(paste.action, "paste");
+    }
+
+    #[test]
+    fn parse_config_migrates_old_paste_default_to_qa() {
+        // 旧配置仍处于旧默认态(action=paste + 总结提示词)→ 应迁移为问答提示词
+        let raw = r#"
+        {
+          "shortcuts": [
+            {"id": "paste", "accelerator": "", "promptId": "builtin-summarize", "action": "paste"}
+          ]
+        }"#;
+        let cfg: AppConfig = config::parse_config(raw);
+        let paste = cfg.shortcuts.iter().find(|s| s.id == "paste").unwrap();
+        assert_eq!(paste.prompt_id.as_deref(), Some("builtin-qa"));
+    }
+
+    #[test]
+    fn parse_config_keeps_user_modified_paste_prompt() {
+        // 用户已在设置页改过提示词(action 会被置为 "prompt")→ 不迁移,尊重用户选择
+        let raw = r#"
+        {
+          "shortcuts": [
+            {"id": "paste", "accelerator": "Cmd+Shift+X", "promptId": "builtin-summarize", "action": "prompt"}
+          ]
+        }"#;
+        let cfg: AppConfig = config::parse_config(raw);
+        let paste = cfg.shortcuts.iter().find(|s| s.id == "paste").unwrap();
+        assert_eq!(paste.prompt_id.as_deref(), Some("builtin-summarize"));
+        assert_eq!(paste.action, "prompt");
     }
 }

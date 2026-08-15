@@ -51,6 +51,18 @@ export function AppSettings() {
       .catch(() => setCfg(null));
   }, []);
 
+  // 配置变更(其它窗口/首启引导/引导覆盖层写入)时同步到本窗口 cfg。
+  // settings 窗口在应用启动即创建且常驻(hidden),若仅依赖挂载时的一次 config_get,
+  // 首启引导在主窗口完成后本窗口仍显示启动时的空配置(「AI 服务」数据为空)。
+  useEffect(() => {
+    const un = listen<AppConfig>("config-changed", (e) => {
+      setCfg(e.payload);
+    });
+    return () => {
+      void un.then((fn) => fn());
+    };
+  }, []);
+
   // 状态栏「关于ReadBrief」等入口:打开设置并跳转到指定分区
   useEffect(() => {
     const un = listen<string>("navigate-settings", (e) => {
@@ -183,6 +195,12 @@ function GeneralPage({
       .catch(() => setScreenRecording(null));
   }, []);
 
+  // 其它窗口(如主窗口引导)改动了开机启动后,经 config-changed 同步到本页开关,
+  // 避免仅依赖挂载时的一次读取导致开关状态陈旧(引导里关了/开了,设置里不变)。
+  useEffect(() => {
+    setLaunchOnStart(cfg.launchOnStart ?? true);
+  }, [cfg.launchOnStart]);
+
   // 窗口重新聚焦(重新打开设置 / 从系统设置返回)时再检测一次,避免授权状态陈旧
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -190,6 +208,10 @@ function GeneralPage({
     void getCurrentWindow()
       .onFocusChanged(({ payload: focused }) => {
         if (!focused) return;
+        // 开机启动同样随窗口聚焦刷新:覆盖「设置窗在启动时已挂载、引导随后才改系统 LaunchAgent」的场景
+        invoke<boolean>("autostart_status")
+          .then(setLaunchOnStart)
+          .catch(() => {});
         invoke<boolean>("accessibility_status")
           .then(setAccessibility)
           .catch(() => setAccessibility(null));
