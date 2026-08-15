@@ -2,7 +2,8 @@ import { useState } from "react";
 import type { AppConfig, PromptConfig } from "../lib/config/types";
 import { FREE_PROMPT_LIMIT } from "../lib/license";
 import { useLicense } from "../lib/license/useLicense";
-import { BUILTIN_PROMPTS, BUILTIN_ICONS } from "../lib/prompts/builtins";
+import { BUILTIN_PROMPTS, BUILTIN_ICONS, TAG_OPTIONS, TAG_LABELS, TAG_TIPS } from "../lib/prompts/builtins";
+import type { PromptTag } from "../lib/prompts/builtins";
 import { invoke } from "@tauri-apps/api/core";
 import { Icon } from "./Icon";
 
@@ -32,6 +33,7 @@ export function PromptManager({ cfg, onConfigChange }: PromptManagerProps) {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [newContent, setNewContent] = useState("");
+  const [newTag, setNewTag] = useState<PromptTag>("summary");
 
   const license = useLicense(cfg);
 
@@ -56,10 +58,12 @@ export function PromptManager({ cfg, onConfigChange }: PromptManagerProps) {
       shortcut: null,
       outputFormat: "md",
       isBuiltin: false,
+      tag: newTag,
     };
     void savePrompts([...userPrompts, prompt]);
     setNewName("");
     setNewContent("");
+    setNewTag("summary");
     setCreating(false);
   }
 
@@ -98,6 +102,11 @@ export function PromptManager({ cfg, onConfigChange }: PromptManagerProps) {
             <Icon name={iconInfo?.icon ?? "edit"} size={14} />
           </span>
           <span className="grow trunc rb-prompt-name">{p.name}</span>
+          {p.tag ? (
+            <span className="tag tag-brand" style={{ fontSize: 10 }}>
+              {TAG_LABELS[p.tag as PromptTag] ?? p.tag}
+            </span>
+          ) : null}
           {isBuiltin ? (
             <>
               {p.id === "builtin-summarize" ? (
@@ -125,6 +134,7 @@ export function PromptManager({ cfg, onConfigChange }: PromptManagerProps) {
               <button className="iconbtn" title="编辑" onClick={() => {
                 setNewName(p.name);
                 setNewContent(p.content);
+                setNewTag((p.tag as PromptTag) ?? "summary");
                 handleDelete(p.id);
                 setCreating(true);
               }}>
@@ -161,7 +171,7 @@ export function PromptManager({ cfg, onConfigChange }: PromptManagerProps) {
         </div>
         <button
           className="btn btn-primary btn-sm"
-          onClick={() => { setNewName(""); setNewContent(""); setCreating(true); }}
+          onClick={() => { setNewName(""); setNewContent(""); setNewTag("summary"); setCreating(true); }}
           disabled={atLimit}
         >
           <Icon name="plus" size={14} />
@@ -174,7 +184,29 @@ export function PromptManager({ cfg, onConfigChange }: PromptManagerProps) {
         <div className="rb-prompt-editor">
           <div className="rb-prompt-editor-hd">
             <span>新建提示词</span>
-            <span className="tag tag-gray" style={{ fontSize: 10 }}>自定义</span>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <span className="tag tag-gray" style={{ fontSize: 10 }}>自定义</span>
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 5,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: "var(--rb-error)",
+                  background: "var(--rb-error-bg)",
+                  border: "1px solid var(--rb-error-border)",
+                  padding: "4px 9px",
+                  borderRadius: "var(--rb-radius-sm)",
+                }}
+              >
+                <svg className="ic" viewBox="0 0 24 24" style={{ width: 14, height: 14, flex: "none" }}>
+                  <path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z" />
+                  <path d="M12 9v4M12 17h.01" />
+                </svg>
+                如果需要捕获数据，必须包含 {"{{text}}"}
+              </span>
+            </div>
           </div>
           <input
             className="inp"
@@ -189,11 +221,42 @@ export function PromptManager({ cfg, onConfigChange }: PromptManagerProps) {
           <textarea
             className="inp"
             placeholder="提示词内容，用 {{text}} 代表选中的文本…"
-            rows={3}
-            style={{ resize: "vertical", lineHeight: 1.6, minHeight: 64, padding: "8px 10px" }}
+            rows={6}
+            style={{ resize: "vertical", lineHeight: 1.6, minHeight: 112, marginBottom: 8, padding: "8px 10px" }}
             value={newContent}
             onChange={(e) => setNewContent(e.currentTarget.value)}
           />
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ fontSize: "var(--rb-text-xs)", fontWeight: 500, marginBottom: 6 }}>提示词类型</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              {TAG_OPTIONS.map((t) => {
+                const active = newTag === t;
+                return (
+                  <span
+                    key={t}
+                    className="rb-seg"
+                    onClick={() => setNewTag(t)}
+                    style={{
+                      flex: 1,
+                      textAlign: "center",
+                      padding: "7px 0",
+                      fontSize: 12,
+                      fontWeight: active ? 600 : 400,
+                      color: active ? "#fff" : "var(--rb-text-secondary)",
+                      background: active ? "var(--rb-brand-600)" : "var(--rb-bg-surface)",
+                      border: `1px solid ${active ? "var(--rb-brand-600)" : "var(--rb-border-default)"}`,
+                      borderRadius: "var(--rb-radius-sm)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {TAG_LABELS[t]}
+                    <span className="rb-q">?</span>
+                    <span className="rb-tip">{TAG_TIPS[t]}</span>
+                  </span>
+                );
+              })}
+            </div>
+          </div>
           <div className="rb-prompt-editor-row">
             <span className="muted" style={{ fontSize: 11 }}>模型在「快捷键」中为每个快捷键分别选择</span>
             <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>

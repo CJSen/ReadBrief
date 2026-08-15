@@ -8,6 +8,10 @@ export type PromptConfig = { id: string, name: string, content: string, model: s
 /**
  * 是否为内置提示词(不可修改/删除)
  */
-isBuiltin: boolean, };
+isBuiltin: boolean, 
+/**
+ * 提示词类别:summary(总结)/translate(翻译)/qa(问答)/general(通用)
+ */
+tag: string, };
 
 export type ShortcutConfig = { id: string, accelerator: string, promptId?: string | null, action: string, name?: string | null, description?: string | null, isDefault: boolean, model?: string | null, };

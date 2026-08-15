@@ -6,11 +6,10 @@ import { SUMMARY_MAX_TOKENS } from "../ai/constants";
 import type { AppConfig } from "../config/types";
 import { getDefaultService } from "../config/types";
 import { getLanguage } from "../i18n";
+import type { PromptTag } from "../prompts/builtins";
 import {
-  DEFAULT_SYSTEM_ZH,
-  DEFAULT_SYSTEM_EN,
-  SUMMARY_FORMAT_RULE_ZH,
-  SUMMARY_FORMAT_RULE_EN,
+  getRole,
+  getFormatRule,
   findBuiltinPrompt,
   BUILTIN_PROMPTS,
 } from "../prompts/builtins";
@@ -27,17 +26,43 @@ function wrapText(text: string): string {
 }
 
 /**
- * 从分隔符式输出解析标题与正文。
- * - 首行为标题,全量保留不截断(与浮窗显示一致;中英文混排标题如产品名不再被截断)。
- * - 其余为正文(要点列表);模型未换行时整段兜底为正文。
+ * 按提示词类别解析标题与正文:
+ * - summary:首行=标题(中英文混排不截断),其余=要点正文(模型未换行时整段兜底正文)。
+ * - translate/qa:模型遵循「翻译：/问答：」前缀约定则首行作标题(保留前缀),其后为正文;
+ *   未遵循(无换行或无前缀)时回退为提示词名作标题、整段作正文,避免丢失输出。
+ * - general:首行=标题(无前缀),其余=正文;无换行/空标题时回退提示词名作标题。
  */
-function splitTitleBody(summary: string): { title: string; body: string } {
+function parseOutput(
+  summary: string,
+  tag: PromptTag | string,
+  promptName: string,
+): { title: string; body: string } {
+  const text = summary.trim();
+  if (tag === "summary") {
+    const nl = summary.indexOf("\n");
+    const rawTitle = (nl >= 0 ? summary.slice(0, nl) : summary).trim();
+    const title = rawTitle || "总结";
+    let body = nl >= 0 ? summary.slice(nl + 1).trim() : "";
+    if (!body) body = text;
+    return { title, body };
+  }
+  if (tag === "translate" || tag === "qa") {
+    const nl = summary.indexOf("\n");
+    const firstLine = (nl >= 0 ? summary.slice(0, nl) : summary).trim();
+    // 模型遵循「翻译：/问答：」前缀约定 → 首行作标题,其后为正文
+    if (nl >= 0 && /^(翻译|问答)[：:]/.test(firstLine)) {
+      const body = summary.slice(nl + 1).trim();
+      return { title: firstLine, body: body || text };
+    }
+    // 未遵循约定 → 标题用提示词名,正文为完整输出
+    return { title: promptName, body: text };
+  }
+  // general:首行=标题(无前缀),其余=正文;无换行/空标题时回退提示词名
   const nl = summary.indexOf("\n");
   const rawTitle = (nl >= 0 ? summary.slice(0, nl) : summary).trim();
-  const title = rawTitle || "总结";
-  let body = nl >= 0 ? summary.slice(nl + 1).trim() : "";
-  if (!body) body = summary.trim();
-  return { title, body };
+  const title = rawTitle || promptName;
+  const body = nl >= 0 ? summary.slice(nl + 1).trim() : "";
+  return { title, body: body || text };
 }
 
 /** 解析总结输出语言:system = 跟随界面语言 */
@@ -96,31 +121,39 @@ export function useSummarySession(
       ? (findBuiltinPrompt(promptIdRef.current) ?? prompts.find((p) => p.id === promptIdRef.current))
       : prompts[0];
     const lang = resolveSummaryLang(cfgRef.current);
-    // 强制格式规则始终追加到 system 末尾,保证自定义提示词下也能解析出独立标题 + 要点列表
-    const system = `${lang === "en" ? DEFAULT_SYSTEM_EN : DEFAULT_SYSTEM_ZH}\n\n${
-      lang === "en" ? SUMMARY_FORMAT_RULE_EN : SUMMARY_FORMAT_RULE_ZH
-    }`;
+    // 按提示词类别取格式规则:summary 沿用原总结规则;translate/qa 用各自带标题前缀的规则;
+    // general 无规则(空串),仅保留角色基线。修复「隐藏系统提示词把一切强转总结」的问题。
+    const tag: PromptTag = (prompt?.tag as PromptTag) ?? "summary";
+    const role = getRole(tag, lang);
+    const rule = getFormatRule(tag, lang);
+    const system = rule ? `${role}\n\n${rule}` : role;
     if (prompt?.content) {
       // 提示词含 {{text}} 占位符则替换为包裹文本;不含则把原文以分隔符附在其后,避免丢失且防注入
       const user =
         prompt.content.indexOf("{{text}}") >= 0
           ? prompt.content.replace(/\{\{text\}\}/g, wrapText(text))
           : `${prompt.content}\n\n${wrapText(text)}`;
-      return { system, user, name: prompt.name };
+      return { system, user, name: prompt.name, tag };
     }
-    return { system, user: wrapText(text), name: lang === "en" ? "Summary" : "要点总结" };
+    return { system, user: wrapText(text), name: lang === "en" ? "Summary" : "要点总结", tag };
   }, [cfgRef]);
 
   /**
-   * 落库:分隔符式输出首行存 ai_title,正文(要点列表)存 summary。
+   * 落库:按提示词类别解析标题与正文后入库。
+   * meta.tag/meta.name 由调用方(已解析出的 prompt)传入,避免重复解析。
    * replaceId 非空 = 重新生成场景 → update 原记录(保持原文/标签/收藏),否则 create 新记录。
    */
   const saveHistory = useCallback(
-    async (source: string, summary: string, replaceId: number | null) => {
+    async (
+      source: string,
+      summary: string,
+      replaceId: number | null,
+      meta: { tag: string; name: string },
+    ) => {
       try {
-        const { title, body } = splitTitleBody(summary);
+        const { title, body } = parseOutput(summary, meta.tag, meta.name);
         const model = cfgRef.current ? getDefaultService(cfgRef.current).model : "";
-        const promptName = resolvePrompt(source).name;
+        const promptName = meta.name;
         if (replaceId != null) {
           await invoke("history_update_summary", {
             id: replaceId,
@@ -148,7 +181,7 @@ export function useSummarySession(
         // 忽略入库失败
       }
     },
-    [cfgRef, resolvePrompt],
+    [cfgRef],
   );
 
   const run = useCallback(
@@ -225,7 +258,10 @@ export function useSummarySession(
               // 重新生成(replace)传原记录 id → update 同一记录;新总结传 null → create 新记录
               if (!streamFailed) {
                 setState("done");
-                void saveHistory(text, outputRef.current, replace ? originalId : null);
+                void saveHistory(text, outputRef.current, replace ? originalId : null, {
+                  tag: prompt.tag,
+                  name: prompt.name,
+                });
               }
             }
           },

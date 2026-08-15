@@ -169,7 +169,7 @@ export function AppFloat() {
       return await invoke<number>("history_create", {
         sourceText: inputRef.current,
         summary: outputRef.current,
-        // 与 useSummarySession.splitTitleBody 一致:标题全量保留,不截断
+        // 与 useSummarySession.parseOutput 的 summary 分支一致(停止后未走自动落库时的兜底):标题取首行、全量保留不截断
         aiTitle: outputRef.current.split("\n")[0]?.trim() || "总结",
         model: cfgRef.current ? getDefaultService(cfgRef.current).model : "",
         promptName: "",

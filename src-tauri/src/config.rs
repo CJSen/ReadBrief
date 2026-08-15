@@ -35,6 +35,11 @@ pub struct PromptConfig {
     /// 是否为内置提示词(不可修改/删除)
     #[serde(default)]
     pub is_builtin: bool,
+    /// 提示词类别:summary(总结)/translate(翻译)/qa(问答)/general(通用)。
+    /// 决定拼接哪套系统提示词模板与历史标题解析方式。
+    /// 旧配置缺该字段时回退 "summary"(行为与改动前一致)。
+    #[serde(default = "default_prompt_tag")]
+    pub tag: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -118,6 +123,10 @@ fn default_summary_lang() -> String {
 
 fn default_font_scale() -> f32 {
     1.0
+}
+
+fn default_prompt_tag() -> String {
+    "summary".to_string()
 }
 
 fn default_onboarding_done() -> bool {
