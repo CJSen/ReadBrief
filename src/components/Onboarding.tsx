@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { AppConfig, ApiConfig, ProviderType } from "../lib/config/types";
-import { testConnection } from "../lib/ai/provider";
+import { testConnection, listModels } from "../lib/ai/provider";
 import { t } from "../lib/i18n";
 import { Icon, type IconName } from "./Icon";
 import "./Onboarding.css";
@@ -22,6 +23,9 @@ const FORMAT_META: Record<ProviderType, { name: string; official: string; defaul
   gemini: { name: "Gemini 格式", official: "https://generativelanguage.googleapis.com", defaultModel: "gemini-2.0-flash" },
 };
 const FORMAT_ORDER: ProviderType[] = ["openai", "claude", "gemini"];
+
+/** 模型下拉候选(组合框:可手输,打开态供选择);与 AiServicesPage 一致 */
+const MODEL_SUGGESTIONS: string[] = ["deepseek-chat", "deepseek-reasoner", "gpt-4o-mini"];
 
 /* ═══ 快捷键录制(复用 ShortcutsPage 范式,仅绑定 summarize) ═══ */
 const MODIFIER_KEYS = new Set(["CONTROL", "SHIFT", "ALT", "META"]);
@@ -146,6 +150,9 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
   /** 已点击过屏幕录制授权(用于提示"需重启生效"),避免首次未授权时误提示 */
   const [screenAttempted, setScreenAttempted] = useState(false);
 
+  /* 开机启动:默认开(与设置中心一致),联动系统 LaunchAgent */
+  const [launchOnStart, setLaunchOnStart] = useState<boolean>(cfg.launchOnStart ?? true);
+
   useEffect(() => {
     if (step !== 2) return;
     // 统一检测:读取两项权限状态
@@ -219,6 +226,20 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
       await invoke("open_privacy_settings", { kind: "screen" }).catch(() => {});
     }
     setScreenAuthing(false);
+  }
+
+  async function toggleLaunchOnStart(enabled: boolean) {
+    setLaunchOnStart(enabled);
+    // 写入系统 LaunchAgent(登录时自启);失败则回滚开关
+    try {
+      await invoke("autostart_set", { enabled });
+    } catch {
+      setLaunchOnStart(!enabled);
+      return;
+    }
+    const next: AppConfig = { ...cfg, launchOnStart: enabled };
+    await invoke("config_save", { cfg: next }).catch(() => {});
+    onUpdate(next);
   }
 
   /* ═══ 步骤3:快捷键录制(summarize) ═══ */
@@ -306,7 +327,16 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
 
   /* ═══ 完成 / 跳过(统一持久化) ═══ */
   async function finish() {
-    const next: AppConfig = { ...cfg, onboardingDone: true, onboardingStep: undefined };
+    const next: AppConfig = {
+      ...cfg,
+      onboardingDone: true,
+      onboardingStep: undefined,
+      launchOnStart,
+    };
+    // 同步开机启动到系统 LaunchAgent(默认开):仅当与当前配置不一致时调用,避免无谓写盘
+    if (launchOnStart !== Boolean(cfg.launchOnStart)) {
+      await invoke("autostart_set", { enabled: launchOnStart }).catch(() => {});
+    }
     // 步骤3 快捷键若已改则落库
     if (shortcutAccel !== defaultAccel) {
       const shortcuts = (cfg.shortcuts ?? []).map((s) =>
@@ -477,6 +507,24 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
                       </div>
                     ) : null}
                   </div>
+
+                  <div className="rb-ob-perm">
+                    <div className="flex ac g8">
+                      <span className="rb-ob-perm-ic">
+                        <Icon name="power" size={14} />
+                      </span>
+                      <div>
+                        <div className="rb-ob-perm-name">{t("onboarding.launchOnStart")}</div>
+                        <div className="muted rb-ob-perm-desc">{t("onboarding.launchOnStartDesc")}</div>
+                      </div>
+                    </div>
+                    <div
+                      className={`sw${launchOnStart ? " on" : ""}`}
+                      role="switch"
+                      aria-checked={launchOnStart}
+                      onClick={() => void toggleLaunchOnStart(!launchOnStart)}
+                    />
+                  </div>
                 </div>
               ) : null}
 
@@ -601,6 +649,63 @@ function ServiceFields({
   aiSaved,
 }: ServiceFieldsProps) {
   const fmt = FORMAT_META[form.protocol as ProviderType];
+
+  /* ═══ 模型组合框(与 AiServicesPage 一致:可手输 + 下拉调接口拉取) ═══ */
+  const modelInputRef = useRef<HTMLDivElement>(null);
+  const modelMenuRef = useRef<HTMLDivElement>(null);
+  const [modelOpen, setModelOpen] = useState(false);
+  const [modelMenuPos, setModelMenuPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [models, setModels] = useState<string[] | null>(null);
+  const [loadingModels, setLoadingModels] = useState(false);
+  const [modelErr, setModelErr] = useState<string | null>(null);
+
+  /** 打开模型下拉:记录触发器位置(portal 用 fixed 定位)并用表单实时值调接口拉取 */
+  async function openModelPicker() {
+    const el = modelInputRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    // 越界保护:底部空间不足(菜单高 196px)时向上展开
+    const MENU_MAX_H = 196;
+    let top = rect.bottom + 4;
+    if (top + MENU_MAX_H > window.innerHeight) {
+      top = Math.max(4, rect.top - MENU_MAX_H - 4);
+    }
+    setModelMenuPos({ top, left: rect.left, width: rect.width });
+    setModelOpen((v) => !v);
+    if (!modelOpen) {
+      setLoadingModels(true);
+      setModelErr(null);
+      const list = await listModels({
+        type: form.protocol as ProviderType,
+        apiKey: form.apiKey,
+        baseUrl: form.baseUrl,
+        model: form.model,
+      });
+      setModels(list);
+      setLoadingModels(false);
+      if (!list.length) setModelErr("未获取到模型列表，可手动输入");
+    }
+  }
+
+  /** 点击下拉外部(mousedown)关闭 portal 菜单;菜单内部点击不关(由菜单项 onClick 处理) */
+  useEffect(() => {
+    if (!modelOpen) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (modelInputRef.current?.contains(target)) return;
+      if (modelMenuRef.current?.contains(target)) return;
+      setModelOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [modelOpen]);
+
+  /** 模型候选:接口结果优先;失败/为空回退 [当前值 + 内置候选] 去重 */
+  const modelOptions =
+    models && models.length
+      ? [form.model, ...models].filter((m, i, arr) => Boolean(m) && arr.indexOf(m) === i)
+      : [form.model, ...MODEL_SUGGESTIONS].filter((m, i, arr) => Boolean(m) && arr.indexOf(m) === i);
+
   return (
     <div className="rb-ob-form">
       <div className="rb-ob-row">
@@ -674,15 +779,61 @@ function ServiceFields({
         </div>
       </div>
 
-      <div className="rb-ob-row">
+      <div className="rb-ob-row rb-ob-row-model">
         <div className="rb-ob-field">
           <div className="rb-ob-field-label">{t("settings.model")}</div>
-          <input
-            className="inp mono"
-            value={form.model}
-            onChange={(e) => set({ model: e.currentTarget.value })}
-            placeholder={fmt.defaultModel}
-          />
+          {/* 模型:组合框(可手输 + 下拉调接口拉取),与 AiServicesPage 一致 */}
+          <div className="rb-svc-model" ref={modelInputRef}>
+            <input
+              className="inp mono rb-svc-model-input"
+              value={form.model}
+              onChange={(e) => set({ model: e.currentTarget.value })}
+              placeholder={fmt.defaultModel}
+            />
+            <button className="iconbtn rb-svc-model-caret" title="拉取模型列表" onClick={() => void openModelPicker()}>
+              <Icon name="chevronDown" size={14} />
+            </button>
+          </div>
+          {/* 模型下拉:portal 到 body + fixed 定位,脱离表单滚动容器裁剪;最多 6 项内部滚动 */}
+          {modelOpen && modelMenuPos
+            ? createPortal(
+                <div
+                  ref={modelMenuRef}
+                  className={`rb-svc-model-menu rb-svc-model-menu-fixed${
+                    loadingModels ? " rb-svc-model-menu-loading" : ""
+                  }`}
+                  style={{ top: modelMenuPos.top, left: modelMenuPos.left, width: modelMenuPos.width }}
+                >
+                  {loadingModels ? (
+                    <div className="rb-svc-model-loading" style={{ cursor: "default", color: "var(--rb-text-tertiary)" }}>
+                      加载中…
+                    </div>
+                  ) : (
+                    <>
+                      {modelOptions.map((m) => (
+                        <div
+                          key={m}
+                          className={`rb-svc-model-item${m === form.model ? " on" : ""}`}
+                          onClick={() => {
+                            set({ model: m });
+                            setModelOpen(false);
+                          }}
+                        >
+                          <span className="mono">{m}</span>
+                          {m === form.model ? <Icon name="check" size={12} /> : null}
+                        </div>
+                      ))}
+                      {modelErr ? (
+                        <div className="rb-svc-model-item" style={{ cursor: "default", color: "var(--rb-warning)" }}>
+                          {modelErr}
+                        </div>
+                      ) : null}
+                    </>
+                  )}
+                </div>,
+                document.body,
+              )
+            : null}
         </div>
         <div className="rb-ob-field rb-ob-field-switch">
           <div className="rb-ob-field-label">{t("onboarding.stream")}</div>

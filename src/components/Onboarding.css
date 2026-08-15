@@ -145,6 +145,17 @@
 .rb-ob-field-switch {
   justify-content: flex-end;
 }
+/* 模型行:模型选择框尽量长(1fr),流式输出开关靠右(auto) */
+.rb-ob-row.rb-ob-row-model {
+  grid-template-columns: 1fr auto;
+}
+.rb-ob-row.rb-ob-row-model .rb-ob-field-switch {
+  align-items: flex-end;
+}
+/* 引导内模型选择框解除 300px 上限,随字段拉伸到最长 */
+.rb-ob-form .rb-svc-model {
+  max-width: none;
+}
 .rb-ob-field-label {
   font-size: var(--rb-text-xs);
   font-weight: 500;

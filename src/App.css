@@ -2154,7 +2154,8 @@
 /* portal 到 body 的 fixed 定位:脱离 .rb-svc-form-body 的 overflow 裁剪 */
 .rb-svc-model-menu-fixed {
   position: fixed;
-  z-index: 400; /* 高于 modal overlay(--rb-z-modal:300) */
+  /* 高于引导全屏覆盖层(.rb-ob-overlay:9999),否则菜单会被覆盖层遮挡看不见 */
+  z-index: 10000;
 }
 
 /* 加载中:固定占满 6 项高度,避免高度跳动/割裂;内容垂直居中 */
