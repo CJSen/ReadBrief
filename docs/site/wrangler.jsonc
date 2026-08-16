@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "readbrief",
+  "compatibility_date": "2026-08-16",
+  "observability": {
+    "enabled": true
+  },
+  "assets": {
+    // 相对本文件所在目录（docs/site）；构建产物在 docs/site/.vitepress/dist
+    "directory": ".vitepress/dist"
+  }
+}
