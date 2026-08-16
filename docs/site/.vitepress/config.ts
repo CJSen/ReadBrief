@@ -8,17 +8,20 @@ export default defineConfig({
   titleTemplate: ':title · ReadBrief',
   description: '划词即总结 · macOS 上的 AI 划词总结桌面助手',
   lang: 'zh-CN',
+  // 部署到 GitHub Pages 项目页：https://cjsen.github.io/ReadBrief/
+  base: '/ReadBrief/',
   cleanUrls: true,
   lastUpdated: true,
 
   head: [
-    ['link', { rel: 'icon', href: '/favicon.png' }],
-    ['link', { rel: 'apple-touch-icon', href: '/logo.png' }],
+    // 注意：head 中的资源 URL 不会被 VitePress 自动加 base，部署到子路径需手动前缀 /ReadBrief/
+    ['link', { rel: 'icon', href: '/ReadBrief/favicon.png' }],
+    ['link', { rel: 'apple-touch-icon', href: '/ReadBrief/logo.png' }],
     ['meta', { name: 'theme-color', content: '#4B4BC8' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:title', content: 'ReadBrief · 划词即总结' }],
     ['meta', { property: 'og:description', content: 'macOS 上的 AI 划词总结桌面助手：选中文字，按下快捷键，AI 流式生成要点总结，浮窗出现在光标附近。' }],
-    ['meta', { property: 'og:image', content: '/logo.png' }],
+    ['meta', { property: 'og:image', content: '/ReadBrief/logo.png' }],
   ],
 
   themeConfig: {
