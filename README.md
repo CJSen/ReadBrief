@@ -1,0 +1,130 @@
+<p align="center">
+  <img src="src-tauri/icons/128x128.png" width="96" alt="ReadBrief" />
+</p>
+
+<h1 align="center">ReadBrief</h1>
+
+<p align="center"><b>划词即总结 · macOS 上的 AI 阅读助手</b></p>
+
+<p align="center">
+  <img alt="Platform" src="https://img.shields.io/badge/platform-macOS%2013.0%2B-blue" />
+  <img alt="Built with" src="https://img.shields.io/badge/Tauri-2-24C8DB" />
+  <img alt="Version" src="https://img.shields.io/badge/version-0.1.0-orange" />
+  <img alt="License" src="https://img.shields.io/badge/license-MIT-green" />
+</p>
+
+---
+
+在任何应用中选中一段文字，按下全局快捷键，ReadBrief 会读取选中内容并调用 AI **流式生成要点总结**，以系统级浮窗展示在光标附近——即使正全屏使用其他应用，浮窗也会直接悬浮显示，不会切回桌面、不打断当前工作。
+
+每次总结自动保存到本地历史，随时搜索、回顾、复用。
+
+---
+
+## 功能
+
+- **划词即总结**：选中文字 → 按 `⌘+Shift+Z` → 浮窗立即流式输出总结，可复制带走
+- **多 AI 服务**：支持 OpenAI / Claude / Gemini 三协议，可配置多个服务、测速、设默认
+- **系统级浮窗**：跨全屏应用悬浮显示，不激活应用、不切出桌面
+- **密钥安全**：AI 请求由 Rust 后端发起，密钥不进入前端界面
+- **历史记录**：自动入库，支持搜索、标签、收藏、复制、重新生成
+- **自定义提示词**：内置 + 自定义，支持 `{{text}}` 占位符，可绑定到不同快捷键
+- **多语言**：界面中 / 英双语，可单独设置总结语言
+- **外观可调**：亮暗主题、字体大小三档
+
+## 界面预览
+
+| 截图 | 建议文件名 | 应展示内容 |
+| --- | --- | --- |
+| 主界面 | `docs/images/main-window.png` | 历史记录页：列表 + 原文 / 总结对照 |
+| 总结浮窗 | `docs/images/float-done.png` | 浮窗完成态：小标题 + 正文 + 底部操作栏 |
+| 设置中心 | `docs/images/settings.png` | AI 服务 / 快捷键 / 提示词 / 外观等设置页 |
+| 提示词管理 | `docs/images/prompts.png` | 提示词卡片列表 |
+| 托盘菜单 | `docs/images/tray.png` | 菜单栏托盘状态与操作 |
+
+<p align="center">
+  <!-- TODO: 替换为主界面截图 -->
+  <img src="docs/images/main-window.png" width="800" alt="主界面" />
+</p>
+
+<p align="center">
+  <!-- TODO: 替换为浮窗截图 -->
+  <img src="docs/images/float-done.png" width="800" alt="总结浮窗" />
+</p>
+
+<p align="center">
+  <img src="docs/images/settings.png" width="800" alt="设置中心" />
+</p>
+
+<p align="center">
+  <img src="docs/images/prompts.png" width="800" alt="提示词管理" />
+</p>
+
+<p align="center">
+  <img src="docs/images/tray.png" width="800" alt="托盘菜单" />
+</p>
+
+## 快速开始
+
+**系统要求**：macOS 13.0 及以上
+
+1. 下载并安装 `ReadBrief.dmg`
+2. 启动后，前往 **系统设置 → 隐私与安全性 → 辅助功能**，为 ReadBrief 开启权限（用于读取选中文本）
+3. 打开 **设置 → AI 服务**，添加你的 AI 服务（协议 / API Key / 模型）
+4. 在任意应用选中文字，按 `⌘+Shift+Z` 即可总结
+
+## 使用说明
+
+- 选中文字后按快捷键，浮窗出现在光标附近并自动开始总结；未捕获到文本时，可手动粘贴后按 `Enter` 总结
+- 浮窗内可：复制（`⌘C`）、重新生成（`⌘R`）、固定（`⌘P`）、切换提示词、收藏
+- 主窗口可浏览全部历史，搜索、打标签、收藏、重新生成、删除
+
+## 快捷键
+
+| 功能 | 快捷键 |
+| --- | --- |
+| 呼出浮窗并总结 | `⌘ + Shift + Z`（可自定义） |
+| 复制总结 | `⌘ C` |
+| 重新生成 | `⌘ R` |
+| 固定浮窗 | `⌘ P` |
+| 发送 / 总结 | `Enter`（`Shift+Enter` 换行） |
+| 退出 | `Esc` |
+
+## 技术栈
+
+- 桌面框架：**Tauri 2**（Rust 后端 + WebView 前端）
+- 前端：React + TypeScript + Vite
+- 后端：Rust（AI 流式请求、全局快捷键、划词捕获、SQLite）
+- 数据库：SQLite（本地历史）
+- 平台特性：macOS 原生 NSPanel 系统级浮窗
+
+## 从源码构建
+
+```bash
+npm install            # 安装前端依赖
+npm run tauri dev      # 开发模式（热更新）
+npm run tauri build    # 生产构建 → src-tauri/target/release/bundle/
+```
+
+需要 [Rust 工具链](https://rustup.rs/)、Node.js 22+ 与 Xcode Command Line Tools。
+
+## 常见问题
+
+**划词读不到选中文本？**
+部分应用（如 Safari）辅助功能属性不完整，可改用托盘菜单的「粘贴并总结」，或手动粘贴后按 Enter。
+
+**密钥安全吗？**
+密钥仅保存在本地配置文件中，AI 请求由后端发起，前端界面拿不到密钥。
+
+**支持 Windows 吗？**
+当前版本聚焦 macOS，Windows 适配在后续规划中。
+
+## 许可证
+
+本项目基于 [MIT License](LICENSE) 开源。
+
+Copyright (c) 2026 chjs
+
+---
+
+<p align="center">ReadBrief · 划词即总结</p>

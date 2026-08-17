@@ -52,4 +52,5 @@ docs/site/.vitepress/*.timestamp-*.mjs
 
 docs/*
 !docs/site
+!docs/images
 scripts/
