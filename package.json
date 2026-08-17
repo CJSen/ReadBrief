@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "node scripts/sync-version.mjs && tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri",
+    "tauri": "node scripts/sync-version.mjs && tauri",
     "lint": "eslint src",
     "format": "prettier --write \"src/**/*.{ts,tsx,css,json}\" \"*.{json,ts,js}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css,json}\" \"*.{json,ts,js}\"",

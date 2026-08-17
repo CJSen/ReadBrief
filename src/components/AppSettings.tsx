@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getVersion } from "@tauri-apps/api/app";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import type { AppConfig } from "../lib/config/types";
 import { getLanguage, setLanguage, t, type Language } from "../lib/i18n";
 import { applyPreference, applyFontScale, type ThemePreference } from "../lib/theme";
@@ -702,6 +704,19 @@ function PrivacyPage({
 
 /* ═══ 关于 ═══ */
 function AboutPage() {
+  const [version, setVersion] = useState<string>("");
+  useEffect(() => {
+    let alive = true;
+    getVersion()
+      .then((v) => {
+        if (alive) setVersion(v);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   return (
     <div>
       <div style={{ textAlign: "center", padding: "22px 0 16px" }}>
@@ -710,7 +725,7 @@ function AboutPage() {
         </div>
         <div style={{ fontSize: "var(--rb-text-lg)", fontWeight: 600 }}>ReadBrief</div>
         <div className="muted" style={{ fontSize: "var(--rb-text-xs)", marginTop: 3 }}>
-          版本 0.1.0 · Tauri
+          版本 {version || "—"} · Tauri
         </div>
       </div>
 
@@ -725,16 +740,35 @@ function AboutPage() {
             已是最新
           </span>
         </div>
-        <div className="set-row">
+        <div
+          className="set-row"
+          style={{ cursor: "pointer" }}
+          onClick={() => void openUrl("https://readbrief.936668.xyz")}
+        >
           <div>
             <div className="set-row-t">官方网站</div>
-            <div className="set-row-d">readbrief.app</div>
+            <div className="set-row-d">readbrief.936668.xyz</div>
           </div>
           <Icon name="logout" size={14} className="rb-row-link-icon" />
         </div>
-        <div className="set-row">
+        <div
+          className="set-row"
+          style={{ cursor: "pointer" }}
+          onClick={() => void openUrl("https://github.com/CJSen/ReadBrief")}
+        >
           <div>
-            <div className="set-row-t">开源许可与致谢</div>
+            <div className="set-row-t">源代码</div>
+            <div className="set-row-d">github.com/CJSen/ReadBrief</div>
+          </div>
+          <Icon name="logout" size={14} className="rb-row-link-icon" />
+        </div>
+        <div
+          className="set-row"
+          style={{ cursor: "pointer" }}
+          onClick={() => void openUrl("https://github.com/CJSen/ReadBrief/blob/main/LICENSE")}
+        >
+          <div>
+            <div className="set-row-t">致谢</div>
             <div className="set-row-d">MIT License · 第三方组件清单</div>
           </div>
           <Icon name="logout" size={14} className="rb-row-link-icon" />
