@@ -62,12 +62,18 @@ export async function streamChat(
     // done 文本由 outputRef 累计,这里无需携带
     onEvent({ kind: "done", text: "" });
   };
+  // 思考型模型阶段标记+思考增量(流式中返回 reasoning_content → 前端显示「思考中」并累计)
+  const thinkingHandler = (event: { payload: { requestId: string; text?: string } }) => {
+    if (isAborted() || event.payload.requestId !== requestId) return;
+    onEvent({ kind: "thinking", text: event.payload.text ?? "" });
+  };
 
   const unlistens: UnlistenFn[] = [];
   try {
     unlistens.push(await listen("ai-delta", deltaHandler));
     unlistens.push(await listen("ai-error", errorHandler));
     unlistens.push(await listen("ai-done", doneHandler));
+    unlistens.push(await listen("ai-thinking", thinkingHandler));
     // Rust 侧失败统一 emit ai-error 事件(错误已随事件回传),invoke 正常 resolve
     await invoke("ai_stream", {
       config: serviceConfig,

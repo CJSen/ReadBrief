@@ -15,6 +15,8 @@ const zh = {
   },
   float: {
     streaming: "生成中…",
+    thinking: "思考中",
+    reasoningToggle: "思考过程",
     stop: "停止",
     copy: "复制",
     copied: "已复制",
@@ -175,6 +177,8 @@ const en: typeof zh = {
   },
   float: {
     streaming: "Generating…",
+    thinking: "Thinking",
+    reasoningToggle: "Reasoning",
     stop: "Stop",
     copy: "Copy",
     copied: "Copied",

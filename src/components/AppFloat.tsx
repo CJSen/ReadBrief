@@ -69,7 +69,11 @@ export function AppFloat() {
   const [currentTags, setCurrentTags] = useState<string[]>([]);
   /** 本次会话实际绑定的模型(来自快捷键/捕获);为空表示用默认服务模型。用于标题栏展示「实际将使用的模型」 */
   const [boundModel, setBoundModel] = useState<string | null>(null);
+  /** 思考过程折叠:done 且存在思考内容时,点击展开/收起本次会话的思考内容 */
+  const [showReasoning, setShowReasoning] = useState(false);
   const pickerInputRef = useRef<HTMLInputElement>(null);
+  /** 思考期流式输出容器:reasoning 累积时自动滚到底,容器限高两行 + overflow hidden,视觉上始终只显示最新两行 */
+  const thinkingStreamRef = useRef<HTMLDivElement>(null);
 
   const { cfg, ref: cfgRef } = useConfig();
   const {
@@ -77,6 +81,8 @@ export function AppFloat() {
     state,
     error,
     historyId,
+    thinking,
+    reasoning,
     run: runSummary,
     stop,
     reset: resetSession,
@@ -85,6 +91,12 @@ export function AppFloat() {
     setModelId,
     promptName,
   } = useSummarySession(cfgRef);
+
+  // 思考内容流式追加 → 滚到最新(overflow hidden 仍可编程式 scrollTop,无滚动条视觉噪音)
+  useEffect(() => {
+    const el = thinkingStreamRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [reasoning]);
 
   const inputRef = useRef("");
   const stateRef = useRef(state);
@@ -277,6 +289,7 @@ export function AppFloat() {
       setElapsed(0);
       setCurrentTags([]);
       setBoundModel(null);
+      setShowReasoning(false);
       setPickerOpen(false);
       setPickerInput("");
       setTagSearch("");
@@ -481,16 +494,39 @@ export function AppFloat() {
           <div className="rb-float-output-body">
             {state === "streaming" ? (
               <div className="rb-streaming">
-                <div className="rb-stream-title">{output.split("\n")[0] || "总结中…"}</div>
-                <div className="rb-output-text">
-                  {output.split("\n").slice(1).join("\n")}
-                  <span className="rb-stream-cursor" />
+                {/* 标题始终为总结标题/流式文案;思考型模型思考期在标题下方显示灰色小字「思考中......」动画 */}
+                <div className="rb-stream-title">
+                  {output.split("\n")[0] || t("float.streaming")}
                 </div>
-                <div className="rb-skeleton">
-                  <div style={{ width: "100%" }} />
-                  <div style={{ width: "82%" }} />
-                  <div style={{ width: "54%" }} />
-                </div>
+                {thinking ? (
+                  <>
+                    <div className="rb-thinking">
+                      <span>{t("float.thinking")}</span>
+                      <span className="rb-thinking-dots">
+                        {[0, 1, 2, 3, 4, 5].map((i) => (
+                          <span key={i} className="rb-thinking-dot" />
+                        ))}
+                      </span>
+                    </div>
+                    {reasoning ? (
+                      <div className="rb-thinking-stream" ref={thinkingStreamRef}>
+                        {reasoning}
+                      </div>
+                    ) : null}
+                  </>
+                ) : (
+                  <>
+                    <div className="rb-output-text">
+                      {output.split("\n").slice(1).join("\n")}
+                      <span className="rb-stream-cursor" />
+                    </div>
+                    <div className="rb-skeleton">
+                      <div style={{ width: "100%" }} />
+                      <div style={{ width: "82%" }} />
+                      <div style={{ width: "54%" }} />
+                    </div>
+                  </>
+                )}
               </div>
             ) : null}
 
@@ -498,6 +534,19 @@ export function AppFloat() {
               <div className="rb-done">
                 <div className="rb-stream-title rb-summary-title">{summaryTitle}</div>
                 <div className="rb-output-text rb-summary-body">{summaryBody}</div>
+                {/* 思考过程:本次会话的思考内容(不落库),点击展开/收起 */}
+                {reasoning ? (
+                  <div className="rb-reasoning">
+                    <button
+                      className="rb-reasoning-toggle"
+                      onClick={() => setShowReasoning((v) => !v)}
+                    >
+                      <span className={`rb-reasoning-arrow${showReasoning ? " open" : ""}`}>▸</span>
+                      {t("float.reasoningToggle")}
+                    </button>
+                    {showReasoning ? <div className="rb-reasoning-body">{reasoning}</div> : null}
+                  </div>
+                ) : null}
               </div>
             ) : null}
 

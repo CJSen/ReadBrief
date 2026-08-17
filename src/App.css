@@ -172,6 +172,102 @@
   word-break: break-word;
 }
 
+/* 思考型模型「思考中」:灰色小字,标题下方;后接六个点循环播放动画(不闪烁) */
+.rb-thinking {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  color: var(--rb-text-secondary);
+  font-size: var(--rb-text-sm);
+}
+
+.rb-thinking-dots {
+  display: inline-flex;
+  gap: 1px;
+}
+
+.rb-thinking-dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--rb-text-secondary);
+  opacity: 0;
+  animation: rb-thinking-dot 1.2s infinite;
+}
+
+.rb-thinking-dot:nth-child(1) { animation-delay: 0s; }
+.rb-thinking-dot:nth-child(2) { animation-delay: 0.2s; }
+.rb-thinking-dot:nth-child(3) { animation-delay: 0.4s; }
+.rb-thinking-dot:nth-child(4) { animation-delay: 0.6s; }
+.rb-thinking-dot:nth-child(5) { animation-delay: 0.8s; }
+.rb-thinking-dot:nth-child(6) { animation-delay: 1s; }
+
+/* 六个点依次亮起,再整体归零循环 */
+@keyframes rb-thinking-dot {
+  0%, 40% { opacity: 0; }
+  60%, 100% { opacity: 1; }
+}
+
+/* 思考期流式输出:「思考中」标签下方,限高两行,overflow hidden + JS 滚到底,
+   视觉上始终只显示最新两行思考内容(无滚动条);tertiary 色 + xs 字号,视觉次于正文 */
+.rb-thinking-stream {
+  margin-top: 4px;
+  max-height: 3em;        /* 2 行 × line-height 1.5 = 3em */
+  line-height: 1.5;
+  overflow: hidden;       /* 隐藏早期内容,靠 useEffect 设 scrollTop 显示最新两行 */
+  color: var(--rb-text-tertiary);
+  font-size: var(--rb-text-xs);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 思考过程:完成态可点击入口(灰色小字)+ 折叠内容(限高滚动) */
+.rb-reasoning {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--rb-border-subtle);
+}
+
+.rb-reasoning-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--rb-text-secondary);
+  font-size: var(--rb-text-sm);
+}
+
+.rb-reasoning-toggle:hover {
+  color: var(--rb-text-primary);
+}
+
+.rb-reasoning-arrow {
+  display: inline-block;
+  transition: transform 0.15s ease;
+  font-size: 10px;
+}
+
+.rb-reasoning-arrow.open {
+  transform: rotate(90deg);
+}
+
+.rb-reasoning-body {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--rb-bg-sunken);
+  color: var(--rb-text-secondary);
+  font-size: var(--rb-text-sm);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
 .rb-stream-cursor {
   display: inline-block;
   width: 2px;

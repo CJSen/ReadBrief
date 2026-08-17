@@ -224,6 +224,22 @@ describe("streamChat", () => {
     await p;
   });
 
+  it("ai-thinking 事件转发为 thinking 事件并携带思考增量(思考型模型)", async () => {
+    invokeMock.mockResolvedValue(null);
+    const handlers = captureHandlers();
+    const events: Array<{ kind: string; text?: string }> = [];
+    const p = streamChat(baseReq, cfg.openai, (e) => events.push(e));
+    await vi.waitFor(() => expect(invokeMock).toHaveBeenCalled());
+    const requestId = invokeMock.mock.calls[0][1].requestId;
+    handlers["ai-thinking"]({ payload: { requestId, text: "先分析" } });
+    handlers["ai-thinking"]({ payload: { requestId, text: "再推理" } });
+    expect(events).toEqual([
+      { kind: "thinking", text: "先分析" },
+      { kind: "thinking", text: "再推理" },
+    ]);
+    await p;
+  });
+
   it("中止后忽略后续事件（不落库）", async () => {
     invokeMock.mockResolvedValue(null);
     const controller = new AbortController();

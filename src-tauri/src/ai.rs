@@ -179,10 +179,28 @@ fn emit_error(app: &tauri::AppHandle, request_id: &str, err: &AppError) {
     );
 }
 
-/// 从 SSE 数据行提取文本 delta(三协议共用)
-fn extract_delta(protocol: &str, data: &str) -> Result<String, String> {
+/// SSE data 行解析结果:正文增量 + 思考增量 + 结束原因(三协议统一)
+struct ExtractedDelta {
+    /// 正文增量(content / text_delta / 非 thought part)
+    text: String,
+    /// 思考增量(reasoning_content / thinking_delta / thought part),空串 = 无思考内容
+    reasoning_text: String,
+    /// finish_reason(截断检测,openai 系为 "length")
+    finish_reason: Option<String>,
+}
+
+/// 从 SSE 数据行提取文本 delta(三协议共用)。
+/// 思考型模型识别(运行时行为,不看模型名):
+/// - openai 兼容:思考在 `delta.reasoning_content`,正文在 `delta.content`
+/// - claude:思考为 `content_block_delta` 的 `thinking_delta`(内容在 delta.thinking),正文为 `text_delta`
+/// - gemini:思考为 `parts[].thought == true` 的 part,正文为普通 text part
+fn extract_delta(protocol: &str, data: &str) -> Result<ExtractedDelta, String> {
     if data == "[DONE]" {
-        return Ok(String::new());
+        return Ok(ExtractedDelta {
+            text: String::new(),
+            reasoning_text: String::new(),
+            finish_reason: None,
+        });
     }
     let json: serde_json::Value =
         serde_json::from_str(data).map_err(|e| format!("SSE JSON 解析失败: {e}"))?;
@@ -192,31 +210,81 @@ fn extract_delta(protocol: &str, data: &str) -> Result<String, String> {
         return Err(msg.to_string());
     }
     match protocol {
-        "openai" => Ok(json
-            .get("choices")
-            .and_then(|c| c.get(0))
-            .and_then(|c| c.get("delta"))
-            .and_then(|d| d.get("content"))
-            .and_then(|c| c.as_str())
-            .unwrap_or("")
-            .to_string()),
-        "claude" => {
-            let is_text_delta = json.get("type").and_then(|t| t.as_str()) == Some("content_block_delta")
-                && json.get("delta").and_then(|d| d.get("type")).and_then(|t| t.as_str())
-                    == Some("text_delta");
-            if is_text_delta {
-                Ok(json
-                    .get("delta")
-                    .and_then(|d| d.get("text"))
-                    .and_then(|t| t.as_str())
+        "openai" => {
+            let choice = json.get("choices").and_then(|c| c.get(0));
+            let delta = choice.and_then(|c| c.get("delta"));
+            let reasoning_text = delta
+                .and_then(|d| d.get("reasoning_content"))
+                .and_then(|r| r.as_str())
+                .unwrap_or("")
+                .to_string();
+            let text = if reasoning_text.is_empty() {
+                delta
+                    .and_then(|d| d.get("content"))
+                    .and_then(|c| c.as_str())
                     .unwrap_or("")
-                    .to_string())
+                    .to_string()
             } else {
-                Ok(String::new())
+                String::new()
+            };
+            let finish_reason = choice
+                .and_then(|c| c.get("finish_reason"))
+                .and_then(|f| f.as_str())
+                .map(String::from);
+            Ok(ExtractedDelta {
+                text,
+                reasoning_text,
+                finish_reason,
+            })
+        }
+        "claude" => {
+            let is_delta = json.get("type").and_then(|t| t.as_str()) == Some("content_block_delta");
+            if is_delta {
+                let delta_type = json
+                    .get("delta")
+                    .and_then(|d| d.get("type"))
+                    .and_then(|t| t.as_str())
+                    .unwrap_or("");
+                let delta = json.get("delta");
+                if delta_type == "thinking_delta" {
+                    // 思考增量(思考型;仅当请求开启 thinking 或网关默认开启时出现)
+                    Ok(ExtractedDelta {
+                        text: String::new(),
+                        reasoning_text: delta
+                            .and_then(|d| d.get("thinking"))
+                            .and_then(|t| t.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        finish_reason: None,
+                    })
+                } else if delta_type == "text_delta" {
+                    Ok(ExtractedDelta {
+                        text: delta
+                            .and_then(|d| d.get("text"))
+                            .and_then(|t| t.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        reasoning_text: String::new(),
+                        finish_reason: None,
+                    })
+                } else {
+                    Ok(ExtractedDelta {
+                        text: String::new(),
+                        reasoning_text: String::new(),
+                        finish_reason: None,
+                    })
+                }
+            } else {
+                Ok(ExtractedDelta {
+                    text: String::new(),
+                    reasoning_text: String::new(),
+                    finish_reason: None,
+                })
             }
         }
         "gemini" => {
             let mut out = String::new();
+            let mut thinking = String::new();
             if let Some(parts) = json
                 .get("candidates")
                 .and_then(|c| c.get(0))
@@ -225,14 +293,28 @@ fn extract_delta(protocol: &str, data: &str) -> Result<String, String> {
                 .and_then(|p| p.as_array())
             {
                 for part in parts {
+                    // thought:true 的 part 是思考内容,不得混入正文回显
+                    let is_thought = part.get("thought").and_then(|t| t.as_bool()).unwrap_or(false);
                     if let Some(t) = part.get("text").and_then(|t| t.as_str()) {
-                        out.push_str(t);
+                        if is_thought {
+                            thinking.push_str(t);
+                        } else {
+                            out.push_str(t);
+                        }
                     }
                 }
             }
-            Ok(out)
+            Ok(ExtractedDelta {
+                text: out,
+                reasoning_text: thinking,
+                finish_reason: None,
+            })
         }
-        _ => Ok(String::new()),
+        _ => Ok(ExtractedDelta {
+            text: String::new(),
+            reasoning_text: String::new(),
+            finish_reason: None,
+        }),
     }
 }
 
@@ -316,36 +398,61 @@ pub async fn ai_stream(
     }
 
     // 流式读取:逐行解析 SSE(处理跨 chunk 拆分)
+    // 关键:用字节缓冲(Vec<u8>)而非 String,按 \n 字节切行后整行 UTF-8 解码。
+    // 原因:bytes_stream 的 chunk 按 TCP/TLS 传输边界切割,可能落在 UTF-8 多字节
+    // 字符中间(中/韩/日 3 字节,法/德/西/阿拉伯等重音字符 2 字节,emoji 4 字节)。
+    // 若先 from_utf8_lossy 再按 String 切行,残字节已被替换为 U+FFFD(不可逆)→ 乱码。
+    // 字节缓冲 + 行边界解码:SSE 每行内是完整 UTF-8,多字节字符不会被拆,多语言通用。
     let protocol = config.protocol.clone();
     let mut stream = response.bytes_stream();
-    let mut buf = String::new();
+    let mut buf: Vec<u8> = Vec::new();
     let mut failed = false;
+    // 思考型模型支持(运行时识别,三协议统一):
+    // 思考增量 → ai-thinking(text=增量,前端累计并显示「思考中」/完成后可展开查看)
+    // finish_reason=length(触及 max_tokens 上限):零正文→报错;有正文→追加「可能不完整」提示
+    let mut saw_reasoning = false;
+    let mut saw_content = false;
+    let mut truncated = false;
 
     while let Some(chunk) = stream.next().await {
         match chunk {
             Ok(bytes) => {
-                buf.push_str(&String::from_utf8_lossy(&bytes));
-                // 按行切分:完整行立即处理,最后不完整行保留在 buf
-                let processed = if let Some(pos) = buf.rfind('\n') {
+                buf.extend_from_slice(&bytes);
+                // 按字节 \n 切行:完整行立即处理,最后不完整行保留在 buf(等下次 chunk)
+                let processed: Vec<u8> = if let Some(pos) = buf.iter().rposition(|&b| b == b'\n') {
                     let tail = buf.split_off(pos + 1);
                     let head = std::mem::replace(&mut buf, tail);
                     head
                 } else {
-                    String::new()
+                    Vec::new()
                 };
-                for line in processed.split('\n') {
-                    let line = line.trim();
-                    if line.is_empty() || line.starts_with(':') {
+                for line_bytes in processed.split(|&b| b == b'\n') {
+                    // 字节级跳过空行 / SSE 注释行(: 开头)
+                    if line_bytes.is_empty() || line_bytes.first() == Some(&b':') {
                         continue;
                     }
-                    if let Some(data) = line.strip_prefix("data:") {
+                    if let Some(data_bytes) = line_bytes.strip_prefix(b"data:") {
+                        // 整行 UTF-8 解码:行内是完整 UTF-8,跨 chunk 不会拆坏多字节字符。
+                        // (多语言通用:中/韩/日 3 字节,法/德/西/阿拉伯等重音字符 2 字节,
+                        //  emoji 4 字节,只要完整在一行内即安全。极端行内非法字节仍 lossy 容错。)
+                        let data = String::from_utf8_lossy(data_bytes);
                         let data = data.trim();
                         match extract_delta(&protocol, data) {
-                            Ok(delta) => {
-                                if !delta.is_empty() {
+                            Ok(d) => {
+                                if d.finish_reason.as_deref() == Some("length") {
+                                    truncated = true;
+                                }
+                                if !d.reasoning_text.is_empty() {
+                                    saw_reasoning = true;
+                                    let _ = app.emit(
+                                        "ai-thinking",
+                                        AiEvent { request_id: request_id.clone(), text: Some(d.reasoning_text), error: None, done: None },
+                                    );
+                                } else if !d.text.is_empty() {
+                                    saw_content = true;
                                     let _ = app.emit(
                                         "ai-delta",
-                                        AiEvent { request_id: request_id.clone(), text: Some(delta), error: None, done: None },
+                                        AiEvent { request_id: request_id.clone(), text: Some(d.text), error: None, done: None },
                                     );
                                 }
                             }
@@ -372,6 +479,22 @@ pub async fn ai_stream(
 
     // 仅成功路径 emit done —— 失败/中止绝不触发前端落库(P0-3 门控,与前端双保险)
     if !failed {
+        // 思考型模型「只思考未输出」:思考耗尽 max_tokens → 明确提示配额不足,不再静默空结果
+        if saw_reasoning && truncated && !saw_content {
+            let _ = app.emit(
+                "ai-error",
+                AiEvent { request_id: request_id.clone(), text: None, error: Some(serde_json::json!({ "type": "unknown", "message": "输出配额不足：思考内容与正文共享 max_tokens 配额，当前被思考耗尽。建议在设置中调大输出上限，或改用非思考型模型" })), done: None },
+            );
+            return Ok(());
+        }
+        // 有正文但被 max_tokens 截断(finish_reason=length)→ 追加提示,
+        // 让用户知道内容不完整,而非静默 done 误以为总结就这样
+        if truncated && saw_content {
+            let _ = app.emit(
+                "ai-delta",
+                AiEvent { request_id: request_id.clone(), text: Some("\n\n（输出已达上限，可能不完整）".into()), error: None, done: None },
+            );
+        }
         let _ = app.emit(
             "ai-done",
             AiEvent { request_id, text: None, error: None, done: Some(true) },
@@ -388,7 +511,9 @@ pub async fn ai_test(config: AiServiceConfig) -> AppResult<serde_json::Value> {
         system: Some("回复两个字:ok".into()),
         user: "ping".into(),
         stream: false,
-        max_tokens: 8,
+        // 思考型模型(reasoner 类)的 max_tokens 含思考,8 太小连一句思考都不够,
+        // 会导致 content 恒空、测速结果失真;64 足以完成「验证连通+鉴权」的最小请求
+        max_tokens: 64,
         model: None,
     };
     let (url, headers, body) = build_request(&req, &config)?;

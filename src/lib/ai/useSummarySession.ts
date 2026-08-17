@@ -2,7 +2,7 @@ import { useCallback, useRef, useState, type RefObject } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { streamChat } from "../ai/provider";
 import type { ProviderError, ProviderType, StreamEvent } from "../ai/types";
-import { SUMMARY_MAX_TOKENS } from "../ai/constants";
+import { maxTokensForProtocol } from "../ai/constants";
 import type { AppConfig } from "../config/types";
 import { getDefaultService } from "../config/types";
 import { getLanguage } from "../i18n";
@@ -77,6 +77,10 @@ export interface SummarySession {
   state: FloatState;
   error: ProviderError | null;
   historyId: number | null;
+  /** 思考型模型阶段标记:streaming 且模型返回 reasoning_content 时为 true(浮窗显示「思考中」) */
+  thinking: boolean;
+  /** 本次会话的思考内容(思考型模型;仅当前会话展示,不落库) */
+  reasoning: string;
   /** 总结:opts.replace=true 表示重新生成(成功后 update 原历史记录,而非新建) */
   run: (text: string, opts?: { replace?: boolean }) => Promise<void>;
   stop: () => void;
@@ -108,6 +112,11 @@ export function useSummarySession(
   const [state, setState] = useState<FloatState>("idle");
   const [error, setError] = useState<ProviderError | null>(null);
   const [historyId, setHistoryId] = useState<number | null>(null);
+  /** 思考型模型阶段标记:收到 ai-thinking 事件置 true,首个正文 delta/done/error/reset 时清除 */
+  const [thinking, setThinking] = useState(false);
+  /** 本次会话思考内容(思考型模型的 reasoning 增量累计;仅展示,不落库) */
+  const [reasoning, setReasoning] = useState("");
+  const reasoningRef = useRef("");
   /** 当前生效提示词名称(供浮窗标题栏/历史展示,取代写死的「要点总结」) */
   const [promptName, setPromptName] = useState("");
 
@@ -233,6 +242,9 @@ export function useSummarySession(
       outputRef.current = "";
       setOutput("");
       setError(null);
+      setThinking(false);
+      reasoningRef.current = "";
+      setReasoning("");
       setState("streaming");
 
       const prompt = resolvePrompt(text);
@@ -248,20 +260,30 @@ export function useSummarySession(
       try {
         // 本次会话是否已失败:流中 error 事件后即使再收到 done 也绝不落库
         let streamFailed = false;
+        // 按协议取默认 max_tokens(claude 配额分离 / gemini 思考占配额 / openai 兼容预留思考)
+        const maxTokens = maxTokensForProtocol(config.type);
         await streamChat(
           {
             system: prompt.system,
             user: prompt.user,
             stream: true,
-            maxTokens: SUMMARY_MAX_TOKENS,
+            maxTokens,
             model: config.model,
           },
           config,
           (event: StreamEvent) => {
-            if (event.kind === "delta") {
+            if (event.kind === "thinking") {
+              // 思考型模型:累计思考增量,标记「思考中」(思考内容不落库)
+              setThinking(true);
+              reasoningRef.current += event.text;
+              setReasoning(reasoningRef.current);
+            } else if (event.kind === "delta") {
+              // 首个正文增量到达:思考阶段结束
+              setThinking(false);
               outputRef.current += event.text;
               setOutput(outputRef.current);
             } else if (event.kind === "error") {
+              setThinking(false);
               streamFailed = true;
               setError(event.error);
               setState("error");
@@ -269,6 +291,7 @@ export function useSummarySession(
               // 成功结束才进入 done 态并写历史;失败/中止路径绝不落库。
               // 重新生成(replace)传原记录 id → update 同一记录;新总结传 null → create 新记录
               if (!streamFailed) {
+                setThinking(false);
                 setState("done");
                 void saveHistory(text, outputRef.current, replace ? originalId : null, {
                   tag: prompt.tag,
@@ -294,6 +317,7 @@ export function useSummarySession(
 
   const stop = useCallback(() => {
     abortRef.current?.abort();
+    setThinking(false);
     setState("done");
   }, []);
 
@@ -328,6 +352,9 @@ export function useSummarySession(
     outputRef.current = "";
     setOutput("");
     setError(null);
+    setThinking(false);
+    reasoningRef.current = "";
+    setReasoning("");
     setState("idle");
     historyIdRef.current = null;
     setHistoryId(null);
@@ -341,6 +368,8 @@ export function useSummarySession(
     state,
     error,
     historyId,
+    thinking,
+    reasoning,
     run,
     stop,
     reset,

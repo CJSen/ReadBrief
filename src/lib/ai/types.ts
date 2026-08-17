@@ -24,7 +24,12 @@ export interface InternalRequest {
 export type StreamEvent =
   | { kind: "delta"; text: string }
   | { kind: "done"; text: string }
-  | { kind: "error"; error: ProviderError };
+  | { kind: "error"; error: ProviderError }
+  /**
+   * 思考型模型阶段标记(流式中返回思考内容,如 deepseek reasoning_content /
+   * claude thinking_delta / gemini thought part)。text 为思考增量,前端累计展示。
+   */
+  | { kind: "thinking"; text: string };
 
 export interface TestConnectionResult {
   ok: boolean;
