@@ -6,6 +6,7 @@ import type { AppConfig, ApiConfig, ProviderType } from "../lib/config/types";
 import { testConnection, listModels } from "../lib/ai/provider";
 import { t } from "../lib/i18n";
 import { Icon, type IconName } from "./Icon";
+import { resolveShortcutKey } from "../lib/shortcutKey";
 import "./Onboarding.css";
 
 /* ═══ 步骤定义 ═══ */
@@ -295,6 +296,8 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
   function handleKeyDown(e: React.KeyboardEvent) {
     if (!recording) return;
     const key = e.key.toUpperCase();
+    // 实体键:Option 下 e.key 被合成死键字符(å/ø/∆),改用 e.code 还原字母/数字
+    const physKey = resolveShortcutKey(e);
     if (key === "TAB") return;
     if ((e.metaKey || e.ctrlKey) && (key === "W" || key === "Q")) {
       cancelRecord();
@@ -316,10 +319,10 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
     if (e.ctrlKey) parts.push("Ctrl");
     if (e.altKey) parts.push("Alt");
     if (e.shiftKey) parts.push("Shift");
-    if (!MODIFIER_KEYS.has(key)) parts.push(key);
+    if (!MODIFIER_KEYS.has(physKey)) parts.push(physKey);
     const live = parts.join("+");
     setDraft(live);
-    if (MODIFIER_KEYS.has(key)) return;
+    if (MODIFIER_KEYS.has(physKey)) return;
     setRecording(false);
     setDraft("");
     if (SYSTEM_SHORTCUTS.includes(live)) {

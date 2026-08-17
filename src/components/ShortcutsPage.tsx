@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AppConfig, ShortcutConfig } from "../lib/config/types";
 import { invoke } from "@tauri-apps/api/core";
 import { BUILTIN_PROMPT_OPTIONS } from "../lib/prompts/builtins";
+import { resolveShortcutKey } from "../lib/shortcutKey";
 import { Icon } from "./Icon";
 
 const SYSTEM_SHORTCUTS = ["Cmd+Space", "Cmd+Tab", "Ctrl+Space"];
@@ -160,6 +161,8 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
   function handleKeyDown(e: React.KeyboardEvent, id: string) {
     if (recordingId !== id) return;
     const key = e.key.toUpperCase();
+    // 实体键:Option 下 e.key 被合成死键字符(å/ø/∆),改用 e.code 还原字母/数字
+    const physKey = resolveShortcutKey(e);
 
     // Tab 透传(允许焦点移动,不拦截)
     if (key === "TAB") return;
@@ -194,12 +197,12 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
     if (e.ctrlKey) parts.push("Ctrl");
     if (e.altKey) parts.push("Alt");
     if (e.shiftKey) parts.push("Shift");
-    if (!MODIFIER_KEYS.has(key)) parts.push(key);
+    if (!MODIFIER_KEYS.has(physKey)) parts.push(physKey);
     const live = parts.join("+");
     setDraft(live);
 
     // 单独修饰键只回显、不提交
-    if (MODIFIER_KEYS.has(key)) return;
+    if (MODIFIER_KEYS.has(physKey)) return;
 
     setRecordingId(null);
     setDraft("");
