@@ -5,18 +5,14 @@ description: 下载 ReadBrief 安装包（macOS）
 
 # 下载 ReadBrief
 
-**当前版本 v0.1.0** · 要求 **macOS 13.0+**
-
-::: warning 即将发布
-安装包正在准备中，将在 [Releases 页面](https://github.com/) 发布。当前可从源码自行构建（见下方）。
-:::
+**当前版本 v0.9.5** · 要求 **macOS 13.0+**
 
 ## 安装包
 
-| 芯片 | 文件名 | 状态 |
-| --- | --- | --- |
-| Apple Silicon（M 系列） | <code v-pre>ReadBrief_0.1.0_aarch64.dmg</code> | 即将发布 |
-| Intel | <code v-pre>ReadBrief_0.1.0_x86_64.dmg</code> | 即将发布 |
+| 芯片 | 下载 |
+| --- | --- |
+| Apple Silicon（M 系列） | [ReadBrief_0.9.5_aarch64.dmg](https://github.com/CJSen/ReadBrief/releases/download/0.9.5/ReadBrief_0.9.5_aarch64.dmg) |
+| Intel | [ReadBrief_0.9.5_x64.dmg](https://github.com/CJSen/ReadBrief/releases/download/0.9.5/ReadBrief_0.9.5_x64.dmg) |
 
 安装步骤：
 

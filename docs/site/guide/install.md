@@ -13,7 +13,7 @@ description: 下载安装 ReadBrief，并开启 macOS 辅助功能权限
 
 ## 安装步骤
 
-1. 前往 [下载页](/download) 获取最新版 <code v-pre>ReadBrief_x.y.z_aarch64.dmg</code>（Apple Silicon）或 <code v-pre>x86_64.dmg</code>（Intel）
+1. 前往 [下载页](/download) 获取最新版 <code v-pre>ReadBrief_0.9.5_aarch64.dmg</code>（Apple Silicon）或 <code v-pre>ReadBrief_0.9.5_x64.dmg</code>（Intel）
 2. 双击挂载，将 `ReadBrief.app` 拖入「应用程序」
 3. 首次启动后，按提示前往 **系统设置 → 隐私与安全性 → 辅助功能**，为 ReadBrief 开启权限
 
