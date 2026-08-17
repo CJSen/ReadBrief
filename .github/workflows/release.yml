@@ -1,54 +1,150 @@
 name: Release
 
-# 预留:配置 APPVEYOR / GitHub Secrets 后可启用。
-# 所需 Secrets: APPLE_CERTIFICATE、APPLE_CERTIFICATE_PASSWORD、
-#              APPLE_SIGNING_IDENTITY、APPLE_ID、APPLE_PASSWORD、APPLE_TEAM_ID
+# 自动发布工作流
+# 触发：推送 tag（推荐 v0.9.5，也兼容 0.9.5）
+# 行为：自动编译 macOS Intel(x86_64) 与 Apple Silicon(aarch64) 两个 dmg，
+#       生成 changelog，创建 GitHub Release 并上传产物。
+#
+# 可选 Secrets（配置后自动签名+公证，不配置则出未签名构建）：
+#   APPLE_CERTIFICATE            base64 编码的 .p12 开发者证书
+#   APPLE_CERTIFICATE_PASSWORD   证书导出密码
+#   APPLE_SIGNING_IDENTITY       "Developer ID Application: ..."
+#   APPLE_ID                     开发者 Apple ID（邮箱）
+#   APPLE_PASSWORD                App 专用密码
+#   APPLE_TEAM_ID                团队 ID
+
 on:
   push:
     tags:
-      - "v*"
+      - "v*.*.*"
+      - "*.*.*"
+
+permissions:
+  contents: write
 
 jobs:
+  create-release:
+    runs-on: ubuntu-22.04
+    outputs:
+      release_id: ${{ steps.create-release.outputs.result }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute version
+        id: version
+        run: |
+          ref="${GITHUB_REF_NAME}"
+          version="${ref#v}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Version: $version"
+
+      - name: Generate release notes
+        run: python3 .github/gen-release-notes.py
+
+      - name: create release
+        id: create-release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('release-notes.md', 'utf8');
+            // 注意：github-script 的 context 没有 ref_name 属性（context.ref 是 refs/tags/0.9.5 带前缀）。
+            // 纯 tag 名必须用环境变量 GITHUB_REF_NAME 取，否则 tag 为 undefined 会被 Octokit 省略 → 422。
+            const tag = process.env.GITHUB_REF_NAME || (context.ref ? context.ref.replace(/^refs\/tags\//, '') : '');
+            // 幂等：若同 tag 已存在 release（含 draft，修复后移动 tag 重跑时会命中），
+            // 先删除再重建，避免 createRelease 报 "already_exists"。
+            const releases = await github.paginate(github.rest.repos.listReleases, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            const existing = releases.find(r => r.tag_name === tag);
+            if (existing) {
+              await github.rest.repos.deleteRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                release_id: existing.id,
+              });
+              console.log(`已删除旧 release (id=${existing.id}) 以便重建`);
+            }
+            const { data } = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: `ReadBrief v${{ steps.version.outputs.version }}`,
+              body,
+              tag_name: tag,
+              draft: true,
+              prerelease: false
+            });
+            return data.id
+
   build:
-    runs-on: macos-13
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        # 在单台 Apple Silicon runner上：aarch64 原生编译，x86_64 交叉编译。
+        # 不依赖已被废弃的 macos-13(Intel) runner，长期可用。
+        include:
+          - target: x86_64-apple-darwin
+            arch: x64
+          - target: aarch64-apple-darwin
+            arch: aarch64
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Add Rust targets
+        run: rustup target add x86_64-apple-darwin aarch64-apple-darwin
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
-      - name: Install frontend deps
+      - name: Install frontend dependencies
         run: npm ci
 
-      - name: Setup Tauri signing
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      - name: Configure Apple signing (only if secrets present)
+        # 未配置证书时，绝不把 APPLE_* 变量设为空字符串——否则 Tauri 打包器
+        # 看到 APPLE_CERTIFICATE 被设置（即使为空）会去 `security import` 导入空证书而失败。
+        # 这里用 bash 守卫：只有真正配了 APPLE_CERTIFICATE 才写入 $GITHUB_ENV，走证书签名+公证；
+        # 否则这些变量保持未设置，Tauri 自动走 ad-hoc 自签名（无需证书，macOS 允许）。
+        # 注意：不用 `if: ${{ secrets.* }}`（GitHub 不允许在 if 里这样用 secrets 上下文）。
         run: |
-          echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
-          security create-keychain -p temp temp.keychain
-          security default-keychain -s temp.keychain
-          security unlock-keychain -p temp temp.keychain
-          security import certificate.p12 -k temp.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: -s -k temp temp.keychain
+          if [ -n "${{ secrets.APPLE_CERTIFICATE }}" ]; then
+            echo "APPLE_CERTIFICATE=${{ secrets.APPLE_CERTIFICATE }}" >> "$GITHUB_ENV"
+            echo "APPLE_CERTIFICATE_PASSWORD=${{ secrets.APPLE_CERTIFICATE_PASSWORD }}" >> "$GITHUB_ENV"
+            echo "APPLE_SIGNING_IDENTITY=${{ secrets.APPLE_SIGNING_IDENTITY }}" >> "$GITHUB_ENV"
+            echo "APPLE_ID=${{ secrets.APPLE_ID }}" >> "$GITHUB_ENV"
+            echo "APPLE_PASSWORD=${{ secrets.APPLE_PASSWORD }}" >> "$GITHUB_ENV"
+            echo "APPLE_TEAM_ID=${{ secrets.APPLE_TEAM_ID }}" >> "$GITHUB_ENV"
+          fi
 
-      - name: Build release bundle
+      - name: Build and upload (${{ matrix.arch }})
+        uses: tauri-apps/tauri-action@v0
         env:
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: npm run tauri build
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: release
-          path: |
-            src-tauri/target/release/bundle/dmg/*.dmg
-            src-tauri/target/release/bundle/macos/*.app
+          releaseId: ${{ needs.create-release.outputs.release_id }}
+          args: --target ${{ matrix.target }}
+
+  publish-release:
+    needs: [create-release, build]
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Publish release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: ${{ needs.create-release.outputs.release_id }},
+              draft: false
+            });
