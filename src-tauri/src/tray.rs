@@ -120,11 +120,26 @@ pub fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
             _ => {}
         });
 
-    // 图标缺失不 panic:有图标用图标,否则用空白托盘(仅记录警告)
-    if let Some(icon) = app.default_window_icon() {
-        builder = builder.icon(icon.clone());
+    // 状态栏图标:使用新设计的圆形白线 tray 图标(模板模式,系统按菜单栏明暗自动反色)
+    // 编译期嵌入 PNG 并解码为 RGBA,避免 dev/build 资源路径差异
+    let tray_icon = (|| -> Option<tauri::image::Image<'static>> {
+        let bytes = include_bytes!("../icons/tray-iconTemplate@2x.png");
+        let decoder = png::Decoder::new(std::io::Cursor::new(bytes.as_ref()));
+        let mut reader = decoder.read_info().ok()?;
+        let mut buf = vec![0u8; reader.output_buffer_size()];
+        let info = reader.next_frame(&mut buf).ok()?;
+        buf.truncate(info.buffer_size());
+        tauri::image::Image::new_owned(buf, info.width, info.height).into()
+    })();
+    if let Some(icon) = tray_icon {
+        builder = builder.icon(icon).icon_as_template(true);
     } else {
-        log::warn!("未找到默认窗口图标,托盘将显示空白图标");
+        log::warn!("加载托盘图标失败,回退到默认窗口图标");
+        if let Some(icon) = app.default_window_icon() {
+            builder = builder.icon(icon.clone());
+        } else {
+            log::warn!("未找到默认窗口图标,托盘将显示空白图标");
+        }
     }
 
     let tray = builder.build(app)?;

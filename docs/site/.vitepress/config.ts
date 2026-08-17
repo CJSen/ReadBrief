@@ -13,12 +13,12 @@ export default defineConfig({
 
   head: [
     ['link', { rel: 'icon', href: '/favicon.png' }],
-    ['link', { rel: 'apple-touch-icon', href: '/logo.png' }],
+    ['link', { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' }],
     ['meta', { name: 'theme-color', content: '#4B4BC8' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:title', content: 'ReadBrief · 划词即总结' }],
     ['meta', { property: 'og:description', content: 'macOS 上的 AI 划词总结桌面助手：选中文字，按下快捷键，AI 流式生成要点总结，浮窗出现在光标附近。' }],
-    ['meta', { property: 'og:image', content: '/logo.png' }],
+    ['meta', { property: 'og:image', content: '/og-image.png' }],
   ],
 
   themeConfig: {

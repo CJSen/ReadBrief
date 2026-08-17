@@ -7,6 +7,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { t } from "../lib/i18n";
 import { Icon } from "./Icon";
+import { LogoMark } from "./LogoMark";
 import { Onboarding } from "./Onboarding";
 
 interface HistoryRecord {
@@ -630,7 +631,7 @@ export function AppMain() {
       <aside className="rb-sidebar">
         <div className="rb-sidebar-brand">
           <span className="rb-logo-mark">
-            <Icon name="summarize" size={14} className="rb-logo-icon" />
+            <LogoMark size={20} className="rb-logo-icon" />
           </span>
           <span>ReadBrief</span>
         </div>

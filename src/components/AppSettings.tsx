@@ -6,6 +6,7 @@ import type { AppConfig } from "../lib/config/types";
 import { getLanguage, setLanguage, t, type Language } from "../lib/i18n";
 import { applyPreference, applyFontScale, type ThemePreference } from "../lib/theme";
 import { Icon } from "./Icon";
+import { LogoMark } from "./LogoMark";
 import { ShortcutsPage } from "./ShortcutsPage";
 import { PromptManager } from "./PromptManager";
 import { AiServicesPage } from "./AiServicesPage";
@@ -705,7 +706,7 @@ function AboutPage() {
     <div>
       <div style={{ textAlign: "center", padding: "22px 0 16px" }}>
         <div className="rb-logo-mark rb-about-logo">
-          <Icon name="summarize" size={26} className="rb-logo-icon" />
+          <LogoMark size={48} className="rb-logo-icon" />
         </div>
         <div style={{ fontSize: "var(--rb-text-lg)", fontWeight: 600 }}>ReadBrief</div>
         <div className="muted" style={{ fontSize: "var(--rb-text-xs)", marginTop: 3 }}>

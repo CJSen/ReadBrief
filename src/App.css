@@ -358,12 +358,9 @@
 }
 
 .rb-logo-mark {
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  background: var(--rb-brand-600);
-  display: grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex: none;
 }
 
@@ -2344,9 +2341,6 @@
 }
 
 .rb-about-logo {
-  width: 52px;
-  height: 52px;
-  border-radius: 14px;
   margin: 0 auto 11px;
 }
 
