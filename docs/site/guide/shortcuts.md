@@ -9,12 +9,12 @@ description: ReadBrief 的全局与浮窗内快捷键，以及录制式自定义
 
 | 功能 | 默认快捷键 | 说明 |
 | --- | --- | --- |
-| 划词总结 | <kbd>⌥</kbd><kbd>D</kbd> | 默认提示词，划词后提取要点与结论 |
-| 呼出输入框 | <kbd>⌥</kbd><kbd>A</kbd> | 粘贴总结路径，无需权限 |
-| 翻译并总结 | <kbd>⌥</kbd><kbd>T</kbd> | 翻译为中文，保留原意与语气 |
-| 截图总结 (Pro) | <kbd>⌥</kbd><kbd>S</kbd> | 路线图能力，UI 已预埋 |
+| 划词总结 | <kbd>⌘</kbd><kbd>⇧</kbd><kbd>z</kbd> | 默认提示词，划词后提取要点与结论 |
+| 呼出输入框 | 自定义 | 粘贴总结路径，无需权限 |
+| 翻译并总结 | 自定义 | 翻译为中文，保留原意与语气 |
+<!-- | 截图总结 (Pro) | <kbd>⌥</kbd><kbd>S</kbd> | 路线图能力，UI 已预埋 | -->
 
-> Windows 端 <kbd>⌘</kbd> → <kbd>Ctrl</kbd>，<kbd>⌥</kbd> → <kbd>Alt</kbd>。
+<!-- > Windows 端 <kbd>⌘</kbd> → <kbd>Ctrl</kbd>，<kbd>⌥</kbd> → <kbd>Alt</kbd>。 -->
 
 ## 浮窗内快捷键
 

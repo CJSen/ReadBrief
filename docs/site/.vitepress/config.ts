@@ -25,6 +25,10 @@ export default defineConfig({
     logo: '/logo.png',
     siteTitle: '<span class="rb-logo-word">ReadBrief</span>',
 
+    socialLinks: [
+      { icon: 'github', link: 'https://github.com/CJSen/ReadBrief' },
+    ],
+
     nav: [
       { text: '首页', link: '/' },
       {
