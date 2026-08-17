@@ -67,6 +67,8 @@ export function AppFloat() {
   const [pickerInput, setPickerInput] = useState("");
   const [tagSearch, setTagSearch] = useState("");
   const [currentTags, setCurrentTags] = useState<string[]>([]);
+  /** 本次会话实际绑定的模型(来自快捷键/捕获);为空表示用默认服务模型。用于标题栏展示「实际将使用的模型」 */
+  const [boundModel, setBoundModel] = useState<string | null>(null);
   const pickerInputRef = useRef<HTMLInputElement>(null);
 
   const { cfg, ref: cfgRef } = useConfig();
@@ -81,6 +83,7 @@ export function AppFloat() {
     outputRef,
     setPromptId,
     setModelId,
+    promptName,
   } = useSummarySession(cfgRef);
 
   const inputRef = useRef("");
@@ -273,6 +276,7 @@ export function AppFloat() {
       setIsFavorite(false);
       setElapsed(0);
       setCurrentTags([]);
+      setBoundModel(null);
       setPickerOpen(false);
       setPickerInput("");
       setTagSearch("");
@@ -282,9 +286,11 @@ export function AppFloat() {
       setCapture(event.payload);
       setPromptId(event.payload.promptId ?? null);
       setModelId(event.payload.model ?? null);
+      setBoundModel(event.payload.model ?? null);
       // 空捕获不清空已有输入:浮窗弹出后自身成为前台应用,AX 可能读到空文本
       // (双保险,配合 Rust 侧 dispatch_capture 的空文本过滤)
-      if (!event.payload.text) return;
+      // 未捕获到任何有效文本(含纯空白)时绝不调用大模型接口
+      if (!event.payload.text || !event.payload.text.trim()) return;
       setInput(event.payload.text);
       void runSummary(event.payload.text);
     });
@@ -359,9 +365,16 @@ export function AppFloat() {
           ? "errors.network"
           : "errors.unknown";
 
-  const title = state === "streaming" ? t("float.streaming") : state === "error" ? "生成失败" : "要点总结";
+  // 标题栏:默认显示当前生效提示词名称;仅生成失败态显示「生成失败」(流式/完成态均显示提示词名)。
+  // 此前写死「要点总结」,与历史 promptName 错显同源 —— 现统一由 session.promptName 驱动。
+  const title = state === "error" ? "生成失败" : promptName || "要点总结";
   const dotColor =
     state === "streaming" ? "brand" : state === "error" ? "error" : state === "done" ? "success" : "brand";
+
+  // 标题栏展示的「使用模型」= 本次会话实际将调用的模型:
+  // 快捷键绑定了具体模型优先(如绑定到某服务的特定模型),否则用当前默认服务模型。
+  // cfg 经 config-changed 实时同步,改 AI 服务后立即反映最新默认模型,避免显示陈旧模型。
+  const displayModel = boundModel || (cfg ? getDefaultService(cfg).model : "") || "";
 
   // 捕获模式标签:selection=划词 / clipboard=托盘粘贴 / history=历史重新生成 / empty=未捕获
   const captureMode =
@@ -399,7 +412,7 @@ export function AppFloat() {
         <div className="tbar rb-float-tbar" onMouseDown={handleTitleBarMouseDown}>
           <span className={`rb-status-dot rb-status-${dotColor}`} />
           <span className="tbar-title">{title}</span>
-          {cfg ? <span className="tag tag-gray">{getDefaultService(cfg).model || "未配置模型"}</span> : null}
+          {cfg ? <span className="tag tag-gray">{displayModel || "未配置模型"}</span> : null}
           <div style={{ marginLeft: "auto" }} className="rb-tbar-actions">
             <button className="iconbtn" title="固定" onClick={() => setPinned((v) => !v)}>
               <Icon name="pin" className={pinned ? "rb-pinned" : ""} />

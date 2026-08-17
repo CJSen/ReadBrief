@@ -89,6 +89,8 @@ export interface SummarySession {
   setPromptId: (id: string | null) => void;
   /** 由捕获事件设置本次会话使用的模型(快捷键绑定;为空则用默认服务模型) */
   setModelId: (model: string | null) => void;
+  /** 当前生效提示词名称(供浮窗标题栏/历史展示) */
+  promptName: string;
 }
 
 /**
@@ -106,6 +108,8 @@ export function useSummarySession(
   const [state, setState] = useState<FloatState>("idle");
   const [error, setError] = useState<ProviderError | null>(null);
   const [historyId, setHistoryId] = useState<number | null>(null);
+  /** 当前生效提示词名称(供浮窗标题栏/历史展示,取代写死的「要点总结」) */
+  const [promptName, setPromptName] = useState("");
 
   const abortRef = useRef<AbortController | null>(null);
   const outputRef = useRef("");
@@ -114,12 +118,16 @@ export function useSummarySession(
   /** historyId 的可变镜像:供 run/saveHistory 在流式期间读取原记录 id(重新生成替换用),避免闭包过期 */
   const historyIdRef = useRef<number | null>(null);
 
-  /** 解析当前提示词:capture 携带 promptId 优先(内置∪用户并集),否则默认第一个用户提示词 */
+  /** 解析当前提示词:capture 携带 promptId 优先(内置∪用户并集),否则用户提示词优先、内置兜底 */
   const resolvePrompt = useCallback((text: string) => {
-    const prompts = cfgRef.current?.prompts ?? [];
+    const userPrompts = cfgRef.current?.prompts ?? [];
+    // 默认提示词:用户提示词优先,内置提示词兜底。
+    // 此前仅取用户提示词(prompts[0]),无自定义提示词时 prompt 为 undefined,
+    // 导致 name 回退成「要点总结」而非真实提示词名(浮窗标题/历史 promptName 错显)。
+    const fallbackList = [...userPrompts, ...BUILTIN_PROMPTS];
     const prompt = promptIdRef.current
-      ? (findBuiltinPrompt(promptIdRef.current) ?? prompts.find((p) => p.id === promptIdRef.current))
-      : prompts[0];
+      ? (findBuiltinPrompt(promptIdRef.current) ?? userPrompts.find((p) => p.id === promptIdRef.current))
+      : fallbackList[0];
     const lang = resolveSummaryLang(cfgRef.current);
     // 按提示词类别取格式规则:summary 沿用原总结规则;translate/qa 用各自带标题前缀的规则;
     // general 无规则(空串),仅保留角色基线。修复「隐藏系统提示词把一切强转总结」的问题。
@@ -127,15 +135,18 @@ export function useSummarySession(
     const role = getRole(tag, lang);
     const rule = getFormatRule(tag, lang);
     const system = rule ? `${role}\n\n${rule}` : role;
+    // name 始终取提示词名称;仅极端无提示词时才回退「要点总结」
+    const name = prompt?.name ?? (lang === "en" ? "Summary" : "要点总结");
     if (prompt?.content) {
       // 提示词含 {{text}} 占位符则替换为包裹文本;不含则把原文以分隔符附在其后,避免丢失且防注入
       const user =
         prompt.content.indexOf("{{text}}") >= 0
           ? prompt.content.replace(/\{\{text\}\}/g, wrapText(text))
           : `${prompt.content}\n\n${wrapText(text)}`;
-      return { system, user, name: prompt.name, tag };
+      return { system, user, name, tag };
     }
-    return { system, user: wrapText(text), name: lang === "en" ? "Summary" : "要点总结", tag };
+    // 无 content(极少见):仍用提示词名称,保证浮窗标题/历史 promptName 显示一致,不悬空成「要点总结」
+    return { system, user: wrapText(text), name, tag };
   }, [cfgRef]);
 
   /**
@@ -225,6 +236,7 @@ export function useSummarySession(
       setState("streaming");
 
       const prompt = resolvePrompt(text);
+      setPromptName(prompt.name);
       const config = {
         type: service.protocol as ProviderType,
         apiKey: service.apiKey,
@@ -321,6 +333,7 @@ export function useSummarySession(
     setHistoryId(null);
     promptIdRef.current = null;
     modelRef.current = null;
+    setPromptName("");
   }, []);
 
   return {
@@ -335,5 +348,6 @@ export function useSummarySession(
     switchPrompt,
     setPromptId,
     setModelId,
+    promptName,
   };
 }

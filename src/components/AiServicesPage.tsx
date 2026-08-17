@@ -1,16 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { AppConfig, ApiConfig, ProviderType } from "../lib/config/types";
 import { getServices } from "../lib/config/types";
 import { testConnection, listModels } from "../lib/ai/provider";
 import { invoke } from "@tauri-apps/api/core";
 import { Icon } from "./Icon";
-
-const DEFAULT_MODELS: Record<ProviderType, string> = {
-  openai: "gpt-4o-mini",
-  claude: "claude-sonnet-4-20250514",
-  gemini: "gemini-2.0-flash",
-};
+import { t } from "../lib/i18n";
 
 const FORMAT_META: Record<ProviderType, { name: string; desc: string; mark: string }> = {
   openai: { name: "OpenAI 格式", desc: "官方 API 及绝大多数兼容网关", mark: "O" },
@@ -79,7 +74,7 @@ export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
       protocol: "openai",
       apiKey: "",
       baseUrl: "",
-      model: DEFAULT_MODELS.openai,
+      model: "",
       isDefault: services.length === 0,
       stream: true,
     });
@@ -363,6 +358,8 @@ function ServiceForm({ svc, isNew, onSave, onCancel, onTest, latency }: ServiceF
   const fmt = FORMAT_META[form.protocol as ProviderType];
   const modelInputRef = useRef<HTMLDivElement>(null);
   const modelMenuRef = useRef<HTMLDivElement>(null);
+  /** 打开下拉时记录的触发输入框视口坐标,供 useLayoutEffect 做实际高度对齐 */
+  const openRectRef = useRef<DOMRect | null>(null);
 
   const set = (patch: Partial<ApiConfig>) => setForm((f) => ({ ...f, ...patch }));
 
@@ -371,13 +368,9 @@ function ServiceForm({ svc, isNew, onSave, onCancel, onTest, latency }: ServiceF
     const el = modelInputRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    // 越界保护:底部空间不足(菜单高 196px)时向上展开
-    const MENU_MAX_H = 196;
-    let top = rect.bottom + 4;
-    if (top + MENU_MAX_H > window.innerHeight) {
-      top = Math.max(4, rect.top - MENU_MAX_H - 4);
-    }
-    setModelMenuPos({ top, left: rect.left, width: rect.width });
+    openRectRef.current = rect;
+    // 初始置于输入框下方;向上翻转及贴合细节由 useLayoutEffect 按菜单实际高度修正
+    setModelMenuPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
     setModelOpen((v) => !v);
     if (!modelOpen) {
       setLoadingModels(true);
@@ -406,6 +399,29 @@ function ServiceForm({ svc, isNew, onSave, onCancel, onTest, latency }: ServiceF
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [modelOpen]);
+
+  /**
+   * 模型下拉定位修正:菜单经 portal 渲染到 body,高度随模型数量变化(加载占位 196px,
+   * 实际 2~N 项更矮)。向上展开时必须用「菜单实际高度」把底部贴住输入框上沿,
+   * 否则少数模型时菜单会悬空在输入框上方留白处。绘制前修正,无闪烁。
+   * 翻转与否用最大高度(196)判定以保持加载/加载后一致,避免菜单在列表返回时跳动。
+   */
+  useLayoutEffect(() => {
+    if (!modelOpen || !modelMenuPos) return;
+    const rect = openRectRef.current;
+    const menu = modelMenuRef.current;
+    if (!rect || !menu) return;
+    const MENU_MAX_H = 196;
+    const menuH = menu.offsetHeight;
+    let top = rect.bottom + 4;
+    if (top + MENU_MAX_H > window.innerHeight) {
+      // 底部空间不足:向上展开,底部对齐输入框上沿(用实际高度,避免矮菜单悬空)
+      top = Math.max(4, rect.top - menuH - 4);
+    }
+    if (top !== modelMenuPos.top) {
+      setModelMenuPos((p) => (p ? { ...p, top } : p));
+    }
+  }, [modelOpen, loadingModels, models, modelMenuPos]);
 
   /** 模型候选:接口结果优先;失败/为空回退 [当前值 + 内置候选] 去重 */
   const modelOptions =
@@ -465,7 +481,8 @@ function ServiceForm({ svc, isNew, onSave, onCancel, onTest, latency }: ServiceF
                       key={p}
                       className={`svc-mi${p === form.protocol ? " on" : ""}`}
                       onClick={() => {
-                        set({ protocol: p, model: DEFAULT_MODELS[p] });
+                        // 切换格式:仅更新协议,模型保持空白(由用户手动输入或从接口拉取)
+                        set({ protocol: p, model: "" });
                         setFmtOpen(false);
                       }}
                     >
@@ -544,7 +561,7 @@ function ServiceForm({ svc, isNew, onSave, onCancel, onTest, latency }: ServiceF
                   set({ model: e.currentTarget.value });
                   setSaveErr(null);
                 }}
-                placeholder={DEFAULT_MODELS[form.protocol as ProviderType]}
+                placeholder={t("settings.modelPlaceholder")}
               />
               <button className="iconbtn rb-svc-model-caret" title="拉取模型列表" onClick={() => void openModelPicker()}>
                 <Icon name="chevronDown" size={14} />
