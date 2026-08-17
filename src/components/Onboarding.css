@@ -16,6 +16,7 @@
 }
 
 .rb-ob-win {
+  position: relative;
   width: 548px;
   max-width: calc(100vw - 32px);
   max-height: calc(100vh - 32px);
@@ -279,4 +280,175 @@
   .rb-ob-row {
     grid-template-columns: 1fr;
   }
+}
+
+/* 底部右侧按钮组(上一步 + 下一步/完成) */
+.rb-ob-foot-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rb-ob-prev {
+  height: 34px;
+  padding: 0 14px;
+}
+
+/* 步骤3 权限 · 辅助功能未授权红态 */
+.rb-ob-perm-error {
+  border-color: var(--rb-error);
+  background: var(--rb-error-bg);
+}
+.rb-ob-perm-ic-error {
+  background: var(--rb-error-bg);
+  color: var(--rb-error);
+}
+.rb-ob-perm-badge {
+  margin-left: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--rb-error);
+  background: var(--rb-error-bg);
+  border: 1px solid var(--rb-error-border);
+  padding: 1px 6px;
+  border-radius: var(--rb-radius-sm);
+}
+.rb-ob-perm-err-desc {
+  font-size: 11px;
+  margin-top: 1px;
+  color: var(--rb-error);
+}
+.rb-ob-perm-grant {
+  flex: none;
+  background: var(--rb-error);
+  color: #fff;
+  border: none;
+}
+
+/* 未授权二次确认弹窗(覆盖整个引导窗口) */
+.rb-ob-confirm-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 16, 20, 0.5);
+  border-radius: var(--rb-radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 30;
+}
+.rb-ob-confirm {
+  width: 288px;
+  max-width: calc(100% - 32px);
+  background: var(--rb-bg-raised);
+  border: 1px solid var(--rb-border-default);
+  border-radius: var(--rb-radius-lg);
+  box-shadow: var(--rb-shadow-float);
+  overflow: hidden;
+}
+.rb-ob-confirm-body {
+  padding: 15px 16px 12px;
+}
+.rb-ob-confirm-ic {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--rb-error-bg);
+  color: var(--rb-error);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.rb-ob-confirm-title {
+  font-size: var(--rb-text-md);
+  font-weight: 600;
+}
+.rb-ob-confirm-desc {
+  font-size: var(--rb-text-sm);
+  color: var(--rb-text-secondary);
+  line-height: 1.65;
+}
+.rb-ob-confirm-foot {
+  padding: 10px 12px;
+  background: var(--rb-bg-sunken);
+  border-top: 1px solid var(--rb-border-subtle);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* 第5步 · 概览双栏 */
+.rb-ob-overview {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.rb-ob-ov-head {
+  margin-bottom: 5px;
+}
+.rb-ob-ov-check {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--rb-marker-50);
+  color: var(--rb-marker-600);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.rb-ob-ov-title {
+  font-size: var(--rb-text-lg);
+  font-weight: 600;
+}
+.rb-ob-ov-sub {
+  font-size: var(--rb-text-sm);
+  line-height: 1.6;
+  margin-bottom: 14px;
+}
+.rb-ob-ov-grid {
+  flex: 1 1 auto;
+  align-items: stretch;
+  gap: 28px;
+}
+.rb-ob-ov-col-shortcuts {
+  flex: 0 0 168px;
+}
+.rb-ob-ov-col-svc {
+  flex: 1;
+  min-width: 0;
+}
+.rb-ob-ov-label {
+  font-size: var(--rb-text-xs);
+  font-weight: 500;
+  margin-bottom: 7px;
+}
+.rb-ob-ov-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.rb-ob-ov-name {
+  font-size: var(--rb-text-xs);
+}
+.rb-ob-ov-svc {
+  border: 1px solid var(--rb-border-default);
+  border-radius: var(--rb-radius-md);
+  overflow: hidden;
+}
+.rb-ob-ov-svc-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 11px;
+  border-bottom: 1px solid var(--rb-border-subtle);
+}
+.rb-ob-ov-svc-row:last-child {
+  border-bottom: none;
+}
+.rb-ob-ov-svc-val {
+  font-size: var(--rb-text-xs);
+  font-weight: 500;
+  text-align: right;
+  word-break: break-all;
 }

@@ -14,7 +14,7 @@ const FORMAT_META: Record<ProviderType, { name: string; desc: string; mark: stri
 };
 
 /** 模型下拉候选(组合框:可手输,打开态供选择) */
-const MODEL_SUGGESTIONS: string[] = ["deepseek-chat", "deepseek-reasoner", "gpt-4o-mini"];
+const MODEL_SUGGESTIONS: string[] = ["deepseek-v4-flash", "deepseek-v4-pro"];
 
 const PROVIDER_MARKS: Record<string, string> = {
   OpenAI: "O",
@@ -208,7 +208,7 @@ export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
                   ) : null}
                 </div>
               </div>
-              {/* 测速状态:有结果显示响应/停用,未测显示未验证 */}
+              {/* 测速状态:有结果显示响应/停用,未测显示未测速 */}
               {lat ? (
                 lat.ok ? (
                   <span className="tag tag-ok">
@@ -219,7 +219,7 @@ export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
                   <span className="tag rb-svc-failed-tag">已停用</span>
                 )
               ) : (
-                <span className="tag tag-gray">未验证</span>
+                <span className="tag tag-gray">未测速</span>
               )}
               {/* 行操作三图标:重新测速 → 修改 → 删除 */}
               <div className="flex ac g2">

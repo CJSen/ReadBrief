@@ -969,11 +969,12 @@ export function AppMain() {
                   })}
                   <div style={{ position: "relative" }}>
                     <button
-                      className="iconbtn rb-detail-tag-add"
+                      className="btn btn-ghost btn-sm rb-detail-tag-add"
                       title={t("history.addTag")}
                       onClick={() => setPickerOpen((v) => !v)}
                     >
-                      <Icon name="plus" size={13} />
+                      <Icon name="plus" size={12} />
+                      {t("history.addTag")}
                     </button>
                     {/* 标签添加浮层:已有标签点选(带对勾) + 新建输入;满 4 个时新增项禁用 */}
                     {pickerOpen ? (

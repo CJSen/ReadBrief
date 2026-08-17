@@ -14,7 +14,15 @@ const STEPS: Array<{ key: string; name: string; icon: IconName }> = [
   { key: "ai", name: "配置 AI 服务", icon: "zap" },
   { key: "perms", name: "开启权限", icon: "shield" },
   { key: "shortcut", name: "自定义快捷键", icon: "keyboard" },
+  { key: "overview", name: "概览", icon: "check" },
 ];
+
+/** 概览页「已配置的服务」格式展示名(对齐设计稿 OpenAI 兼容 等) */
+const FORMAT_COMPAT: Record<ProviderType, string> = {
+  openai: "OpenAI 兼容",
+  claude: "Claude 兼容",
+  gemini: "Gemini 兼容",
+};
 
 /* 与 AiServicesPage 一致的服务商默认(官方 Base URL / 默认模型) */
 const FORMAT_META: Record<ProviderType, { name: string; official: string; defaultModel: string }> = {
@@ -40,6 +48,15 @@ const MOD_SYMBOLS: Record<string, string> = { CMD: "⌘", CTRL: "⌃", ALT: "⌥
 function keySymbol(k: string): string {
   if (!k || k === " ") return "Space";
   return MOD_SYMBOLS[k.toUpperCase()] ?? k;
+}
+
+/** 将 "Cmd+Shift+Z" 之类的快捷键串渲染为 <kbd> 元素序列 */
+function accelKbds(accel: string): React.ReactNode {
+  return accel.split("+").map((k, i) => (
+    <span className="kbd" key={`${k}-${i}`}>
+      {MOD_SYMBOLS[k.toUpperCase()] ?? k}
+    </span>
+  ));
 }
 
 interface OnboardingProps {
@@ -68,7 +85,7 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
           protocol: "openai",
           apiKey: "",
           baseUrl: "",
-          model: FORMAT_META.openai.defaultModel,
+          model: "",
           isDefault: (cfg.services?.length ?? 0) === 0,
           stream: true,
         },
@@ -154,6 +171,9 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
 
   /* 开机启动:默认开(与设置中心一致),联动系统 LaunchAgent */
   const [launchOnStart, setLaunchOnStart] = useState<boolean>(cfg.launchOnStart ?? true);
+
+  /** 未授权辅助功能时点「下一步」的二次确认弹窗 */
+  const [showPermConfirm, setShowPermConfirm] = useState(false);
 
   useEffect(() => {
     if (step !== 2) return;
@@ -358,6 +378,21 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
     onClose();
   }
 
+  /** 离开权限步骤(第3步):进入快捷键步骤(第4步) */
+  async function proceedFromPerms() {
+    const nextStep = 3;
+    setStep(nextStep);
+    await persistStep(nextStep);
+  }
+
+  /** 返回上一步(第1步欢迎页无前序,不显示该按钮) */
+  async function goPrev() {
+    if (step <= 0) return;
+    const nextStep = step - 1;
+    setStep(nextStep);
+    await persistStep(nextStep);
+  }
+
   async function goNext() {
     if (step === 0) {
       const nextStep = 1;
@@ -369,7 +404,14 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
       setStep(nextStep);
       await persistStep(nextStep, saved ?? cfg);
     } else if (step === 2) {
-      const nextStep = 3;
+      // 权限步骤:辅助功能明确未授权时,弹二次确认拦截,避免用户裸奔划词
+      if (accessibility === false) {
+        setShowPermConfirm(true);
+        return;
+      }
+      await proceedFromPerms();
+    } else if (step === 3) {
+      const nextStep = 4;
       setStep(nextStep);
       await persistStep(nextStep);
     } else {
@@ -399,7 +441,60 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
             ))}
           </div>
 
-          <div className="flex g18 rb-ob-grid">
+          {step === 4 ? (
+            <div className="rb-ob-overview">
+              {/* 第5步 · 概览:已配置服务 + 快捷键双栏 */}
+              <div className="flex ac g8 rb-ob-ov-head">
+                <span className="rb-ob-ov-check">
+                  <Icon name="check" size={15} />
+                </span>
+                <div className="rb-ob-ov-title">{t("onboarding.overviewTitle")}</div>
+              </div>
+              <div className="muted rb-ob-ov-sub">{t("onboarding.overviewDesc")}</div>
+              <div className="flex rb-ob-ov-grid">
+                <div className="rb-ob-ov-col rb-ob-ov-col-shortcuts">
+                  <div className="rb-ob-ov-label">{t("onboarding.overviewShortcuts")}</div>
+                  <div className="rb-ob-ov-list">
+                    {[
+                      { label: t("onboarding.shortcutLabel"), accel: shortcutAccel },
+                      { label: t("onboarding.shortcutCopy"), accel: "Cmd+C" },
+                      { label: t("onboarding.shortcutRegenerate"), accel: "Cmd+R" },
+                      { label: t("onboarding.shortcutPin"), accel: "Cmd+P" },
+                    ].map((s) => (
+                      <div className="flex ac jb" key={s.label}>
+                        <span className="rb-ob-ov-name">{s.label}</span>
+                        <span className="flex g4">{accelKbds(s.accel)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="rb-ob-ov-col rb-ob-ov-col-svc">
+                  <div className="rb-ob-ov-label">{t("onboarding.overviewServices")}</div>
+                  <div className="rb-ob-ov-svc">
+                    <div className="rb-ob-ov-svc-row">
+                      <span className="muted">{t("onboarding.format")}</span>
+                      <span className="rb-ob-ov-svc-val">{FORMAT_COMPAT[form.protocol as ProviderType]}</span>
+                    </div>
+                    <div className="rb-ob-ov-svc-row">
+                      <span className="muted">{t("settings.baseUrl")}</span>
+                      <span className="rb-ob-ov-svc-val">
+                        {form.baseUrl.trim()
+                          ? form.baseUrl.trim().replace(/^https?:\/\//, "")
+                          : t("onboarding.baseUrlFallbackDefault")}
+                      </span>
+                    </div>
+                    <div className="rb-ob-ov-svc-row">
+                      <span className="muted">{t("settings.model")}</span>
+                      <span className="rb-ob-ov-svc-val mono">
+                        {form.model.trim() || FORMAT_META[form.protocol as ProviderType].defaultModel}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex g18 rb-ob-grid">
             {/* 左栏:图标 + 标题 + 说明 */}
             <div className="rb-ob-aside">
               <div className="rb-ob-mark">
@@ -461,14 +556,23 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
 
               {step === 2 ? (
                 <div className="rb-ob-perms">
-                  <div className="rb-ob-perm">
+                  <div className={`rb-ob-perm${accessibility === false ? " rb-ob-perm-error" : ""}`}>
                     <div className="flex ac g8">
-                      <span className="rb-ob-perm-ic">
+                      <span className={`rb-ob-perm-ic${accessibility === false ? " rb-ob-perm-ic-error" : ""}`}>
                         <Icon name="shield" size={14} />
                       </span>
                       <div>
-                        <div className="rb-ob-perm-name">{t("onboarding.accessibility")}</div>
-                        <div className="muted rb-ob-perm-desc">{t("onboarding.accessibilityDesc")}</div>
+                        <div className="rb-ob-perm-name">
+                          {t("onboarding.accessibility")}
+                          {accessibility === false ? (
+                            <span className="rb-ob-perm-badge">{t("onboarding.permsNotGranted")}</span>
+                          ) : null}
+                        </div>
+                        {accessibility === false ? (
+                          <div className="rb-ob-perm-err-desc">{t("onboarding.permsNotAuth")}</div>
+                        ) : (
+                          <div className="muted rb-ob-perm-desc">{t("onboarding.accessibilityDesc")}</div>
+                        )}
                       </div>
                     </div>
                     {accessibility === true ? (
@@ -477,7 +581,7 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
                         {t("onboarding.granted")}
                       </span>
                     ) : accessibility === false ? (
-                      <button className="btn btn-secondary btn-sm" onClick={() => void requestAccessibility()} disabled={authing}>
+                      <button className="btn btn-sm rb-ob-perm-grant" onClick={() => void requestAccessibility()} disabled={authing}>
                         {t("onboarding.grant")}
                       </button>
                     ) : (
@@ -615,17 +719,62 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
               ) : null}
             </div>
           </div>
+          )}
 
-          {/* 底部:跳过 / 下一步 */}
+          {/* 底部:跳过 / 上一步 + 下一步(末步为完成) */}
           <div className="rb-ob-foot">
             <button className="btn btn-ghost rb-ob-skip" onClick={() => void finish()}>
               {t("onboarding.skip")}
             </button>
-            <button className="btn btn-primary rb-ob-next" onClick={() => void goNext()}>
-              {isLast ? t("onboarding.done") : t("onboarding.next")}
-            </button>
+            <div className="rb-ob-foot-right">
+              {step > 0 ? (
+                <button className="btn btn-ghost rb-ob-prev" onClick={() => void goPrev()}>
+                  {t("onboarding.prev")}
+                </button>
+              ) : null}
+              <button className="btn btn-primary rb-ob-next" onClick={() => void goNext()}>
+                {isLast ? t("onboarding.done") : t("onboarding.next")}
+              </button>
+            </div>
           </div>
         </div>
+
+        {/* 未授权点「下一步」的二次确认弹窗(覆盖整个引导窗口) */}
+        {showPermConfirm ? (
+          <div className="rb-ob-confirm-overlay">
+            <div className="rb-ob-confirm">
+              <div className="rb-ob-confirm-body">
+                <div className="flex ac g8" style={{ marginBottom: 9 }}>
+                  <span className="rb-ob-confirm-ic">
+                    <Icon name="alert" size={15} />
+                  </span>
+                  <span className="rb-ob-confirm-title">{t("onboarding.confirmTitle")}</span>
+                </div>
+                <div className="rb-ob-confirm-desc">{t("onboarding.confirmDesc")}</div>
+              </div>
+              <div className="rb-ob-confirm-foot">
+                <button
+                  className="btn btn-sm btn-secondary"
+                  onClick={() => {
+                    void requestAccessibility();
+                    setShowPermConfirm(false);
+                  }}
+                >
+                  {t("onboarding.grant")}
+                </button>
+                <button
+                  className="btn btn-sm btn-primary"
+                  onClick={() => {
+                    setShowPermConfirm(false);
+                    void proceedFromPerms();
+                  }}
+                >
+                  {t("onboarding.confirmContinue")}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -736,7 +885,7 @@ function ServiceFields({
                     key={p}
                     className={`svc-mi${p === form.protocol ? " on" : ""}`}
                     onClick={() => {
-                      set({ protocol: p, model: FORMAT_META[p].defaultModel });
+                      set({ protocol: p, model: "" });
                       setFmtOpen(false);
                     }}
                   >
@@ -797,7 +946,7 @@ function ServiceFields({
               className="inp mono rb-svc-model-input"
               value={form.model}
               onChange={(e) => set({ model: e.currentTarget.value })}
-              placeholder={fmt.defaultModel}
+              placeholder={t("settings.modelPlaceholder")}
             />
             <button className="iconbtn rb-svc-model-caret" title="拉取模型列表" onClick={() => void openModelPicker()}>
               <Icon name="chevronDown" size={14} />

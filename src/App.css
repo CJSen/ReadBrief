@@ -839,10 +839,12 @@
 }
 
 .rb-detail-tag-add {
-  width: 22px;
+  flex: none;
   height: 22px;
-  border: 1px dashed var(--rb-border-strong);
-  border-radius: var(--rb-radius-xs);
+  padding: 0 8px;
+  font-size: 11px;
+  color: var(--rb-text-secondary);
+  gap: 2px;
 }
 
 /* 通用浮层（创建标签 / 添加标签） */
