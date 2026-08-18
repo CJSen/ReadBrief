@@ -13,6 +13,8 @@ import { ShortcutsPage } from "./ShortcutsPage";
 import { PromptManager } from "./PromptManager";
 import { AiServicesPage } from "./AiServicesPage";
 import { Onboarding } from "./Onboarding";
+import { checkUpdate, RELEASE_PAGE, type UpdateInfo } from "../lib/update/checkUpdate";
+import { renderMarkdown, archLabel } from "../lib/update/markdown";
 
 type SettingsSection =
   | "general"
@@ -705,6 +707,10 @@ function PrivacyPage({
 /* ═══ 关于 ═══ */
 function AboutPage() {
   const [version, setVersion] = useState<string>("");
+  const [update, setUpdate] = useState<UpdateInfo | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [showRelease, setShowRelease] = useState(false);
+
   useEffect(() => {
     let alive = true;
     getVersion()
@@ -712,10 +718,36 @@ function AboutPage() {
         if (alive) setVersion(v);
       })
       .catch(() => {});
+    checkUpdate()
+      .then((info) => {
+        if (alive) {
+          setUpdate(info);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (alive) setLoading(false);
+      });
     return () => {
       alive = false;
     };
   }, []);
+
+  async function handleCheck() {
+    setLoading(true);
+    try {
+      setUpdate(await checkUpdate({ force: true }));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function openDownload() {
+    if (update?.releaseUrl) void openUrl(update.releaseUrl);
+  }
+
+  const hasUpdate = update?.hasUpdate ?? false;
+
 
   return (
     <div>
@@ -733,12 +765,40 @@ function AboutPage() {
         <div className="set-row">
           <div>
             <div className="set-row-t">检查更新</div>
-            <div className="set-row-d">当前已是最新版本</div>
+            <div className="set-row-d">
+              {loading
+                ? "正在检查更新…"
+                : hasUpdate
+                ? `发现新版本 v${update?.latestVersion ?? ""}（当前 v${update?.currentVersion ?? ""}）`
+                : update?.error
+                ? `检查失败：${update.error}`
+                : "当前已是最新版本"}
+              {!loading && update?.hint ? <div className="set-row-hint">{update.hint}</div> : null}
+              {!loading && update?.error ? (
+                <div className="set-row-hint">
+                  <span className="rb-link" onClick={() => void openUrl(RELEASE_PAGE)}>
+                    可点击 Release 自行查看
+                  </span>
+                </div>
+              ) : null}
+            </div>
           </div>
-          <span className="tag tag-ok">
-            <Icon name="check" size={11} />
-            已是最新
-          </span>
+          {hasUpdate ? (
+            <span className="tag tag-go" style={{ cursor: "pointer" }} onClick={() => setShowRelease(true)}>
+              查看更新
+            </span>
+          ) : loading ? (
+            <span className="tag">检查中</span>
+          ) : update?.error ? (
+            <span className="tag tag-go" style={{ cursor: "pointer" }} onClick={() => void handleCheck()}>
+              重试
+            </span>
+          ) : (
+            <span className="tag tag-ok">
+              <Icon name="check" size={11} />
+              已是最新
+            </span>
+          )}
         </div>
         <div
           className="set-row"
@@ -777,6 +837,42 @@ function AboutPage() {
       <div style={{ textAlign: "center", fontSize: 11, color: "var(--rb-text-tertiary)", paddingTop: 6 }}>
         © 2026 ReadBrief
       </div>
+
+      {/* 更新内容模态框：查看更新说明 + 右下角前往下载（含架构兜底入口） */}
+      {showRelease && update ? (
+        <div className="rb-modal-mask" onClick={() => setShowRelease(false)}>
+          <div className="rb-release-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+            <button className="rb-modal-close" onClick={() => setShowRelease(false)} aria-label="关闭">
+              <Icon name="close" size={14} />
+            </button>
+            <div className="rb-release-modal-head">
+              <div className="rb-release-modal-title">更新到 v{update.latestVersion}</div>
+              <div className="rb-release-modal-sub">当前版本 v{update.currentVersion}</div>
+            </div>
+            <div
+              className="rb-release-modal-body"
+              dangerouslySetInnerHTML={{ __html: renderMarkdown(update.releaseNotes ?? "（无更新说明）") }}
+            />
+            <div className="rb-release-modal-foot">
+              {update.dmgAssets.length > 1 ? (
+                <div className="rb-release-links">
+                  <span className="rb-release-links-label">其他版本：</span>
+                  {update.dmgAssets.map((d) => (
+                    <button key={d.url} className="rb-release-link" onClick={() => void openUrl(d.url)}>
+                      {archLabel(d.name)} 下载
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <span />
+              )}
+              <button className="rb-update-popup-btn" onClick={() => void openDownload()}>
+                前往下载
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -2053,6 +2053,170 @@
   to { opacity: 1; transform: translate(-50%, 0); }
 }
 
+/* 主窗右下角更新提示弹窗 */
+.rb-update-popup {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: var(--rb-z-toast);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 340px;
+  padding: 11px 12px;
+  background: var(--rb-bg-surface);
+  border: 1px solid var(--rb-border-default);
+  border-left: 3px solid #4B4BC8;
+  border-radius: var(--rb-radius-md);
+  box-shadow: var(--rb-shadow-lg);
+  animation: rb-popup-in var(--rb-duration-normal) var(--rb-ease-out);
+}
+.rb-update-popup-icon { color: #4B4BC8; flex: none; display: flex; }
+.rb-update-popup-body { flex: 1; min-width: 0; }
+.rb-update-popup-title { font-size: var(--rb-text-sm); font-weight: 600; color: var(--rb-text-primary); }
+.rb-update-popup-desc { font-size: var(--rb-text-xs); color: var(--rb-text-secondary); margin-top: 2px; }
+.rb-update-popup-btn {
+  flex: none;
+  border: none;
+  cursor: pointer;
+  background: #4B4BC8;
+  color: #fff;
+  font-size: var(--rb-text-sm);
+  padding: 6px 12px;
+  border-radius: var(--rb-radius-md);
+  transition: background var(--rb-duration-fast) var(--rb-ease-out);
+}
+.rb-update-popup-btn:hover { background: #3f3fae; }
+.rb-update-popup-close {
+  flex: none;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--rb-text-secondary);
+  display: flex;
+  padding: 2px;
+  border-radius: 6px;
+}
+.rb-update-popup-close:hover { background: var(--rb-bg-hover); color: var(--rb-text-primary); }
+@keyframes rb-popup-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 更新内容模态框（设置-关于 → 查看更新） */
+.rb-modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 20, 30, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 24px;
+  animation: rb-fade-in var(--rb-duration-normal) var(--rb-ease-out);
+}
+@keyframes rb-fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+.rb-release-modal {
+  position: relative;
+  width: 100%;
+  max-width: 520px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--rb-bg-surface);
+  border: 1px solid var(--rb-border-default);
+  border-radius: var(--rb-radius-lg);
+  box-shadow: var(--rb-shadow-lg);
+  overflow: hidden;
+  animation: rb-modal-in var(--rb-duration-normal) var(--rb-ease-out);
+}
+@keyframes rb-modal-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.rb-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--rb-text-secondary);
+  display: flex;
+  padding: 4px;
+  border-radius: 6px;
+}
+.rb-modal-close:hover { background: var(--rb-bg-hover); color: var(--rb-text-primary); }
+
+.rb-release-modal-head {
+  padding: 18px 20px 12px;
+  border-bottom: 1px solid var(--rb-border-default);
+}
+.rb-release-modal-title { font-size: var(--rb-text-lg); font-weight: 600; color: var(--rb-text-primary); }
+.rb-release-modal-sub { font-size: var(--rb-text-xs); color: var(--rb-text-secondary); margin-top: 3px; }
+
+.rb-release-modal-body {
+  padding: 14px 20px;
+  overflow-y: auto;
+  flex: 1;
+  font-size: var(--rb-text-sm);
+  line-height: 1.7;
+  color: var(--rb-text-primary);
+}
+.rb-release-modal-body h1,
+.rb-release-modal-body h2,
+.rb-release-modal-body h3,
+.rb-release-modal-body h4 { font-weight: 600; line-height: 1.4; margin: 12px 0 6px; }
+.rb-release-modal-body h1 { font-size: 17px; }
+.rb-release-modal-body h2 { font-size: 15px; }
+.rb-release-modal-body h3 { font-size: 14px; }
+.rb-release-modal-body h4 { font-size: 13px; }
+.rb-release-modal-body p { margin: 6px 0; }
+.rb-release-modal-body ul,
+.rb-release-modal-body ol { margin: 6px 0; padding-left: 20px; }
+.rb-release-modal-body li { margin: 3px 0; }
+.rb-release-modal-body a { color: #4B4BC8; text-decoration: underline; word-break: break-word; }
+.rb-release-modal-body code {
+  font-family: var(--rb-font-mono);
+  font-size: 12px;
+  background: var(--rb-bg-hover);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+.rb-release-modal-body strong { font-weight: 600; }
+
+.rb-release-modal-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--rb-border-default);
+}
+.rb-release-links { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rb-release-links-label { font-size: var(--rb-text-xs); color: var(--rb-text-secondary); }
+.rb-release-link {
+  border: 1px solid var(--rb-border-default);
+  background: var(--rb-bg-surface);
+  color: var(--rb-text-secondary);
+  cursor: pointer;
+  font-size: var(--rb-text-xs);
+  padding: 4px 9px;
+  border-radius: var(--rb-radius-sm);
+  transition: all var(--rb-duration-fast) var(--rb-ease-out);
+}
+.rb-release-link:hover { color: #4B4BC8; border-color: rgba(75, 75, 200, 0.4); }
+
+/* 设置-关于:更新可用 / 重试 标签按钮 */
+.tag-go {
+  color: #4B4BC8;
+  border-color: rgba(75, 75, 200, 0.35);
+  background: rgba(75, 75, 200, 0.08);
+}
+
 /* ============================================================
    设置中心 · AI 服务列表(设计稿 §7 新版)
    ============================================================ */
@@ -2487,6 +2651,28 @@
   color: var(--rb-text-secondary);
   margin-top: 2px;
   line-height: 1.5;
+}
+
+.set-row-hint {
+  margin-top: 4px;
+  font-size: 10px;
+  line-height: 1.45;
+  color: #b06a2c;
+  white-space: normal;
+  word-break: break-word;
+  max-width: 360px;
+}
+
+/* 关于页:检查失败时的「前往 Release 查看」链接 */
+.rb-link {
+  color: var(--rb-text-brand, #4b4bc8);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.rb-link:hover {
+  opacity: 0.85;
 }
 
 .set-row-label {

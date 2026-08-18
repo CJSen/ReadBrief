@@ -3,12 +3,20 @@ import { createPortal } from "react-dom";
 import type { AppConfig } from "../lib/config/types";
 import { getServices } from "../lib/config/types";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { listen, emit } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { t } from "../lib/i18n";
 import { Icon } from "./Icon";
 import { LogoMark } from "./LogoMark";
 import { Onboarding } from "./Onboarding";
+import { checkUpdate, type UpdateInfo } from "../lib/update/checkUpdate";
+
+/**
+ * 本地预览开关：测试「发现新版本」右下角弹窗。
+ * 设为 true 后启动会强制弹出更新提示（无需真实 GitHub Release 高于本地版本）。
+ * 预览完请改回 false 再提交。
+ */
+const DEV_TEST_UPDATE_POPUP = false;
 
 interface HistoryRecord {
   id: number;
@@ -129,6 +137,10 @@ export function AppMain() {
   const [tagEditor, setTagEditor] = useState<"create" | "edit" | null>(null);
   const [editTagName, setEditTagName] = useState<string | null>(null);
   const [editorPos, setEditorPos] = useState<{ top: number; left: number } | null>(null);
+
+  // 启动检查更新(轻量版:仅检测 GitHub Release,有更新则在主窗右下角提示)
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [showUpdatePopup, setShowUpdatePopup] = useState(false);
   const [newTagName, setNewTagName] = useState("");
   const [newTagColor, setNewTagColor] = useState(`var(--rb-brand-400)`);
   const [newTagHex, setNewTagHex] = useState(DEFAULT_TAG_COLOR);
@@ -172,6 +184,59 @@ export function AppMain() {
       .catch(() => setCfg(null))
       .finally(() => setCfgLoaded(true));
   }, []);
+
+  // 启动后异步检查一次更新(轻量版:查询 GitHub Release,不自动下载)
+  useEffect(() => {
+    let alive = true;
+
+    // 本地预览：强制弹出更新提示，无需真实 Release
+    if (DEV_TEST_UPDATE_POPUP) {
+      const fake: UpdateInfo = {
+        hasUpdate: true,
+        currentVersion: "0.9.5",
+        latestVersion: "1.2.0",
+        releaseUrl: "https://github.com/CJSen/ReadBrief/releases/download/v1.2.0/ReadBrief_aarch64.dmg",
+        releaseName: "v1.2.0",
+        releaseNotes:
+          "## 更新内容\n\n- 新增轻量版更新检查（自动匹配本机架构）\n- 关于页可「查看更新」查看更新说明\n- 修复若干已知问题\n\n详情见 [Release 页面](https://github.com/CJSen/ReadBrief/releases/tag/v1.2.0)",
+        dmgAssets: [
+          { name: "ReadBrief_aarch64.dmg", url: "https://github.com/CJSen/ReadBrief/releases/download/v1.2.0/ReadBrief_aarch64.dmg" },
+          { name: "ReadBrief_x86_64.dmg", url: "https://github.com/CJSen/ReadBrief/releases/download/v1.2.0/ReadBrief_x86_64.dmg" },
+        ],
+        error: null,
+        hint: null,
+      };
+      if (alive) {
+        setUpdateInfo(fake);
+        setShowUpdatePopup(true);
+      }
+      return () => {
+        alive = false;
+      };
+    }
+
+    checkUpdate()
+      .then((info) => {
+        if (!alive) return;
+        setUpdateInfo(info);
+        if (info.hasUpdate) setShowUpdatePopup(true);
+        else if (info.error) console.warn("[update] 启动检查失败：", info.error, info.hint ?? "");
+      })
+      .catch((e) => console.warn("[update] 启动检查异常：", e));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  async function handleGoUpdate() {
+    try {
+      await invoke("open_settings");
+      await emit("navigate-settings", "about");
+    } catch {
+      /* 忽略:设置窗口打开失败时不阻塞 */
+    }
+    setShowUpdatePopup(false);
+  }
 
   // 配置变更(设置窗口改 AI 服务/语言/主题等)时同步到主窗口 cfg,
   // 避免常驻主窗口持有陈旧配置(如设置里配好 Key 后主窗仍显示「未配置」横幅)。
@@ -1198,6 +1263,34 @@ export function AppMain() {
           {showOnboarding && cfg ? (
             <Onboarding cfg={cfg} onUpdate={handleOnboardingUpdate} onClose={() => setShowOnboarding(false)} />
           ) : null}
+
+          {/* 更新提示:主窗右下角小弹窗,点击跳转设置-关于 */}
+          {showUpdatePopup && updateInfo?.hasUpdate
+            ? createPortal(
+                <div className="rb-update-popup" role="alert">
+                  <div className="rb-update-popup-icon">
+                    <Icon name="refresh" size={16} />
+                  </div>
+                  <div className="rb-update-popup-body">
+                    <div className="rb-update-popup-title">发现新版本 v{updateInfo.latestVersion}</div>
+                    <div className="rb-update-popup-desc">
+                      当前 v{updateInfo.currentVersion} · 前往设置-关于更新
+                    </div>
+                  </div>
+                  <button className="rb-update-popup-btn" onClick={() => void handleGoUpdate()}>
+                    去更新
+                  </button>
+                  <button
+                    className="rb-update-popup-close"
+                    onClick={() => setShowUpdatePopup(false)}
+                    aria-label="关闭"
+                  >
+                    <Icon name="close" size={12} />
+                  </button>
+                </div>,
+                document.body,
+              )
+            : null}
     </div>
   );
 }

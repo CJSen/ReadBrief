@@ -58,6 +58,7 @@ pub fn run() {
             commands::open_data_dir,
             commands::autostart_status,
             commands::autostart_set,
+            commands::get_app_arch,
             history::history_create,
             history::history_list,
             history::history_count,
