@@ -56,4 +56,8 @@ docs/site/.vitepress/*.timestamp-*.mjs
 docs/*
 !docs/site
 !docs/images
-scripts/
+
+# scripts
+scripts/*
+!scripts/seed_data.py
+!scripts/sync-version.mjs

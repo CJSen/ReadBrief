@@ -596,14 +596,14 @@ pub fn update_tag(conn: &Connection, old_name: &str, new_name: &str, color: &str
 #[tauri::command]
 pub async fn history_update_tag(
     state: tauri::State<'_, AppState>,
-    oldName: String,
-    newName: String,
+    old_name: String,
+    new_name: String,
     color: String,
 ) -> AppResult<()> {
     let db = state.db.clone();
     tauri::async_runtime::spawn_blocking(move || -> AppResult<()> {
         let conn = db.lock().map_err(|e| AppError::from(e.to_string()))?;
-        update_tag(&conn, &oldName, &newName, &color)
+        update_tag(&conn, &old_name, &new_name, &color)
     })
     .await
     .map_err(|e| AppError::from(e.to_string()))?
