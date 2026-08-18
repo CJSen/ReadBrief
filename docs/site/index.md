@@ -105,7 +105,8 @@ hero:
 <div class="rb-steps">
 <div class="rb-step">
 <h3>下载并安装</h3>
-<p>下载 <code>.dmg</code> 拖入「应用程序」，首次启动时按提示开启「辅助功能」权限，用于划词读取选中文本。</p>
+<p><strong>.dmg 安装包双击打不开</strong>：前往 <strong>系统设置 → 隐私与安全性</strong> 点「仍要打开」，或终端 <code>xattr -cr &lt;dmg 路径&gt;</code> 解除隔离。</p>
+<p><strong>首次打开 App 提示「无法验证开发者」</strong>：右键点击 App → <strong>打开</strong> 即可；或前往 <strong>系统设置 → 隐私与安全性</strong> 点「仍要打开」，或终端 <code>xattr -cr /Applications/ReadBrief.app</code> 解除隔离。首次启动按提示开启「辅助功能」权限，用于划词读取选中文本。</p>
 </div>
 
 <div class="rb-step">

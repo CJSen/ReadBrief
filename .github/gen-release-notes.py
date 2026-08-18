@@ -18,10 +18,10 @@ def main() -> int:
     if not ref:
         print("GITHUB_REF_NAME 未设置", file=sys.stderr)
         return 1
-    version = ref[1:] if ref.startswith("v") else ref
+    version = ref.removeprefix("v")
 
     tags = subprocess.check_output(["git", "tag", "--sort=-creatordate"]).decode().split()
-    strip_v = lambda t: t[1:] if t.startswith("v") else t
+    strip_v = lambda t: t.removeprefix("v")
     prev_tags = [t for t in tags if strip_v(t) != version]
     prev = prev_tags[0] if prev_tags else None
     rng = f"{prev}..{ref}" if prev else ref
@@ -76,8 +76,15 @@ def main() -> int:
     L.append("## 📋 安装说明")
     L.append("")
     L.append("1. 下载与你的芯片对应的 `.dmg`，双击挂载。")
+    L.append("   或在设置-隐私与安全性-拉到底-仍要打开-弹窗点击'仍要打开'; ")
+    L.append("   或在终端执行以下命令解除隔离标记后重试：")
+    L.append("")
+    L.append("   ```bash")
+    L.append("   xattr -cr <PATH_TO_DMG(直接将dmg文件拖入终端)>")
+    L.append("   ```")
     L.append("2. 将 **ReadBrief** 拖入 `Applications` 文件夹。")
     L.append("3. 首次打开若提示“无法验证开发者”，右键点击 App → **打开**；")
+    L.append("   或在设置-隐私与安全性-拉到底-仍要打开-弹窗点击'仍要打开'; ")
     L.append("   或在终端执行以下命令解除隔离标记后重试：")
     L.append("")
     L.append("   ```bash")
@@ -89,7 +96,7 @@ def main() -> int:
     L.append("")
     L.append("---")
     L.append("")
-    L.append("ReadBrief · 基于划词检索的桌面端 AI 总结应用 · 全功能免费开放")
+    L.append("ReadBrief · 基于划词检索的桌面端 AI 总结应用")
 
     body = "\n".join(L) + "\n"
     with open("release-notes.md", "w") as f:
