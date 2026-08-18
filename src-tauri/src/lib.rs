@@ -107,6 +107,7 @@ pub fn run() {
         setup_app(app)?;
         windows::setup_window_handlers(app.handle());
         shortcuts::register_default_shortcut(app.handle())?;
+        shortcuts::register_open_settings_shortcut(app.handle())?;
         tray::setup_tray(app.handle())?;
         Ok(())
     });
@@ -115,6 +116,7 @@ pub fn run() {
     let builder = builder.setup(|app| {
         setup_app(app)?;
         shortcuts::register_default_shortcut(app.handle())?;
+        shortcuts::register_open_settings_shortcut(app.handle())?;
         tray::setup_tray(app.handle())?;
         Ok(())
     });

@@ -1,4 +1,4 @@
-export type ProviderType = "openai" | "claude" | "gemini";
+export type ProviderType = "openai" | "claude" | "gemini" | "deepseek";
 
 export interface ProviderConfig {
   type: ProviderType;

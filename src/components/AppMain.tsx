@@ -838,7 +838,7 @@ export function AppMain() {
           <div className="rb-nav-item" onClick={() => invoke("open_settings")}>
             <Icon name="settings" size={14} />
             设置
-            <span className="rb-nav-kbd">⌘,</span>
+            <span className="rb-nav-kbd">⌘ + ,</span>
           </div>
         </div>
       </aside>

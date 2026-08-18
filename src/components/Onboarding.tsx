@@ -23,6 +23,7 @@ const FORMAT_COMPAT: Record<ProviderType, string> = {
   openai: "OpenAI 兼容",
   claude: "Claude 兼容",
   gemini: "Gemini 兼容",
+  deepseek: "DeepSeek 官方",
 };
 
 /* 与 AiServicesPage 一致的服务商默认(官方 Base URL / 默认模型) */
@@ -30,8 +31,9 @@ const FORMAT_META: Record<ProviderType, { name: string; official: string; defaul
   openai: { name: "OpenAI 格式", official: "https://api.openai.com/v1", defaultModel: "gpt-4o-mini" },
   claude: { name: "Claude 格式", official: "https://api.anthropic.com", defaultModel: "claude-sonnet-4-20250514" },
   gemini: { name: "Gemini 格式", official: "https://generativelanguage.googleapis.com", defaultModel: "gemini-2.0-flash" },
+  deepseek: { name: "DeepSeek 官方", official: "https://api.deepseek.com", defaultModel: "deepseek-chat" },
 };
-const FORMAT_ORDER: ProviderType[] = ["openai", "claude", "gemini"];
+const FORMAT_ORDER: ProviderType[] = ["openai", "claude", "gemini", "deepseek"];
 
 /** 模型下拉候选(组合框:可手输,打开态供选择);与 AiServicesPage 一致 */
 const MODEL_SUGGESTIONS: string[] = ["deepseek-chat", "deepseek-reasoner", "gpt-4o-mini"];
@@ -134,7 +136,8 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
       name: form.name?.trim() || FORMAT_META[form.protocol as ProviderType].name,
       protocol: form.protocol,
       apiKey: key,
-      baseUrl: form.baseUrl.trim(),
+      // deepseek 官方格式锁定 Base URL(UI 已禁用,此处保存兜底)
+      baseUrl: form.protocol === "deepseek" ? FORMAT_META.deepseek.official : form.baseUrl.trim(),
       model: form.model.trim() || FORMAT_META[form.protocol as ProviderType].defaultModel,
       isDefault: editingId
         ? Boolean(cfg.services?.find((s) => s.id === editingId)?.isDefault)
@@ -888,7 +891,8 @@ function ServiceFields({
                     key={p}
                     className={`svc-mi${p === form.protocol ? " on" : ""}`}
                     onClick={() => {
-                      set({ protocol: p, model: "" });
+                      // deepseek 官方格式锁定 Base URL(与 AiServicesPage 一致)
+                      set({ protocol: p, model: "", ...(p === "deepseek" ? { baseUrl: FORMAT_META[p].official } : {}) });
                       setFmtOpen(false);
                     }}
                   >
@@ -917,7 +921,9 @@ function ServiceFields({
         <div className="rb-ob-field-label">{t("settings.baseUrl")}</div>
         <input
           className="inp mono"
-          value={form.baseUrl}
+          value={form.protocol === "deepseek" ? FORMAT_META.deepseek.official : form.baseUrl}
+          disabled={form.protocol === "deepseek"}
+          title={form.protocol === "deepseek" ? "DeepSeek 官方格式固定使用该地址" : undefined}
           onChange={(e) => set({ baseUrl: e.currentTarget.value })}
           placeholder={fmt.official}
         />

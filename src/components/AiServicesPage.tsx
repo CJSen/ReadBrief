@@ -11,6 +11,15 @@ const FORMAT_META: Record<ProviderType, { name: string; desc: string; mark: stri
   openai: { name: "OpenAI 格式", desc: "官方 API 及绝大多数兼容网关", mark: "O" },
   claude: { name: "Claude 格式", desc: "Anthropic 官方", mark: "C" },
   gemini: { name: "Gemini 格式", desc: "Google AI Studio / Vertex", mark: "G" },
+  deepseek: { name: "DeepSeek 官方", desc: "DeepSeek 官方 API", mark: "D" },
+};
+
+/** DeepSeek 官方固定 Base URL(选中该格式后不可更改) */
+const DEEPSEEK_BASE = "https://api.deepseek.com";
+
+/** 格式选择是否锁定 Base URL */
+const LOCKED_BASE_URL: Partial<Record<ProviderType, string>> = {
+  deepseek: DEEPSEEK_BASE,
 };
 
 /** 模型下拉候选(组合框:可手输,打开态供选择) */
@@ -356,6 +365,8 @@ function ServiceForm({ svc, isNew, onSave, onCancel, onTest, latency }: ServiceF
     }
   }
   const fmt = FORMAT_META[form.protocol as ProviderType];
+  /** 锁定格式的固定 Base URL(deepseek 官方);非锁定格式为 undefined */
+  const lockedBase = LOCKED_BASE_URL[form.protocol as ProviderType];
   const modelInputRef = useRef<HTMLDivElement>(null);
   const modelMenuRef = useRef<HTMLDivElement>(null);
   /** 打开下拉时记录的触发输入框视口坐标,供 useLayoutEffect 做实际高度对齐 */
@@ -429,13 +440,13 @@ function ServiceForm({ svc, isNew, onSave, onCancel, onTest, latency }: ServiceF
       ? [form.model, ...models].filter((m, i, arr) => Boolean(m) && arr.indexOf(m) === i)
       : [form.model, ...MODEL_SUGGESTIONS].filter((m, i, arr) => Boolean(m) && arr.indexOf(m) === i);
 
-  /** 保存校验:API Key 必填 */
+  /** 保存校验:API Key 必填;锁定格式强制固定 Base URL */
   function handleSaveClick() {
     if (!form.apiKey.trim()) {
       setSaveErr("API Key 是必填项");
       return;
     }
-    onSave(form);
+    onSave(lockedBase ? { ...form, baseUrl: lockedBase } : form);
   }
 
   return (
@@ -481,8 +492,9 @@ function ServiceForm({ svc, isNew, onSave, onCancel, onTest, latency }: ServiceF
                       key={p}
                       className={`svc-mi${p === form.protocol ? " on" : ""}`}
                       onClick={() => {
-                        // 切换格式:仅更新协议,模型保持空白(由用户手动输入或从接口拉取)
-                        set({ protocol: p, model: "" });
+                        // 切换格式:仅更新协议,模型保持空白(由用户手动输入或从接口拉取);
+                        // deepseek 官方格式锁定 Base URL
+                        set({ protocol: p, model: "", ...(LOCKED_BASE_URL[p] ? { baseUrl: LOCKED_BASE_URL[p] } : {}) });
                         setFmtOpen(false);
                       }}
                     >
@@ -518,9 +530,11 @@ function ServiceForm({ svc, isNew, onSave, onCancel, onTest, latency }: ServiceF
             </div>
             <input
               className="inp mono rb-svc-input"
-              value={form.baseUrl}
+              value={lockedBase ?? form.baseUrl}
+              disabled={Boolean(lockedBase)}
+              title={lockedBase ? "DeepSeek 官方格式固定使用该地址" : undefined}
               onChange={(e) => set({ baseUrl: e.currentTarget.value })}
-              placeholder={form.protocol === "openai" ? "https://api.openai.com/v1" : form.protocol === "claude" ? "https://api.anthropic.com" : "https://generativelanguage.googleapis.com"}
+              placeholder={form.protocol === "openai" ? "https://api.openai.com/v1" : form.protocol === "claude" ? "https://api.anthropic.com" : form.protocol === "deepseek" ? "https://api.deepseek.com" : "https://generativelanguage.googleapis.com"}
             />
           </div>
 

@@ -115,6 +115,9 @@ pub fn open_settings(app: tauri::AppHandle) -> AppResult<()> {
         let _ = win.show();
         let _ = win.set_focus();
     }
+    // 每次打开设置都回到「通用」分区,不保留上次停留位置。
+    // 定向入口(状态栏「关于ReadBrief」/更新提示)用 open_settings_section 或后置 emit 覆盖。
+    let _ = app.emit("navigate-settings", "general");
     Ok(())
 }
 

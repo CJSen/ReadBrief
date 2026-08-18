@@ -80,6 +80,26 @@ pub fn register_default_shortcut(app: &tauri::AppHandle) -> AppResult<()> {
     reload_shortcuts(app)
 }
 
+/// 应用级固定快捷键:⌘, / Ctrl+, 打开设置页(macOS 系统惯例)。
+/// 与 config 驱动的快捷键(reload_shortcuts)分开管理:不进设置页快捷键列表、不可被增删改。
+pub fn register_open_settings_shortcut(app: &tauri::AppHandle) -> AppResult<()> {
+    #[cfg(target_os = "macos")]
+    let accel = "Cmd+,";
+    #[cfg(not(target_os = "macos"))]
+    let accel = "Ctrl+,";
+
+    match app.global_shortcut().on_shortcut(accel, move |app, _shortcut, event| {
+        if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+            let _ = crate::windows::open_settings(app.clone());
+        }
+    }) {
+        Ok(()) => {}
+        // 注册失败不阻塞启动(如被系统其它 App 占用),仅告警
+        Err(e) => log::warn!("注册「{accel}」打开设置快捷键失败: {e}"),
+    }
+    Ok(())
+}
+
 /// 从 config.json 读取快捷键并全量重注册(热更新)。
 /// 只注册 config 中显式绑定(accelerator 非空)的快捷键;
 /// 默认绑定(划词总结 = ⌘+Shift+Z)以 config 默认项的形式存在,用户可在设置页修改/删除。

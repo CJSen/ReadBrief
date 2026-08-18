@@ -19,7 +19,7 @@ import type {
 
 export type { ApiConfig, AppConfig, PromptConfig, ShortcutConfig };
 
-export type ProviderType = "openai" | "claude" | "gemini";
+export type ProviderType = "openai" | "claude" | "gemini" | "deepseek";
 
 export function getServices(cfg: AppConfig): ApiConfig[] {
   const services = cfg.services?.length ? cfg.services : [cfg.api];

@@ -52,10 +52,10 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
 /// 输入长度上限:20k 字符(此前前端直发全文无截断,可被超大文本撑爆)
 const MAX_INPUT_CHARS: usize = 20_000;
 
-/// 校验 protocol 是否为三枚举之一(防剪贴板导入非法值后浮窗崩溃)
+/// 校验 protocol 是否为支持枚举之一(防剪贴板导入非法值后浮窗崩溃)
 fn validate_protocol(p: &str) -> Result<(), AppError> {
     match p {
-        "openai" | "claude" | "gemini" => Ok(()),
+        "openai" | "claude" | "gemini" | "deepseek" => Ok(()),
         other => Err(AppError::Invalid(format!("未知协议: {other}"))),
     }
 }
@@ -84,6 +84,7 @@ fn build_request(
         .unwrap_or(match config.protocol.as_str() {
             "claude" => "https://api.anthropic.com",
             "gemini" => "https://generativelanguage.googleapis.com",
+            "deepseek" => "https://api.deepseek.com",
             _ => "https://api.openai.com/v1",
         })
         .trim_end_matches('/');
@@ -91,7 +92,8 @@ fn build_request(
     let model = req.model.as_deref().unwrap_or(&config.model);
 
     match config.protocol.as_str() {
-        "openai" => {
+        // DeepSeek 官方为 OpenAI 兼容协议:同一套请求/SSE 解析
+        "openai" | "deepseek" => {
             let mut messages = Vec::new();
             if let Some(sys) = &req.system {
                 messages.push(serde_json::json!({ "role": "system", "content": sys }));
@@ -210,7 +212,8 @@ fn extract_delta(protocol: &str, data: &str) -> Result<ExtractedDelta, String> {
         return Err(msg.to_string());
     }
     match protocol {
-        "openai" => {
+        // DeepSeek 官方为 OpenAI 兼容协议:同样解析 choices[].delta(reasoning_content/content)
+        "openai" | "deepseek" => {
             let choice = json.get("choices").and_then(|c| c.get(0));
             let delta = choice.and_then(|c| c.get("delta"));
             let reasoning_text = delta
@@ -563,6 +566,7 @@ pub async fn ai_list_models(config: AiServiceConfig) -> AppResult<Vec<String>> {
         .unwrap_or(match config.protocol.as_str() {
             "claude" => "https://api.anthropic.com",
             "gemini" => "https://generativelanguage.googleapis.com",
+            "deepseek" => "https://api.deepseek.com",
             _ => "https://api.openai.com/v1",
         })
         .trim_end_matches('/');
@@ -570,7 +574,8 @@ pub async fn ai_list_models(config: AiServiceConfig) -> AppResult<Vec<String>> {
     let client = reqwest::Client::builder().timeout(REQUEST_TIMEOUT).build()?;
 
     match config.protocol.as_str() {
-        "openai" => {
+        // DeepSeek 官方为 OpenAI 兼容协议:GET {base}/models
+        "openai" | "deepseek" => {
             let url = format!("{base}/models");
             let resp = client
                 .get(&url)

@@ -505,8 +505,9 @@
 .rb-nav-kbd {
   margin-left: auto;
   font-family: var(--rb-font-mono);
-  font-size: 10px;
-  opacity: 0.6;
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.72;
 }
 
 .rb-nav-section {
