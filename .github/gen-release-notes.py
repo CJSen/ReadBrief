@@ -8,9 +8,10 @@
     GITHUB_REF_NAME=v0.9.5 python3 .github/gen-release-notes.py
 """
 import os
-import re
-import subprocess
 import sys
+
+# 与 gen-latest-json.py 共用分组与提交解析规则（脚本所在目录默认在 sys.path 中）。
+from changelog_lib import OTHER_LABEL, collect
 
 
 def main() -> int:
@@ -20,53 +21,23 @@ def main() -> int:
         return 1
     version = ref.removeprefix("v")
 
-    tags = subprocess.check_output(["git", "tag", "--sort=-creatordate"]).decode().split()
-    strip_v = lambda t: t.removeprefix("v")
-    prev_tags = [t for t in tags if strip_v(t) != version]
-    prev = prev_tags[0] if prev_tags else None
-    rng = f"{prev}..{ref}" if prev else ref
+    prev, groups, other, total = collect(ref, version)
     scope = f"相对上一个版本 {prev}" if prev else "首个公开发布版本"
-    out = subprocess.check_output(
-        ["git", "log", "--pretty=format:%s|%h", rng]
-    ).decode().splitlines()
-
-    groups = {
-        "feat": ("✨ 新功能", []),
-        "fix": ("🐛 问题修复", []),
-        "perf": ("⚡ 性能优化", []),
-        "refactor": ("♻️ 重构", []),
-        "docs": ("📝 文档", []),
-        "chore": ("🔧 杂项", []),
-        "ci": ("⚙️ 持续集成", []),
-        "style": ("🎨 样式", []),
-        "test": ("✅ 测试", []),
-    }
-    other = []
-    for line in out:
-        if "|" not in line:
-            continue
-        subject, h = line.split("|", 1)
-        m = re.match(r"^(\w+)(\(.+?\))?!?:\s*(.*)$", subject)
-        if m and m.group(1) in groups:
-            groups[m.group(1)][1].append((m.group(3), h))
-        else:
-            other.append((subject, h))
 
     L = []
     L.append(f"## ReadBrief v{version}")
     L.append("")
-    L.append(f"> {scope} · 共 {len(out)} 条提交")
+    L.append(f"> {scope} · 共 {total} 条提交")
     L.append("")
-    for _, (label, items) in groups.items():
-        if items:
-            L.append(f"### {label}")
-            for msg, h in items:
-                L.append(f"- {msg} (`{h[:7]}`)")
-            L.append("")
+    for _key, label, items in groups:
+        L.append(f"### {label}")
+        for msg, h in items:
+            L.append(f"- {msg} (`{h}`)")
+        L.append("")
     if other:
-        L.append("### 📦 其他变更")
+        L.append(f"### {OTHER_LABEL}")
         for msg, h in other:
-            L.append(f"- {msg} (`{h[:7]}`)")
+            L.append(f"- {msg} (`{h}`)")
         L.append("")
     L.append("## 📥 下载")
     L.append("")

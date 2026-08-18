@@ -14,6 +14,10 @@ name: Release
 #   APPLE_ID                     开发者 Apple ID（邮箱）
 #   APPLE_PASSWORD                App 专用密码
 #   APPLE_TEAM_ID                团队 ID
+#
+# 官网联动 Secret（未配置则跳过并告警，不影响发版）：
+#   CLOUDFLARE_DEPLOY_HOOK       Cloudflare Pages 的 Deploy Hook URL，
+#                                正式版发布完成后 POST 触发官网重建
 
 on:
   push:
@@ -26,12 +30,19 @@ on:
 permissions:
   contents: write
 
+# 发版串行：latest.json 与 GitHub 的 latest 语义都是全局单例，
+# 两个 tag 并行发布会让官网读到错乱的版本。排队而非取消，避免丢发版。
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   create-release:
     runs-on: ubuntu-22.04
     outputs:
       release_id: ${{ steps.create-release.outputs.result }}
       version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.prerelease.outputs.prerelease }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -143,7 +154,7 @@ jobs:
       - name: Add Rust targets
         run: rustup target add x86_64-apple-darwin aarch64-apple-darwin
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -188,6 +199,70 @@ jobs:
     needs: [create-release, build]
     runs-on: ubuntu-22.04
     steps:
+      # gen-latest-json.py 要跑 git log 取变更分组，需完整历史与 tag。
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      # 回查 build 阶段实际上传的产物，拿到真实文件名 / 体积 / 下载直链。
+      # 不用「按版本号拼接 URL」的办法：本仓库 tag 命名并不统一
+      # （历史上既有 0.9.5 也有 v0.9.6），拼出来的链接会 404。
+      - name: Collect release assets
+        id: assets
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { data } = await github.rest.repos.listReleaseAssets({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: ${{ needs.create-release.outputs.release_id }},
+              per_page: 100,
+            });
+            const slim = data.map((a) => ({
+              name: a.name,
+              size: a.size,
+              browser_download_url: a.browser_download_url,
+            }));
+            core.setOutput('json', JSON.stringify(slim));
+            core.info(`已上传资产 ${slim.length} 个：`);
+            slim.forEach((a) => core.info(`  ${a.name} (${a.size} bytes)`));
+
+      - name: Generate latest.json
+        env:
+          RB_ASSETS_JSON: ${{ steps.assets.outputs.json }}
+        run: python3 .github/gen-latest-json.py
+
+      # 固定文件名是关键：让 releases/latest/download/latest.json 永久有效。
+      # 趁 release 仍是 draft 时上传，与正文一起对外可见，避免中间态。
+      - name: Upload latest.json
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const release_id = ${{ needs.create-release.outputs.release_id }};
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            // 幂等：重跑时同名资产已存在，uploadReleaseAsset 会报 422，先删。
+            const { data: existing } = await github.rest.repos.listReleaseAssets({
+              owner, repo, release_id, per_page: 100,
+            });
+            for (const a of existing.filter((a) => a.name === 'latest.json')) {
+              await github.rest.repos.deleteReleaseAsset({ owner, repo, asset_id: a.id });
+              core.info(`已删除旧 latest.json (id=${a.id})`);
+            }
+            // 传 Buffer 而非字符串：正文含中文，按字符数算 content-length 会与实际字节数不符。
+            const data = fs.readFileSync('latest.json');
+            await github.rest.repos.uploadReleaseAsset({
+              owner, repo, release_id,
+              name: 'latest.json',
+              data,
+              headers: {
+                'content-type': 'application/json',
+                'content-length': data.length,
+              },
+            });
+            core.info(`latest.json 上传完成（${data.length} bytes）`);
+
       - name: Publish release
         uses: actions/github-script@v8
         with:
@@ -198,3 +273,23 @@ jobs:
               release_id: ${{ needs.create-release.outputs.release_id }},
               draft: false
             });
+
+      # 官网时序闭环：Cloudflare Pages 按 push 触发构建，而 .version 的提交
+      # 早于打 tag，若不在此处主动触发，官网会在 dmg 尚未产出时抢跑构建，
+      # 出现「显示新版本号但下载链接 404」的窗口期。
+      # 预发布版不触发：官网只跟随正式版。
+      - name: Trigger docs site rebuild
+        if: needs.create-release.outputs.prerelease == 'false'
+        env:
+          HOOK: ${{ secrets.CLOUDFLARE_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "::warning::未配置 CLOUDFLARE_DEPLOY_HOOK，官网不会自动更新，需手动重新部署。"
+            exit 0
+          fi
+          code="$(curl -sS -X POST -o /dev/null -w '%{http_code}' "$HOOK")"
+          echo "Deploy hook 响应：HTTP $code"
+          case "$code" in
+            2*) echo "已触发官网重建。" ;;
+            *)  echo "::error::触发官网重建失败（HTTP $code）"; exit 1 ;;
+          esac

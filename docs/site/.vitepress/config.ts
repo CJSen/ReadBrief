@@ -52,6 +52,7 @@ export default defineConfig({
       { text: '架构', link: '/architecture', activeMatch: '^/architecture' },
       { text: '常见问题', link: '/faq', activeMatch: '^/faq' },
       { text: '下载', link: '/download', activeMatch: '^/download' },
+      { text: '更新日志', link: '/changelog', activeMatch: '^/changelog' },
     ],
 
     sidebar: {
