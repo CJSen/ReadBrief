@@ -199,12 +199,28 @@ jobs:
     needs: [create-release, build]
     runs-on: ubuntu-22.04
     steps:
-      # gen-latest-json.py 要跑 git log 取变更分组，需完整历史与 tag。
+      # gen-latest-json.c 要跑 git log 取变更分组，需完整历史与 tag。
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
+      # 先发布（draft → false），再生成 latest.json。
+      # 之所以在发布之后才抓资产：release 发布后其资产直链才是正式的 tagged slug
+      # （releases/download/v0.9.7/...），可彻底规避「draft/孤儿 release 阶段抓到
+      # untagged-xxxxxxxx 直链、之后 dmg 迁回正式 release 但 latest.json 未重算」的 404 陷阱。
+      - name: Publish release
+        uses: actions/github-script@v8
+        with:
+          script: |
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: ${{ needs.create-release.outputs.release_id }},
+              draft: false
+            });
+
       # 回查 build 阶段实际上传的产物，拿到真实文件名 / 体积 / 下载直链。
+      # 按 tag 取 release（而非依赖 draft 阶段的 release_id），确保拿到的是已发布的正式直链。
       # 不用「按版本号拼接 URL」的办法：本仓库 tag 命名并不统一
       # （历史上既有 0.9.5 也有 v0.9.6），拼出来的链接会 404。
       - name: Collect release assets
@@ -212,10 +228,16 @@ jobs:
         uses: actions/github-script@v8
         with:
           script: |
+            const tag = process.env.GITHUB_REF_NAME || (context.ref ? context.ref.replace(/^refs\/tags\//, '') : '');
+            const { data: rel } = await github.rest.repos.getReleaseByTag({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag,
+            });
             const { data } = await github.rest.repos.listReleaseAssets({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              release_id: ${{ needs.create-release.outputs.release_id }},
+              release_id: rel.id,
               per_page: 100,
             });
             const slim = data.map((a) => ({
@@ -233,7 +255,7 @@ jobs:
         run: python3 .github/gen-latest-json.py
 
       # 固定文件名是关键：让 releases/latest/download/latest.json 永久有效。
-      # 趁 release 仍是 draft 时上传，与正文一起对外可见，避免中间态。
+      # release 已发布，资产直链为正式 tagged URL，latest.json 与正文一并对外可见。
       - name: Upload latest.json
         uses: actions/github-script@v8
         with:
@@ -262,17 +284,6 @@ jobs:
               },
             });
             core.info(`latest.json 上传完成（${data.length} bytes）`);
-
-      - name: Publish release
-        uses: actions/github-script@v8
-        with:
-          script: |
-            await github.rest.repos.updateRelease({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              release_id: ${{ needs.create-release.outputs.release_id }},
-              draft: false
-            });
 
       # 官网时序闭环：Cloudflare Pages 按 push 触发构建，而 .version 的提交
       # 早于打 tag，若不在此处主动触发，官网会在 dmg 尚未产出时抢跑构建，

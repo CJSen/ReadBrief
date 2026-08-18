@@ -97,6 +97,17 @@ def main() -> int:
         # 也不要把空清单发出去——官网会照着它渲染出无法下载的按钮。
         print("::error::未在 release 资产中找到任何 .dmg，latest.json 不予生成。", file=sys.stderr)
         return 1
+    # 防御：资产 URL 若落在「无 tag 的孤儿 release」（slug 形如 untagged-xxxxxxxx），
+    # 说明本次抓取到了被 GitHub 孤儿化的资产，这种链接随时会 404。
+    # 宁可让发版失败，也不能把坏链写进 latest.json。
+    for arch, info in assets.items():
+        if "untagged" in info.get("url", ""):
+            print(
+                f"::error::资产 {info['name']} 的下载地址落在孤儿 release（untagged），"
+                "latest.json 不予生成。请检查 tauri-action 是否把 dmg 传到了正确的 tag release。",
+                file=sys.stderr,
+            )
+            return 1
     for arch, _ in ARCH_PATTERNS:
         if arch not in assets:
             print(f"::warning::缺少 {arch} 架构的 dmg，官网将只展示已有架构。")
