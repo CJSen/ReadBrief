@@ -18,6 +18,9 @@ import { checkUpdate, type UpdateInfo } from "../lib/update/checkUpdate";
  */
 const DEV_TEST_UPDATE_POPUP = false;
 
+/** 被动更新检查的轮询间隔：每 24 小时一次(macOS 用户常挂后台,启动检查已覆盖刚打开的窗口期;远低于 GitHub 匿名 60 次/小时限流) */
+const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
 interface HistoryRecord {
   id: number;
   sourceText: string;
@@ -166,6 +169,8 @@ export function AppMain() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerInput, setPickerInput] = useState("");
   const pickerInputRef = useRef<HTMLInputElement>(null);
+  // 已弹出过提示的版本号:同版本只提示一次,避免 3 小时轮询反复打扰
+  const notifiedVersionRef = useRef<string | null>(null);
 
   const hasApiKey = cfg ? getServices(cfg).some((s) => s.apiKey) : false;
 
@@ -185,9 +190,25 @@ export function AppMain() {
       .finally(() => setCfgLoaded(true));
   }, []);
 
-  // 启动后异步检查一次更新(轻量版:查询 GitHub Release,不自动下载)
+  // 每 24 小时静默检查一次更新(轻量版:仅查 GitHub Release,不下载/不自动安装);启动即查一次已覆盖刚打开的窗口期。
+  // 同版本只提示一次(notifiedVersionRef),失败/已是最新均无感(仅 DevTools 日志);卸载时清理定时器。
   useEffect(() => {
     let alive = true;
+
+    const runCheck = () => {
+      checkUpdate()
+        .then((info) => {
+          if (!alive) return;
+          setUpdateInfo(info);
+          if (info.hasUpdate && info.latestVersion && info.latestVersion !== notifiedVersionRef.current) {
+            notifiedVersionRef.current = info.latestVersion;
+            setShowUpdatePopup(true);
+          } else if (info.error) {
+            console.warn("[update] 检查失败：", info.error, info.hint ?? "");
+          }
+        })
+        .catch((e) => console.warn("[update] 检查异常：", e));
+    };
 
     // 本地预览：强制弹出更新提示，无需真实 Release
     if (DEV_TEST_UPDATE_POPUP) {
@@ -208,6 +229,7 @@ export function AppMain() {
       };
       if (alive) {
         setUpdateInfo(fake);
+        notifiedVersionRef.current = fake.latestVersion ?? null;
         setShowUpdatePopup(true);
       }
       return () => {
@@ -215,16 +237,11 @@ export function AppMain() {
       };
     }
 
-    checkUpdate()
-      .then((info) => {
-        if (!alive) return;
-        setUpdateInfo(info);
-        if (info.hasUpdate) setShowUpdatePopup(true);
-        else if (info.error) console.warn("[update] 启动检查失败：", info.error, info.hint ?? "");
-      })
-      .catch((e) => console.warn("[update] 启动检查异常：", e));
+    runCheck();
+    const timer = setInterval(runCheck, UPDATE_CHECK_INTERVAL_MS);
     return () => {
       alive = false;
+      clearInterval(timer);
     };
   }, []);
 
