@@ -173,7 +173,7 @@ export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
           return (
             <div
               key={svc.id}
-              className={`svc-row${failed ? " rb-svc-failed" : ""}${dragId === svc.id ? " rb-svc-dragging" : ""}`}
+              className={`svc-row${failed ? " rb-svc-failed" : ""}${dragId !== null && dragId === svc.id ? " rb-svc-dragging" : ""}`}
               draggable
               onDragStart={(e) => {
                 setDragId(svc.id!);

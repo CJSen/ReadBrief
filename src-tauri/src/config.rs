@@ -196,7 +196,9 @@ fn default_shortcuts() -> Vec<ShortcutConfig> {
 impl Default for ApiConfig {
     fn default() -> Self {
         Self {
-            id: None,
+            // 默认空服务也须有稳定 id：否则 services 为空时 getServices 会把该 api 顶为服务列表项，
+            // 前端拖拽态判断 dragId(null)===svc.id(null) 恒真 → 整行误挂 opacity:0.4（见 AiServicesPage）。
+            id: Some("svc_default".to_string()),
             name: None,
             protocol: "openai".to_string(),
             api_key: String::new(),
