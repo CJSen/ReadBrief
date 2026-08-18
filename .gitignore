@@ -61,3 +61,5 @@ docs/*
 scripts/*
 !scripts/seed_data.py
 !scripts/sync-version.mjs
+!scripts/git-hooks/
+!scripts/install-git-hooks.sh

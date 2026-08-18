@@ -1,0 +1,46 @@
+#!/bin/sh
+# pre-push 钩子：推送 tag 前校验 .version 与 tag 基础版本一致
+#
+# 规则（与 .github/workflows/release.yml 的 Verify 步骤一致）：
+#   - 正式 / 预发布（-beta / -rc）tag：.version 必须与 tag 版本完全一致
+#   - test tag（vX.Y.Z-testN）：校验基础版本 X.Y.Z（tauri-action 按 tag 基础版本
+#     查找 dmg 上传产物，不一致会跳过 dmg 上传，这是硬约束）
+#
+# 不一致时打印更新指引（node scripts/sync-version.mjs 同步派生文件）并阻断推送。
+# 安装：sh scripts/install-git-hooks.sh
+
+ROOT="$(git rev-parse --show-toplevel)" || exit 0
+VERSION_FILE="$ROOT/.version"
+
+check_tag() {
+  # $1 = ref（refs/tags/vX.Y.Z[-(beta|rc|test)N]）
+  case "$1" in
+    refs/tags/v*)
+      tag="${1#refs/tags/}"
+      base="${tag#v}"
+      base="${base%%-*}"
+      cur=""
+      [ -f "$VERSION_FILE" ] && cur="$(tr -d '[:space:]' < "$VERSION_FILE")"
+      if [ "$cur" != "$base" ]; then
+        # 注意：此处必须用 printf 而非 echo —— macOS /bin/sh(bash 3.2) 的 echo 在
+        # 「变量展开后紧跟全角字符」时会把多字节首字节(EF)吃掉，导致提示乱码
+        printf '✗ 已阻止推送 tag %s：要求 .version = %s，当前是 %s\n' "$tag" "$base" "${cur:-（缺失）}"
+        echo "  请先更新版本号："
+        echo "    1) 把 .version 改为 $base"
+        echo "    2) 运行 node scripts/sync-version.mjs 同步 tauri.conf.json / Cargo.toml / Cargo.lock"
+        echo "    3) 提交后重新推送"
+        echo ""
+        exit 1
+      fi
+      ;;
+  esac
+}
+
+# stdin 每行: <local-ref> <local-oid> <remote-ref> <remote-oid>
+# 推送 tag 时 local 与 remote 均为 refs/tags/*；HEAD:refs/tags/* 写法 remote 为 tags
+while read -r local_ref local_oid remote_ref remote_oid; do
+  check_tag "$local_ref"
+  check_tag "$remote_ref"
+done
+
+exit 0
