@@ -24,7 +24,7 @@ def main() -> int:
     strip_v = lambda t: t[1:] if t.startswith("v") else t
     prev_tags = [t for t in tags if strip_v(t) != version]
     prev = prev_tags[0] if prev_tags else None
-    rng = f"{prev}..HEAD" if prev else "HEAD"
+    rng = f"{prev}..{ref}" if prev else ref
     scope = f"相对上一个版本 {prev}" if prev else "首个公开发布版本"
     out = subprocess.check_output(
         ["git", "log", "--pretty=format:%s|%h", rng]

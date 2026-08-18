@@ -1,7 +1,9 @@
 name: Release
 
 # 自动发布工作流
-# 触发：推送 tag（推荐 v0.9.5，也兼容 0.9.5）
+# 触发：推送 tag（推荐 v0.9.5，也兼容 0.9.5 与 v0.9.6-beta.1 等预发布 tag）
+# 版本校验：除 `-test` 后缀的测试 tag（如 v0.9.6-test1）外，其余 tag 必须与 .version 一致；
+#           test 版为自由测试标签，不要求与 .version 对齐。
 # 行为：自动编译 macOS Intel(x86_64) 与 Apple Silicon(aarch64) 两个 dmg，
 #       生成 changelog，创建 GitHub Release 并上传产物。
 #
@@ -18,6 +20,8 @@ on:
     tags:
       - "v*.*.*"
       - "*.*.*"
+      - "v*.*.*-*"
+      - "*.*.*-*"
 
 permissions:
   contents: write
@@ -41,6 +45,34 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "Version: $version"
 
+      - name: Verify version matches .version
+        run: |
+          ref="${GITHUB_REF_NAME}"
+          version="${ref#v}"
+          file_version="$(tr -d '[:space:]' < .version)"
+          # test 版（如 v0.9.6-test1）为自由测试标签，不要求与 .version 对齐，跳过校验。
+          case "$version" in
+            *-test*)
+              echo "test 版，跳过 .version 一致性校验：$version"
+              ;;
+            *)
+              if [ "$version" != "$file_version" ]; then
+                echo "::error::tag 版本 ($version) 与 .version ($file_version) 不一致，请先更新 .version 后重新打 tag。"
+                exit 1
+              fi
+              echo "版本一致：$version"
+              ;;
+          esac
+
+      - name: Determine prerelease
+        id: prerelease
+        run: |
+          # 明确按预发布后缀判定：test / beta / rc / alpha 一律视为 pre-release。
+          case "${{ steps.version.outputs.version }}" in
+            *-test*|*-beta*|*-rc*|*-alpha*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;;
+            *)   echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+
       - name: Generate release notes
         run: python3 .github/gen-release-notes.py
 
@@ -54,13 +86,22 @@ jobs:
             // 注意：github-script 的 context 没有 ref_name 属性（context.ref 是 refs/tags/0.9.5 带前缀）。
             // 纯 tag 名必须用环境变量 GITHUB_REF_NAME 取，否则 tag 为 undefined 会被 Octokit 省略 → 422。
             const tag = process.env.GITHUB_REF_NAME || (context.ref ? context.ref.replace(/^refs\/tags\//, '') : '');
+            // prerelease 标记由上一步骤按 tag 预发布后缀（test/beta/rc/alpha）判定，这里插值为布尔值。
+            const isPrerelease = '${{ steps.prerelease.outputs.prerelease }}' === 'true';
             // 幂等：若同 tag 已存在 release（含 draft，修复后移动 tag 重跑时会命中），
             // 先删除再重建，避免 createRelease 报 "already_exists"。
-            const releases = await github.paginate(github.rest.repos.listReleases, {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-            });
-            const existing = releases.find(r => r.tag_name === tag);
+            // 用 getReleaseByTag 按 tag 精确定位（不存在时 404），避免 listReleases 全量分页遍历。
+            let existing = null;
+            try {
+              const { data } = await github.rest.repos.getReleaseByTag({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag,
+              });
+              existing = data;
+            } catch (e) {
+              if (e.status !== 404) throw e; // 404 = 该 tag 尚无 release，属正常情况
+            }
             if (existing) {
               await github.rest.repos.deleteRelease({
                 owner: context.repo.owner,
@@ -76,7 +117,7 @@ jobs:
               body,
               tag_name: tag,
               draft: true,
-              prerelease: false
+              prerelease: isPrerelease
             });
             return data.id
 
@@ -110,24 +151,33 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Configure Apple signing (only if secrets present)
-        # 未配置证书时，绝不把 APPLE_* 变量设为空字符串——否则 Tauri 打包器
-        # 看到 APPLE_CERTIFICATE 被设置（即使为空）会去 `security import` 导入空证书而失败。
-        # 这里用 bash 守卫：只有真正配了 APPLE_CERTIFICATE 才写入 $GITHUB_ENV，走证书签名+公证；
-        # 否则这些变量保持未设置，Tauri 自动走 ad-hoc 自签名（无需证书，macOS 允许）。
-        # 注意：不用 `if: ${{ secrets.* }}`（GitHub 不允许在 if 里这样用 secrets 上下文）。
+      # ===== 导入自签名证书（MACOS_* Secrets）=====
+      # 自签名方案：用 openssl 生成的 p12 经 MACOS_CERTIFICATE 传入，
+      # 解码后导入临时钥匙串供 codesign 使用。
+      # 若将来改用 Apple Developer ID 证书，将 Secrets 换回
+      # APPLE_CERTIFICATE/APPLE_CERTIFICATE_PASSWORD/APPLE_SIGNING_IDENTITY/APPLE_ID/APPLE_PASSWORD/APPLE_TEAM_ID
+      # 并恢复「读取 APPLE_* 的 Configure Apple signing 步骤」即可。
+      - name: Import Self-Signed Certificate
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+          MACOS_CI_KEYCHAIN_PWD: ${{ secrets.MACOS_CI_KEYCHAIN_PWD }}
         run: |
-          if [ -n "${{ secrets.APPLE_CERTIFICATE }}" ]; then
-            echo "APPLE_CERTIFICATE=${{ secrets.APPLE_CERTIFICATE }}" >> "$GITHUB_ENV"
-            echo "APPLE_CERTIFICATE_PASSWORD=${{ secrets.APPLE_CERTIFICATE_PASSWORD }}" >> "$GITHUB_ENV"
-            echo "APPLE_SIGNING_IDENTITY=${{ secrets.APPLE_SIGNING_IDENTITY }}" >> "$GITHUB_ENV"
-            echo "APPLE_ID=${{ secrets.APPLE_ID }}" >> "$GITHUB_ENV"
-            echo "APPLE_PASSWORD=${{ secrets.APPLE_PASSWORD }}" >> "$GITHUB_ENV"
-            echo "APPLE_TEAM_ID=${{ secrets.APPLE_TEAM_ID }}" >> "$GITHUB_ENV"
-          fi
+          # 双引号保留 base64 中的换行，避免 p12 被破坏
+          echo "$MACOS_CERTIFICATE" | base64 --decode > certificate.p12
+          security create-keychain -p "$MACOS_CI_KEYCHAIN_PWD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$MACOS_CI_KEYCHAIN_PWD" build.keychain
+          security import certificate.p12 -k build.keychain -P "$MACOS_CERTIFICATE_PWD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign -s -k "$MACOS_CI_KEYCHAIN_PWD" build.keychain
+
+      # ===== 指定签名身份（须与 tauri.conf.json 的 signingIdentity 一致）=====
+      - name: Configure Signing
+        run: |
+          echo "APPLE_SIGNING_IDENTITY=ReadBriefSelfSign" >> "$GITHUB_ENV"
 
       - name: Build and upload (${{ matrix.arch }})
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:

@@ -50,6 +50,9 @@ docs/site/.vitepress/dist/
 docs/site/.vitepress/cache/
 docs/site/.vitepress/*.timestamp-*.mjs
 
+# python
+*.pyc
+
 docs/*
 !docs/site
 !docs/images
