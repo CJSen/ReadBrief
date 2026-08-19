@@ -138,6 +138,16 @@ npm run tauri build    # 生产构建 → src-tauri/target/release/bundle/
 
 Copyright (c) 2026 chjs
 
+## 致谢
+
+ReadBrief 的成长离不开以下社区与项目的启发与支持：
+
+- [**linux.do 社区**](https://linux.do/) — 活跃的中文 AI/技术交流社区，学习和使用了很多ai编程方案。
+- **WorkBuddy** — 陪伴本项目从设计到落地的智能助手。
+- [**OpenCode**](https://github.com/opencode-ai/opencode) — 开源 AI 编码工具，开发效率的重要支撑。
+- [**pot-desktop**](https://github.com/pot-app/pot-desktop) — 开源划词翻译工具,一些设计思路的参考。
+- [**Bob 社区版**](https://github.com/ripperhe/Bob) — 划词翻译标杆工具的开源社区版本，产品定位与体验的灵感来源,一些设计参考。
+
 ---
 
 <p align="center">ReadBrief · 划词即总结</p>
