@@ -71,6 +71,8 @@ pub fn run() {
             history::history_toggle_favorite,
             history::history_clear,
             history::history_today_count,
+            history::history_prune_count,
+            history::history_prune,
             history::history_update_tags,
             history::history_update_summary,
             history::history_all_tags,
@@ -145,6 +147,11 @@ fn setup_app<R: tauri::Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn s
 
     match db::open_connection() {
         Ok(conn) => {
+            // 启动时按保留时长清理一次超期历史(收藏记录豁免;失败不阻断启动)
+            let retention = crate::config::load_config().history_retention;
+            if let Err(e) = history::prune_expired(&conn, &retention) {
+                log::warn!("启动清理超期历史失败: {e}");
+            }
             app.manage(AppState {
                 db: std::sync::Arc::new(std::sync::Mutex::new(conn)),
             });

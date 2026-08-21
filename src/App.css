@@ -2818,6 +2818,67 @@
 }
 
 /* ============================================================
+   设置中心 · 确认弹窗(历史保留时长切换确认)
+   风格对齐 ui-mockups.html 对话框:sunken 头/脚 + float 双层阴影
+   ============================================================ */
+.rb-modal-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--rb-z-modal);
+  background: var(--rb-bg-scrim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rb-modal {
+  width: 340px;
+  max-width: calc(100vw - 48px);
+  background: var(--rb-bg-raised);
+  border: 1px solid var(--rb-border-default);
+  border-radius: var(--rb-radius-lg);
+  box-shadow: var(--rb-shadow-float);
+  overflow: hidden;
+}
+
+.rb-modal-hd {
+  padding: 12px 15px;
+  border-bottom: 1px solid var(--rb-border-subtle);
+  background: var(--rb-bg-sunken);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.rb-modal-bd {
+  padding: 14px 16px;
+  font-size: var(--rb-text-sm);
+  line-height: 1.6;
+  color: var(--rb-text-primary);
+}
+
+.rb-modal-warn {
+  color: var(--rb-error);
+  font-weight: 500;
+}
+
+.rb-modal-note {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--rb-text-secondary);
+}
+
+.rb-modal-ft {
+  padding: 11px 15px;
+  background: var(--rb-bg-sunken);
+  border-top: 1px solid var(--rb-border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* ============================================================
    字体缩放覆盖(设置中心「外观与语言」字体大小五档)
    ============================================================ */
 .font-xs {

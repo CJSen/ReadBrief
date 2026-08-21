@@ -571,6 +571,17 @@ function AppearancePage({
 }
 
 /* ═══ 隐私与数据 ═══ */
+
+/** 历史记录保留时长选项(value 与后端 history.rs retention_cutoff 对应) */
+const RETENTION_OPTIONS: Array<{ value: string; i18n: string }> = [
+  { value: "1d", i18n: "retention1d" },
+  { value: "3d", i18n: "retention3d" },
+  { value: "7d", i18n: "retention7d" },
+  { value: "30d", i18n: "retention30d" },
+  { value: "365d", i18n: "retention365d" },
+  { value: "forever", i18n: "retentionForever" },
+];
+
 function PrivacyPage({
   cfg,
   onConfigChange,
@@ -580,6 +591,14 @@ function PrivacyPage({
 }) {
   const [toast, setToast] = useState<{ text: string; ok: boolean } | null>(null);
   const [diagnostics, setDiagnostics] = useState(cfg.diagnostics ?? false);
+  const [retMenuOpen, setRetMenuOpen] = useState(false);
+  const retMenuRef = useRef<HTMLDivElement>(null);
+  // 待确认的保留时长切换:null 表示无待确认操作(取消即回退,不落盘)
+  const [pending, setPending] = useState<{ retention: string; count: number } | null>(null);
+
+  const currentRetention = cfg.historyRetention ?? "forever";
+  const currentLabel =
+    RETENTION_OPTIONS.find((o) => o.value === currentRetention)?.i18n ?? "retentionForever";
 
   useEffect(() => {
     if (!toast) return;
@@ -587,11 +606,68 @@ function PrivacyPage({
     return () => clearTimeout(timer);
   }, [toast]);
 
+  // 保留时长下拉:点击外部 / Esc 关闭
+  useEffect(() => {
+    if (!retMenuOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (retMenuRef.current && !retMenuRef.current.contains(e.target as Node)) {
+        setRetMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setRetMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [retMenuOpen]);
+
+  // 确认弹窗:Esc 取消
+  useEffect(() => {
+    if (!pending) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPending(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pending]);
+
   async function toggleDiagnostics(v: boolean) {
     setDiagnostics(v);
     const next = { ...cfg, diagnostics: v };
     await invoke("config_save", { cfg: next });
     onConfigChange(next);
+  }
+
+  /** 选择新时长:先查将删除条数,弹确认框;确认才落盘,取消不保存 */
+  async function chooseRetention(next: string) {
+    setRetMenuOpen(false);
+    if (!cfg || next === currentRetention) return;
+    try {
+      const count = await invoke<number>("history_prune_count", { retention: next });
+      setPending({ retention: next, count });
+    } catch {
+      setToast({ text: t("settings.clearFail"), ok: false });
+    }
+  }
+
+  async function confirmRetention() {
+    if (!cfg || !pending) return;
+    const { retention } = pending;
+    const next = { ...cfg, historyRetention: retention };
+    setPending(null);
+    try {
+      await invoke("config_save", { cfg: next });
+      onConfigChange(next);
+      const deleted = await invoke<number>("history_prune", { retention });
+      await invoke("tray_refresh");
+      setToast({ text: t("settings.retentionDone", { count: deleted }), ok: true });
+    } catch {
+      setToast({ text: t("settings.clearFail"), ok: false });
+    }
   }
 
   async function handleExport() {
@@ -633,7 +709,7 @@ function PrivacyPage({
       <div style={{ fontSize: "var(--rb-text-2xl)", fontWeight: 600, marginBottom: 14 }}>{t("settings.nav.privacy")}</div>
 
       <div className="set-card-hd">{t("settings.cardData")}</div>
-      <div className="set-card">
+      <div className="set-card set-card--lang">
         <div className="set-row">
           <div>
             <div className="set-row-t">{t("settings.dataStore")}</div>
@@ -651,6 +727,36 @@ function PrivacyPage({
           <button className="btn btn-secondary btn-sm" onClick={() => void handleExport()}>
             {t("settings.exportAll")}
           </button>
+        </div>
+        <div className="set-row">
+          <div>
+            <div className="set-row-t">{t("settings.retention")}</div>
+            <div className="set-row-d">{t("settings.retentionDesc")}</div>
+          </div>
+          <div className="rb-lang-select-wrap" ref={retMenuRef}>
+            <div
+              className="rb-lang-select"
+              onClick={() => setRetMenuOpen((v) => !v)}
+              title={t("settings.retention")}
+            >
+              <span>{t(`settings.${currentLabel}`)}</span>
+              <Icon name="chevronDown" size={14} className="rb-lang-caret" />
+            </div>
+            {retMenuOpen ? (
+              <div className="rb-lang-menu">
+                {RETENTION_OPTIONS.map((opt) => (
+                  <div
+                    key={opt.value}
+                    className={`rb-lang-option${opt.value === currentRetention ? " on" : ""}`}
+                    onClick={() => void chooseRetention(opt.value)}
+                  >
+                    <span className="grow">{t(`settings.${opt.i18n}`)}</span>
+                    {opt.value === currentRetention ? <Icon name="check" size={13} /> : null}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
         </div>
         <div className="set-row">
           <div>
@@ -696,6 +802,57 @@ function PrivacyPage({
           </span>
         </div>
       </div>
+
+      {pending ? (
+        <div className="rb-modal-scrim" onClick={() => setPending(null)}>
+          <div className="rb-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="rb-modal-hd">
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 28,
+                  height: 28,
+                  borderRadius: 6,
+                  background: "var(--rb-error-bg)",
+                  color: "var(--rb-error)",
+                  flex: "none",
+                }}
+              >
+                <Icon name="alert" size={14} />
+              </span>
+              <div>
+                <div style={{ fontWeight: 500, fontSize: "var(--rb-text-sm)" }}>
+                  {t("settings.retentionConfirmTitle")}
+                </div>
+                <div className="set-row-d" style={{ marginTop: 2 }}>
+                  {t("settings.retentionDesc")}
+                </div>
+              </div>
+            </div>
+            <div className="rb-modal-bd">
+              {pending.count > 0 ? (
+                <>
+                  <div>{t("settings.retentionConfirmLead", { label: t(`settings.${RETENTION_OPTIONS.find((o) => o.value === pending.retention)?.i18n ?? "retentionForever"}`) })}</div>
+                  <div className="rb-modal-warn">{t("settings.retentionConfirmWarn", { count: pending.count })}</div>
+                  <div className="rb-modal-note">{t("settings.retentionConfirmTail")}</div>
+                </>
+              ) : (
+                t("settings.retentionConfirmNone")
+              )}
+            </div>
+            <div className="rb-modal-ft">
+              <button className="btn btn-secondary btn-sm" onClick={() => setPending(null)}>
+                {t("settings.retentionConfirmCancel")}
+              </button>
+              <button className="set-danger" onClick={() => void confirmRetention()}>
+                {t("settings.retentionConfirmOk")}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {toast ? (
         <div className="rb-toast rb-toast-static">

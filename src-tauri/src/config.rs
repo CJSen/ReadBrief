@@ -114,6 +114,9 @@ pub struct AppConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional = nullable)]
     pub onboarding_step: Option<u32>,
+    // 历史记录保留时长:1d/3d/7d/30d/365d/forever(超期未收藏记录自动删除)
+    #[serde(default = "default_history_retention")]
+    pub history_retention: String,
 }
 
 fn default_language() -> String {
@@ -142,6 +145,10 @@ fn default_prompt_tag() -> String {
 
 fn default_onboarding_done() -> bool {
     false
+}
+
+fn default_history_retention() -> String {
+    "forever".to_string()
 }
 
 /// 内置快捷键的默认绑定：开箱即用时即存在，但全部可在设置页修改/删除，
@@ -239,6 +246,7 @@ impl Default for AppConfig {
             font_scale: default_font_scale(),
             onboarding_done: default_onboarding_done(),
             onboarding_step: None,
+            history_retention: default_history_retention(),
         }
     }
 }
@@ -332,6 +340,11 @@ pub fn parse_config(content: &str) -> AppConfig {
         .get("onboardingStep")
         .and_then(|v| v.as_u64())
         .map(|n| n as u32);
+    cfg.history_retention = value
+        .get("historyRetention")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .unwrap_or_else(default_history_retention);
 
     // 迁移:补齐用户从未显式配置过的内置快捷键默认绑定(划词总结默认 ⌘+Shift+Z)。
     // 若 config 中已存在该内置 id(含用户主动清空的情况),则尊重用户选择,不再注入隐藏默认值。

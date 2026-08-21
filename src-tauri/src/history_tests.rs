@@ -226,4 +226,39 @@ mod tests {
         assert_eq!(history::count(&conn, false).expect("总数失败"), 5);
         assert_eq!(history::count(&conn, true).expect("收藏数失败"), 2);
     }
+
+    #[test]
+    fn prune_expired_respects_favorite_and_forever() {
+        let conn = test_conn();
+        let now = chrono::Utc::now();
+
+        // 10 天前未收藏 / 10 天前收藏 / 1 天前未收藏
+        mk_record(&conn, now, 10, "旧", "旧总结", false, &[]);
+        mk_record(&conn, now, 10, "旧收藏", "旧收藏总结", true, &[]);
+        mk_record(&conn, now, 1, "新", "新总结", false, &[]);
+
+        // forever:不清理,计数为 0
+        assert_eq!(history::count_expired(&conn, "forever").expect("forever 计数失败"), 0);
+        assert_eq!(history::prune_expired(&conn, "forever").expect("forever 清理失败"), 0);
+        assert_eq!(history::count(&conn, false).expect("总数失败"), 3);
+
+        // 非法值视同 forever
+        assert_eq!(history::count_expired(&conn, "bogus").expect("非法值计数失败"), 0);
+
+        // 一周:仅 10 天前未收藏那条超期;收藏豁免
+        assert_eq!(history::count_expired(&conn, "7d").expect("计数失败"), 1);
+        assert_eq!(history::prune_expired(&conn, "7d").expect("清理失败"), 1);
+        // 剩余:收藏的旧记录 + 未过期新记录
+        assert_eq!(history::count(&conn, false).expect("总数失败"), 2);
+        assert_eq!(history::count(&conn, true).expect("收藏数失败"), 1);
+
+        // count 与 prune 结果一致:再无超期可清
+        assert_eq!(history::count_expired(&conn, "365d").expect("计数失败"), 0);
+        assert_eq!(history::prune_expired(&conn, "365d").expect("清理失败"), 0);
+
+        // 边界:31 天前的记录落在「一个月」(30d)之外
+        mk_record(&conn, now, 31, "更旧", "更旧总结", false, &[]);
+        assert_eq!(history::count_expired(&conn, "30d").expect("30d 计数失败"), 1);
+        assert_eq!(history::prune_expired(&conn, "30d").expect("30d 清理失败"), 1);
+    }
 }

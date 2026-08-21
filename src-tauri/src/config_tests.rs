@@ -67,6 +67,8 @@ mod tests {
         assert_eq!(cfg.summary_language, "system");
         assert!(!cfg.diagnostics);
         assert_eq!(cfg.font_scale, 1.0);
+        // 保留时长缺省 → 永久(老用户升级无感)
+        assert_eq!(cfg.history_retention, "forever");
     }
 
     #[test]
@@ -80,7 +82,8 @@ mod tests {
           "clickOutside": true,
           "summaryLanguage": "en",
           "diagnostics": true,
-          "fontScale": 1.1
+          "fontScale": 1.1,
+          "historyRetention": "30d"
         }"#;
         let cfg: AppConfig = config::parse_config(raw);
         assert!(!cfg.launch_on_start);
@@ -91,6 +94,7 @@ mod tests {
         assert_eq!(cfg.summary_language, "en");
         assert!(cfg.diagnostics);
         assert_eq!(cfg.font_scale, 1.1);
+        assert_eq!(cfg.history_retention, "30d");
     }
 
     #[test]

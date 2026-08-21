@@ -299,7 +299,7 @@ pub async fn history_create(
     tauri::async_runtime::spawn_blocking(move || -> AppResult<i64> {
         let id = {
             let conn = db.lock().map_err(|e| AppError::from(e.to_string()))?;
-            create(
+            let id = create(
                 &conn,
                 &source_text,
                 &summary,
@@ -307,7 +307,14 @@ pub async fn history_create(
                 &model,
                 prompt_name.as_deref(),
                 &tags,
-            )?
+            )?;
+            // 惰性清理:应用常驻托盘可能数日不重启,新建记录时顺带清理超期记录
+            // (单条带索引 DELETE 开销可忽略;失败不影响本次创建)
+            let retention = crate::config::load_config().history_retention;
+            if let Err(e) = prune_expired(&conn, &retention) {
+                log::warn!("清理超期历史失败: {e}");
+            }
+            id
         };
         // 通知各窗口历史已变更:浮窗新增记录后,主窗口无需手动切换即可刷新(P1-修复)
         let _ = app.emit("history-changed", ());
@@ -424,6 +431,82 @@ pub async fn history_clear(app: tauri::AppHandle, state: tauri::State<'_, AppSta
     })
     .await
     .map_err(|e| AppError::from(e.to_string()))?
+}
+
+/// 保留时长 → 超期 cutoff(RFC3339 UTC);forever 或非法值返回 None(不清理)。
+/// created_at 与 cutoff 均为 UTC RFC3339 字符串,字典序即时间序,可走 idx_history_created_at 索引。
+fn retention_cutoff(retention: &str) -> Option<String> {
+    let secs = match retention {
+        "1d" => 24 * 3600,
+        "3d" => 3 * 24 * 3600,
+        "7d" => 7 * 24 * 3600,
+        "30d" => 30 * 24 * 3600,
+        "365d" => 365 * 24 * 3600,
+        _ => return None,
+    };
+    Some((Utc::now() - chrono::Duration::seconds(secs)).to_rfc3339())
+}
+
+/// 统计将被清理的超期未收藏记录数(只查不删,供设置页确认弹窗)
+pub fn count_expired(conn: &Connection, retention: &str) -> AppResult<i64> {
+    let Some(cutoff) = retention_cutoff(retention) else {
+        return Ok(0);
+    };
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM history WHERE is_favorite = 0 AND created_at < ?1",
+            params![cutoff],
+            |row| row.get(0),
+        )
+        .map_err(|e| AppError::from(e.to_string()))?;
+    Ok(count)
+}
+
+/// 删除超期未收藏记录,返回删除条数;收藏记录豁免,forever 直接跳过
+pub fn prune_expired(conn: &Connection, retention: &str) -> AppResult<usize> {
+    let Some(cutoff) = retention_cutoff(retention) else {
+        return Ok(0);
+    };
+    conn.execute(
+        "DELETE FROM history WHERE is_favorite = 0 AND created_at < ?1",
+        params![cutoff],
+    )
+    .map_err(|e| AppError::from(e.to_string()))
+}
+
+/// 预览将清理的超期记录数(retention 由前端传入,与 history_prune 同源,避免竞态)
+#[tauri::command]
+pub async fn history_prune_count(
+    state: tauri::State<'_, AppState>,
+    retention: String,
+) -> AppResult<i64> {
+    let db = state.db.clone();
+    tauri::async_runtime::spawn_blocking(move || -> AppResult<i64> {
+        let conn = db.lock().map_err(|e| AppError::from(e.to_string()))?;
+        count_expired(&conn, &retention)
+    })
+    .await
+    .map_err(|e| AppError::from(e.to_string()))?
+}
+
+/// 执行超期清理并通知各窗口刷新(设置页确认后调用;有删除才 emit)
+#[tauri::command]
+pub async fn history_prune(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+    retention: String,
+) -> AppResult<usize> {
+    let db = state.db.clone();
+    let deleted = tauri::async_runtime::spawn_blocking(move || -> AppResult<usize> {
+        let conn = db.lock().map_err(|e| AppError::from(e.to_string()))?;
+        prune_expired(&conn, &retention)
+    })
+    .await
+    .map_err(|e| AppError::from(e.to_string()))??;
+    if deleted > 0 {
+        let _ = app.emit("history-changed", ());
+    }
+    Ok(deleted)
 }
 
 /// 今日已总结次数(托盘菜单展示)
