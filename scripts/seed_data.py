@@ -6,8 +6,8 @@ ReadBrief 数据库种子脚本
 用途：
   1. 清空 history(历史) 与 tags(标签) 两张表
   2. 创建 30 个不同的标签(名称 + 颜色)
-  3. 插入 N 条随机历史数据：单条数据量大、时间随机(主要分布在半年内)、
-     每条记录关联 0-4 个标签
+   3. 插入 N 条随机历史数据：单条数据量大、时间随机(分布在最近 5 年内)、
+      每条记录关联 0-4 个标签
 
 用法：
   python3 scripts/seed_data.py [--db <path>] [--count 100000] [--tags 30]
@@ -18,8 +18,7 @@ ReadBrief 数据库种子脚本
     保证「每条都有像样的 AI 总结内容」，不会出现只有原文、没有总结的情况。
   - created_at 使用与 App 一致的 RFC3339(UTC) 格式，可直接被
     ORDER BY created_at DESC 与 DATE(created_at,'localtime') 正确解析。
-  - 时间分布：约 90% 落在最近 180 天内(并轻微偏向近期)，约 10% 落在上一年
-    (180~365 天前)，满足「主要分布在半年内」。
+  - 时间分布：均匀落在最近 5 年(1825 天)内。
   - 标签关联：tags 字段是标签名称的 JSON 数组(与 App 的 history.tags 约定一致)，最多 4 个。
   - 所有写操作按批次在一个事务内完成，并开启 busy_timeout，避免 App 占用时直接报 locked。
 """
@@ -180,13 +179,9 @@ def make_summary() -> tuple[str, str]:
 
 
 def random_created_at(now: datetime) -> str:
-    """返回 RFC3339(UTC) 字符串。约 90% 落在最近 180 天(轻微偏近期)，10% 落在 180~365 天前。"""
-    if random.random() < 0.90:
-        days_ago = (random.random() ** 1.5) * 180.0
-    else:
-        days_ago = 180.0 + random.random() * 185.0
-    secs = int(days_ago * 86400.0)
-    dt = now - timedelta(seconds=secs + random.randint(0, 86399))
+    """返回 RFC3339(UTC) 字符串。均匀分布在最近 5 年(1825 天)内。"""
+    secs = int(random.random() * 1825.0 * 86400.0)
+    dt = now - timedelta(seconds=secs)
     return dt.isoformat()
 
 
@@ -255,7 +250,7 @@ def main() -> int:
                     random.choice(MODELS),
                     random.choice(PROMPT_NAMES),
                     json.dumps(tags, ensure_ascii=False),
-                    1 if random.random() < 0.1 else 0,  # is_favorite
+                    1 if random.random() < 0.05 else 0,  # is_favorite 收藏比例 5%
                 )
             )
             if len(batch) >= args.batch:
@@ -309,9 +304,9 @@ def main() -> int:
                 tagged += 1
             if len(s.strip()) == 0:
                 empty_sum += 1
-        half = conn.execute(
+        five_years = conn.execute(
             "SELECT COUNT(*) FROM history WHERE created_at >= "
-            "strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-180 days')"
+            "strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-1825 days')"
         ).fetchone()[0]
         avg_src = conn.execute("SELECT AVG(length(source_text)) FROM history").fetchone()[0]
         avg_sum = conn.execute("SELECT AVG(length(summary)) FROM history").fetchone()[0]
@@ -337,7 +332,7 @@ def main() -> int:
     print(f"空 summary 记录: {empty_sum} 条 (应为 0)")
     print(f"带标签的记录: {tagged} 条 / {hn}")
     print(f"标签数分布 0/1/2/3/4: " + " / ".join(str(dist.get(i, 0)) for i in range(5)))
-    print(f"半年内记录: {half} 条 ({half * 100.0 / hn:.1f}%)")
+    print(f"五年内记录: {five_years} 条 ({five_years * 100.0 / hn:.1f}%)")
     print(f"平均原文长度: {avg_src:.0f} 字符; 平均总结长度: {avg_sum:.0f} 字符")
     print(
         f"ai_title 长度: 非空 {len(title_nonempty)} / 超15字 {title_over} / 不足6字 {title_under}"

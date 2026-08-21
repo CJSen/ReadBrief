@@ -2732,6 +2732,15 @@
   background: var(--rb-error-bg);
 }
 
+.set-danger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.set-danger:disabled:hover {
+  background: var(--rb-bg-surface);
+}
+
 .set-pro {
   display: flex;
   align-items: center;
@@ -2866,6 +2875,12 @@
   margin-top: 4px;
   font-size: 11px;
   color: var(--rb-text-secondary);
+}
+
+/* 弹窗内确认输入框(清空历史需输入 delete) */
+.rb-modal-input {
+  width: 100%;
+  margin-top: 10px;
 }
 
 .rb-modal-ft {

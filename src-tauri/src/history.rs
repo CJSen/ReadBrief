@@ -420,14 +420,24 @@ pub async fn history_toggle_favorite(
 pub async fn history_clear(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> AppResult<()> {
     let db = state.db.clone();
     tauri::async_runtime::spawn_blocking(move || -> AppResult<()> {
-        {
+        let result: AppResult<i64> = (|| {
             let conn = db.lock().map_err(|e| AppError::from(e.to_string()))?;
+            let count: i64 = conn
+                .query_row("SELECT COUNT(*) FROM history", [], |r| r.get(0))
+                .map_err(|e| AppError::from(e.to_string()))?;
             conn.execute("DELETE FROM history", [])
                 .map_err(|e| AppError::from(e.to_string()))?;
+            Ok(count)
+        })();
+        match &result {
+            Ok(deleted) => log::info!("已清空全部历史记录: {deleted} 条"),
+            Err(e) => log::error!("清空历史记录失败: {e}"),
         }
         // 主窗口/统计数字需即时同步清空结果
-        let _ = app.emit("history-changed", ());
-        Ok(())
+        if result.is_ok() {
+            let _ = app.emit("history-changed", ());
+        }
+        result.map(|_| ())
     })
     .await
     .map_err(|e| AppError::from(e.to_string()))?

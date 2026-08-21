@@ -595,6 +595,10 @@ function PrivacyPage({
   const retMenuRef = useRef<HTMLDivElement>(null);
   // 待确认的保留时长切换:null 表示无待确认操作(取消即回退,不落盘)
   const [pending, setPending] = useState<{ retention: string; count: number } | null>(null);
+  // 清空历史二次确认弹窗:需输入 delete 才可执行
+  const [clearOpen, setClearOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const [clearing, setClearing] = useState(false);
 
   const currentRetention = cfg.historyRetention ?? "forever";
   const currentLabel =
@@ -634,6 +638,16 @@ function PrivacyPage({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [pending]);
+
+  // 清空历史确认弹窗:Esc 取消
+  useEffect(() => {
+    if (!clearOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setClearOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [clearOpen]);
 
   async function toggleDiagnostics(v: boolean) {
     setDiagnostics(v);
@@ -692,15 +706,24 @@ function PrivacyPage({
     }
   }
 
-  async function handleClearHistory() {
-    const ok = window.confirm(t("settings.clearConfirm"));
-    if (!ok) return;
+  /** 点击「清空历史记录」:打开二次确认弹窗(输入 delete 才可执行) */
+  function handleClearHistory() {
+    setConfirmText("");
+    setClearOpen(true);
+  }
+
+  async function confirmClearHistory() {
+    if (confirmText !== "delete" || clearing) return;
+    setClearing(true);
     try {
       await invoke("history_clear");
       await invoke("tray_refresh");
+      setClearOpen(false);
       setToast({ text: t("settings.clearDone"), ok: true });
     } catch {
       setToast({ text: t("settings.clearFail"), ok: false });
+    } finally {
+      setClearing(false);
     }
   }
 
@@ -848,6 +871,63 @@ function PrivacyPage({
               </button>
               <button className="set-danger" onClick={() => void confirmRetention()}>
                 {t("settings.retentionConfirmOk")}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* 清空历史二次确认:输入 delete 才可执行,风格对齐 ui-mockups 对话框(sunken 头/脚) */}
+      {clearOpen ? (
+        <div className="rb-modal-scrim" onClick={() => setClearOpen(false)}>
+          <div className="rb-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="rb-modal-hd">
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 28,
+                  height: 28,
+                  borderRadius: 6,
+                  background: "var(--rb-error-bg)",
+                  color: "var(--rb-error)",
+                  flex: "none",
+                }}
+              >
+                <Icon name="trash" size={14} />
+              </span>
+              <div>
+                <div style={{ fontWeight: 500, fontSize: "var(--rb-text-sm)" }}>
+                  {t("settings.clearHistory")}
+                </div>
+                <div className="set-row-d" style={{ marginTop: 2 }}>
+                  {t("settings.clearHistoryDesc")}
+                </div>
+              </div>
+            </div>
+            <div className="rb-modal-bd">
+              <div className="rb-modal-warn">{t("settings.clearConfirmWarn")}</div>
+              <input
+                className="inp rb-modal-input"
+                value={confirmText}
+                onChange={(e) => setConfirmText(e.target.value)}
+                placeholder={t("settings.clearConfirmType")}
+                aria-label={t("settings.clearConfirmType")}
+                autoFocus
+              />
+            </div>
+            <div className="rb-modal-ft">
+              <button className="btn btn-secondary btn-sm" onClick={() => setClearOpen(false)}>
+                {t("settings.retentionConfirmCancel")}
+              </button>
+              <button
+                className="set-danger"
+                disabled={confirmText !== "delete" || clearing}
+                onClick={() => void confirmClearHistory()}
+              >
+                <Icon name="trash" size={14} />
+                {t("settings.clearConfirmOk")}
               </button>
             </div>
           </div>
