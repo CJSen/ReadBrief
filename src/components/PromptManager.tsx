@@ -4,7 +4,7 @@ import { FREE_PROMPT_LIMIT } from "../lib/license";
 import { useLicense } from "../lib/license/useLicense";
 import { BUILTIN_PROMPTS, BUILTIN_ICONS, TAG_OPTIONS, TAG_LABELS, TAG_TIPS } from "../lib/prompts/builtins";
 import type { PromptTag } from "../lib/prompts/builtins";
-import { t } from "../lib/i18n";
+import { t, useLanguage } from "../lib/i18n";
 import { invoke } from "@tauri-apps/api/core";
 import { Icon } from "./Icon";
 
@@ -31,6 +31,8 @@ interface PromptManagerProps {
 }
 
 export function PromptManager({ cfg, onConfigChange }: PromptManagerProps) {
+  // 订阅语言变更,切语言时即时重渲染
+  useLanguage();
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [newContent, setNewContent] = useState("");
@@ -111,12 +113,12 @@ export function PromptManager({ cfg, onConfigChange }: PromptManagerProps) {
           {isBuiltin ? (
             <>
               {p.id === "builtin-summarize" ? (
-                <span className="tag tag-brand" style={{ fontSize: 10 }}>默认</span>
+                <span className="tag tag-brand" style={{ fontSize: 10 }}>{t("prompts.default")}</span>
               ) : null}
-              <span className="tag tag-gray" style={{ fontSize: 10 }}>内置</span>
+              <span className="tag tag-gray" style={{ fontSize: 10 }}>{t("prompts.builtin")}</span>
             </>
           ) : (
-            <span className="tag tag-gray" style={{ fontSize: 10 }}>自定义</span>
+            <span className="tag tag-gray" style={{ fontSize: 10 }}>{t("prompts.custom")}</span>
           )}
         </div>
         <div className="rb-prompt-preview">
@@ -132,7 +134,7 @@ export function PromptManager({ cfg, onConfigChange }: PromptManagerProps) {
           </div>
           <div className="rb-prompt-actions">
             {!isBuiltin ? (
-              <button className="iconbtn" title="编辑" onClick={() => {
+              <button className="iconbtn" title={t("prompts.edit")} onClick={() => {
                 setNewName(p.name);
                 setNewContent(p.content);
                 setNewTag((p.tag as PromptTag) ?? "summary");
@@ -142,13 +144,13 @@ export function PromptManager({ cfg, onConfigChange }: PromptManagerProps) {
                 <Icon name="edit" size={14} />
               </button>
             ) : null}
-            <button className="iconbtn" title="复制" onClick={() => void handleCopy(p)}>
+            <button className="iconbtn" title={t("prompts.copy")} onClick={() => void handleCopy(p)}>
               <Icon name="copy" size={14} />
             </button>
             {!isBuiltin ? (
               <button
                 className="iconbtn"
-                title="删除"
+                title={t("prompts.delete")}
                 style={{ color: "var(--rb-error)", opacity: 0.65 }}
                 onClick={() => void handleDelete(p.id)}
               >
@@ -165,9 +167,9 @@ export function PromptManager({ cfg, onConfigChange }: PromptManagerProps) {
     <div className="rb-prompt-page">
       <div className="rb-prompt-header">
         <div>
-          <div className="rb-prompt-title">提示词</div>
+          <div className="rb-prompt-title">{t("prompts.title")}</div>
           <div className="muted rb-prompt-subtitle">
-            3 个内置提示词 · 已创建 {userPrompts.length} 个自定义提示词 · {shortcutCount} 个快捷键
+            {t("prompts.subtitle", { n: userPrompts.length, m: shortcutCount })}
           </div>
         </div>
         <button
@@ -184,9 +186,9 @@ export function PromptManager({ cfg, onConfigChange }: PromptManagerProps) {
       {creating ? (
         <div className="rb-prompt-editor">
           <div className="rb-prompt-editor-hd">
-            <span>新建提示词</span>
+            <span>{t("prompts.newEditorTitle")}</span>
             <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-              <span className="tag tag-gray" style={{ fontSize: 10 }}>自定义</span>
+              <span className="tag tag-gray" style={{ fontSize: 10 }}>{t("prompts.custom")}</span>
               <span
                 style={{
                   display: "inline-flex",
@@ -205,13 +207,13 @@ export function PromptManager({ cfg, onConfigChange }: PromptManagerProps) {
                   <path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z" />
                   <path d="M12 9v4M12 17h.01" />
                 </svg>
-                如果需要捕获数据，必须包含 {"{{text}}"}
+                {t("prompts.needText")}
               </span>
             </div>
           </div>
           <input
             className="inp"
-            placeholder="提示词名称，例如：写周报"
+            placeholder={t("prompts.namePlaceholder")}
             value={newName}
             onChange={(e) => setNewName(e.currentTarget.value)}
             onKeyDown={(e) => {
@@ -221,14 +223,14 @@ export function PromptManager({ cfg, onConfigChange }: PromptManagerProps) {
           />
           <textarea
             className="inp"
-            placeholder="提示词内容，用 {{text}} 代表选中的文本…"
+            placeholder={t("prompts.contentPlaceholder")}
             rows={6}
             style={{ resize: "vertical", lineHeight: 1.6, minHeight: 112, marginBottom: 8, padding: "8px 10px" }}
             value={newContent}
             onChange={(e) => setNewContent(e.currentTarget.value)}
           />
           <div style={{ marginBottom: 8 }}>
-            <div style={{ fontSize: "var(--rb-text-xs)", fontWeight: 500, marginBottom: 6 }}>提示词类型</div>
+            <div style={{ fontSize: "var(--rb-text-xs)", fontWeight: 500, marginBottom: 6 }}>{t("prompts.typeLabel")}</div>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               {TAG_OPTIONS.map((t) => {
                 const active = newTag === t;
@@ -293,17 +295,17 @@ export function PromptManager({ cfg, onConfigChange }: PromptManagerProps) {
             </div>
           ) : null}
           <div className="rb-prompt-editor-row">
-            <span className="muted" style={{ fontSize: 11 }}>模型在「快捷键」中为每个快捷键分别选择</span>
+            <span className="muted" style={{ fontSize: 11 }}>{t("prompts.modelHint")}</span>
             <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
               <button className="btn btn-ghost btn-sm" onClick={() => setCreating(false)}>
-                取消
+                {t("prompts.cancel")}
               </button>
               <button
                 className="btn btn-primary btn-sm"
                 onClick={handleCreate}
                 disabled={!newName.trim() || !newContent.trim()}
               >
-                保存
+                {t("prompts.save")}
               </button>
             </div>
           </div>

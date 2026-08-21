@@ -5,7 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { AppConfig } from "../lib/config/types";
-import { getLanguage, setLanguage, t, type Language } from "../lib/i18n";
+import { getLanguage, setLanguage, t, useLanguage, type Language } from "../lib/i18n";
 import { applyPreference, applyFontScale, type ThemePreference } from "../lib/theme";
 import { Icon } from "./Icon";
 import { LogoMark } from "./LogoMark";
@@ -38,6 +38,8 @@ const NAV_ITEMS: Array<{ id: SettingsSection; icon: string; pro?: boolean }> = [
 ];
 
 export function AppSettings() {
+  // 订阅语言变更,切语言时即时重渲染(设置窗常驻,需跟随界面语言切换)
+  useLanguage();
   const [section, setSection] = useState<SettingsSection>("general");
   const [cfg, setCfg] = useState<AppConfig | null>(null);
   const [lang, setLang] = useState<Language>(() => getLanguage());
@@ -318,12 +320,12 @@ function GeneralPage({
         </button>
       </div>
 
-      <div className="set-card-hd">常规</div>
+      <div className="set-card-hd">{t("settings.cardGeneral")}</div>
       <div className="set-card">
         <div className="set-row">
           <div>
-            <div className="set-row-t">开机启动</div>
-            <div className="set-row-d">登录系统后自动在后台运行</div>
+            <div className="set-row-t">{t("settings.launchOnStart")}</div>
+            <div className="set-row-d">{t("settings.launchOnStartDesc")}</div>
           </div>
           <div
             className={`sw${launchOnStart ? " on" : ""}`}
@@ -332,73 +334,73 @@ function GeneralPage({
         </div>
         <div className="set-row">
           <div>
-            <div className="set-row-t">启用划词监听</div>
-            <div className="set-row-d">选中文本后弹出总结按钮</div>
+            <div className="set-row-t">{t("settings.enableSelection")}</div>
+            <div className="set-row-d">{t("settings.enableSelectionDesc")}</div>
           </div>
           <div className={`sw${cfg.selectionOn ? " on" : ""}`} onClick={() => void toggleSelection(!cfg.selectionOn)} />
         </div>
         <div className="set-row">
           <div>
-            <div className="set-row-t">辅助功能授权</div>
-            <div className="set-row-d">划词总结需读取选中文本，请授予「辅助功能」权限</div>
+            <div className="set-row-t">{t("settings.accessibilityAuth")}</div>
+            <div className="set-row-d">{t("settings.accessibilityAuthDesc")}</div>
           </div>
           {accessibility === true ? (
             <span className="tag tag-ok">
               <Icon name="check" size={11} />
-              已授权
+              {t("settings.authorized")}
             </span>
           ) : accessibility === false ? (
             <button className="btn btn-sm btn-primary" onClick={() => void requestAuth()} disabled={authing}>
               <Icon name="shield" size={14} />
-              {authing ? "检测中…" : "去授权"}
+              {authing ? t("float.detecting") : t("float.grant")}
             </button>
           ) : (
-            <span className="tag tag-gray">检测中…</span>
+            <span className="tag tag-gray">{t("float.detecting")}</span>
           )}
         </div>
         {accessibility === false ? (
           <div className="rb-byok-note" style={{ marginTop: 8 }}>
             <Icon name="alert" style={{ color: "var(--rb-warning)", marginTop: 1, flexShrink: 0 }} />
             <div>
-              未获得辅助功能授权时，划词总结无法读取选中文本。点击「去授权」后在弹窗中勾选 ReadBrief，授权即时生效、无需重启。
+              {t("settings.grantNoteAccessibility")}
             </div>
           </div>
         ) : null}
         <div className="set-row">
           <div>
-            <div className="set-row-t">屏幕录制授权</div>
-            <div className="set-row-d">截图 OCR 总结需读取屏幕内容，请授予「屏幕录制」权限</div>
+            <div className="set-row-t">{t("settings.screenAuth")}</div>
+            <div className="set-row-d">{t("settings.screenAuthDesc")}</div>
           </div>
           {screenRecording === true ? (
             <span className="tag tag-ok">
               <Icon name="check" size={11} />
-              已授权
+              {t("settings.authorized")}
             </span>
           ) : screenRecording === false ? (
             <button className="btn btn-sm btn-primary" onClick={() => void requestScreenRecording()} disabled={screenAuthing}>
               <Icon name="screen" size={14} />
-              {screenAuthing ? "检测中…" : "去授权"}
+              {screenAuthing ? t("float.detecting") : t("float.grant")}
             </button>
           ) : (
-            <span className="tag tag-gray">检测中…</span>
+            <span className="tag tag-gray">{t("float.detecting")}</span>
           )}
         </div>
         {screenRecording === false ? (
           <div className="rb-byok-note" style={{ marginTop: 8 }}>
             <Icon name="alert" style={{ color: "var(--rb-warning)", marginTop: 1, flexShrink: 0 }} />
             <div>
-              未获得屏幕录制授权时，截图 OCR 总结无法读取屏幕内容。点击「去授权」后在弹窗中勾选 ReadBrief；授权后需重启应用才能生效（系统限制）。
+              {t("settings.grantNoteScreen")}
             </div>
           </div>
         ) : null}
       </div>
 
-      <div className="set-card-hd">悬浮窗</div>
+      <div className="set-card-hd">{t("settings.float")}</div>
       <div className="set-card">
         <div className="set-row">
           <div>
-            <div className="set-row-t">Esc 关闭悬浮窗</div>
-            <div className="set-row-d">固定状态下不响应，避免误触丢失内容</div>
+            <div className="set-row-t">{t("settings.escCloseFloat")}</div>
+            <div className="set-row-d">{t("settings.escCloseFloatDesc")}</div>
           </div>
           <div
             className={`sw${escClose ? " on" : ""}`}
@@ -411,8 +413,8 @@ function GeneralPage({
         </div>
         <div className="set-row">
           <div>
-            <div className="set-row-t">点击窗口外关闭</div>
-            <div className="set-row-d">仅对"生成中"以外状态的窗口生效</div>
+            <div className="set-row-t">{t("settings.clickOutsideClose")}</div>
+            <div className="set-row-d">{t("settings.clickOutsideCloseDesc")}</div>
           </div>
           <div
             className={`sw${clickOutside ? " on" : ""}`}
@@ -483,29 +485,29 @@ function AppearancePage({
     <div>
       <div style={{ fontSize: "var(--rb-text-2xl)", fontWeight: 600, marginBottom: 14 }}>{t("settings.nav.appearance")}</div>
 
-      <div className="set-card-hd">外观</div>
+      <div className="set-card-hd">{t("settings.cardAppearance")}</div>
       <div className="set-card">
         <div className="set-row">
           <div>
-            <div className="set-row-t">主题</div>
-            <div className="set-row-d">跟随系统时随 macOS 深浅色自动切换</div>
+            <div className="set-row-t">{t("settings.theme")}</div>
+            <div className="set-row-d">{t("settings.themeDesc")}</div>
           </div>
           <div className="seg">
             <span className={theme === "light" ? "on" : ""} onClick={() => onTheme("light")}>
-              亮色
+              {t("settings.light")}
             </span>
             <span className={theme === "dark" ? "on" : ""} onClick={() => onTheme("dark")}>
-              暗色
+              {t("settings.dark")}
             </span>
             <span className={theme === "system" ? "on" : ""} onClick={() => onTheme("system")}>
-              跟随系统
+              {t("settings.system")}
             </span>
           </div>
         </div>
         <div className="set-row">
           <div>
-            <div className="set-row-t">字体大小</div>
-            <div className="set-row-d">调整界面与总结浮窗的文字大小</div>
+            <div className="set-row-t">{t("settings.fontSize")}</div>
+            <div className="set-row-d">{t("settings.fontSizeDesc")}</div>
           </div>
           <div className="flex ac g8">
             <button className="iconbtn" onClick={() => shiftFont(-0.1)} disabled={scale <= 0.9}>
@@ -519,12 +521,12 @@ function AppearancePage({
         </div>
       </div>
 
-      <div className="set-card-hd">语言</div>
+      <div className="set-card-hd">{t("settings.cardLanguage")}</div>
       <div className="set-card set-card--lang">
         <div className="set-row">
           <div>
-            <div className="set-row-t">界面语言</div>
-            <div className="set-row-d">设置窗口与菜单的显示语言</div>
+            <div className="set-row-t">{t("settings.uiLanguage")}</div>
+            <div className="set-row-d">{t("settings.uiLanguageDesc")}</div>
           </div>
           <div className="seg">
             <span className={lang === "zh" ? "on" : ""} onClick={() => onLang("zh")}>
@@ -537,16 +539,16 @@ function AppearancePage({
         </div>
         <div className="set-row">
           <div>
-            <div className="set-row-t">输出语言</div>
-            <div className="set-row-d">AI 输出默认使用的语言，可被提示词覆盖</div>
+            <div className="set-row-t">{t("settings.summaryLanguage")}</div>
+            <div className="set-row-d">{t("settings.summaryLanguageDesc")}</div>
           </div>
           <div className="rb-lang-select-wrap" ref={langMenuRef}>
             <button
               className="rb-lang-select"
               onClick={() => setLangMenuOpen((v) => !v)}
-              title="选择 AI 输出语言"
+              title={t("settings.selectSummaryLang")}
             >
-              <span>{SUMMARY_LANGUAGES.find((l) => l.code === summaryLang)?.label ?? "简体中文"}</span>
+              <span>{SUMMARY_LANGUAGES.find((l) => l.code === summaryLang)?.label ?? SUMMARY_LANGUAGES[0]?.label ?? "简体中文"}</span>
               <Icon name="chevronDown" size={14} className="rb-lang-caret" />
             </button>
             {langMenuOpen ? (
@@ -600,21 +602,21 @@ function PrivacyPage({
   async function handleExport() {
     try {
       const path = await invoke<string>("export_data");
-      setToast(`已导出到 ${path}`);
+      setToast(t("settings.exportDone", { path }));
     } catch {
-      setToast("导出失败，请重试");
+      setToast(t("settings.exportFail"));
     }
   }
 
   async function handleClearHistory() {
-    const ok = window.confirm("确定清空全部历史记录吗？此操作不可恢复。");
+    const ok = window.confirm(t("settings.clearConfirm"));
     if (!ok) return;
     try {
       await invoke("history_clear");
       await invoke("tray_refresh");
-      setToast("历史记录已清空");
+      setToast(t("settings.clearDone"));
     } catch {
-      setToast("清空失败，请重试");
+      setToast(t("settings.clearFail"));
     }
   }
 
@@ -622,44 +624,44 @@ function PrivacyPage({
     <div>
       <div style={{ fontSize: "var(--rb-text-2xl)", fontWeight: 600, marginBottom: 14 }}>{t("settings.nav.privacy")}</div>
 
-      <div className="set-card-hd">数据</div>
+      <div className="set-card-hd">{t("settings.cardData")}</div>
       <div className="set-card">
         <div className="set-row">
           <div>
-            <div className="set-row-t">数据存储</div>
-            <div className="set-row-d">全部数据保存在本机 SQLite，无账号体系</div>
+            <div className="set-row-t">{t("settings.dataStore")}</div>
+            <div className="set-row-d">{t("settings.dataStoreDesc")}</div>
           </div>
           <span className="set-link" onClick={() => void invoke("open_data_dir")}>
-            打开数据文件夹
+            {t("settings.openDataDir")}
           </span>
         </div>
         <div className="set-row">
           <div>
-            <div className="set-row-t">导出全部数据</div>
-            <div className="set-row-d">导出为 JSON，可随时迁移到其他设备</div>
+            <div className="set-row-t">{t("settings.exportAll")}</div>
+            <div className="set-row-d">{t("settings.exportAllDesc")}</div>
           </div>
           <button className="btn btn-secondary btn-sm" onClick={() => void handleExport()}>
-            导出
+            {t("settings.exportAll")}
           </button>
         </div>
         <div className="set-row">
           <div>
-            <div className="set-row-t">清空历史记录</div>
-            <div className="set-row-d">删除全部总结记录与缓存，不可恢复</div>
+            <div className="set-row-t">{t("settings.clearHistory")}</div>
+            <div className="set-row-d">{t("settings.clearHistoryDesc")}</div>
           </div>
           <button className="set-danger" onClick={() => void handleClearHistory()}>
             <Icon name="trash" size={14} />
-            清空
+            {t("settings.clearHistory")}
           </button>
         </div>
       </div>
 
-      <div className="set-card-hd">隐私</div>
+      <div className="set-card-hd">{t("settings.cardPrivacy")}</div>
       <div className="set-card">
         <div className="set-row">
           <div>
-            <div className="set-row-t">匿名诊断数据</div>
-            <div className="set-row-d">仅上报崩溃与性能指标，不含任何文本内容</div>
+            <div className="set-row-t">{t("settings.diagnostics")}</div>
+            <div className="set-row-d">{t("settings.diagnosticsDesc")}</div>
           </div>
           <div
             className={`sw${diagnostics ? " on" : ""}`}
@@ -668,12 +670,12 @@ function PrivacyPage({
         </div>
         <div className="set-row">
           <div>
-            <div className="set-row-t">密钥存储</div>
-            <div className="set-row-d">明文存储于本机 config.json，代码不打印 key</div>
+            <div className="set-row-t">{t("settings.keyStore")}</div>
+            <div className="set-row-d">{t("settings.keyStoreDesc")}</div>
           </div>
           <span className="tag tag-ok">
             <Icon name="check" size={11} />
-            已存储
+            {t("settings.stored")}
           </span>
         </div>
       </div>
@@ -737,27 +739,27 @@ function AboutPage() {
         </div>
         <div style={{ fontSize: "var(--rb-text-lg)", fontWeight: 600 }}>ReadBrief</div>
         <div className="muted" style={{ fontSize: "var(--rb-text-xs)", marginTop: 3 }}>
-          版本 {version || "—"} · Tauri
+          {t("settings.aboutVersion", { version: version || "—" })}
         </div>
       </div>
 
       <div className="set-card">
         <div className="set-row">
           <div>
-            <div className="set-row-t">检查更新</div>
+            <div className="set-row-t">{t("settings.checkUpdate")}</div>
             <div className="set-row-d">
               {loading
-                ? "正在检查更新…"
+                ? t("settings.checking")
                 : hasUpdate
-                ? `发现新版本 v${update?.latestVersion ?? ""}（当前 v${update?.currentVersion ?? ""}）`
+                ? t("settings.updateFound", { latest: update?.latestVersion ?? "", current: update?.currentVersion ?? "" })
                 : update?.error
-                ? `检查失败：${update.error}`
-                : "当前已是最新版本"}
+                ? t("settings.checkFail", { error: update.error })
+                : t("settings.updateLatest")}
               {!loading && update?.hint ? <div className="set-row-hint">{update.hint}</div> : null}
               {!loading && update?.error ? (
                 <div className="set-row-hint">
                   <span className="rb-link" onClick={() => void openUrl(RELEASE_PAGE)}>
-                    可点击 Release 自行查看
+                    {t("settings.releaseHint")}
                   </span>
                 </div>
               ) : null}
@@ -765,18 +767,18 @@ function AboutPage() {
           </div>
           {hasUpdate ? (
             <span className="tag tag-go" style={{ cursor: "pointer" }} onClick={() => setShowRelease(true)}>
-              查看更新
+              {t("settings.tagUpdate")}
             </span>
           ) : loading ? (
-            <span className="tag">检查中</span>
+            <span className="tag">{t("settings.tagChecking")}</span>
           ) : update?.error ? (
             <span className="tag tag-go" style={{ cursor: "pointer" }} onClick={() => void handleCheck()}>
-              重试
+              {t("settings.tagRetry")}
             </span>
           ) : (
             <span className="tag tag-ok">
               <Icon name="check" size={11} />
-              已是最新
+              {t("settings.tagLatest")}
             </span>
           )}
         </div>
@@ -786,7 +788,7 @@ function AboutPage() {
           onClick={() => void openUrl("https://readbrief.936668.xyz")}
         >
           <div>
-            <div className="set-row-t">官方网站</div>
+            <div className="set-row-t">{t("settings.officialSite")}</div>
             <div className="set-row-d">readbrief.936668.xyz</div>
           </div>
           <Icon name="logout" size={14} className="rb-row-link-icon" />
@@ -797,7 +799,7 @@ function AboutPage() {
           onClick={() => void openUrl("https://github.com/CJSen/ReadBrief")}
         >
           <div>
-            <div className="set-row-t">源代码</div>
+            <div className="set-row-t">{t("settings.sourceCode")}</div>
             <div className="set-row-d">github.com/CJSen/ReadBrief</div>
           </div>
           <Icon name="logout" size={14} className="rb-row-link-icon" />
@@ -808,14 +810,14 @@ function AboutPage() {
           onClick={() => void openUrl("https://github.com/CJSen/ReadBrief/blob/main/LICENSE")}
         >
           <div>
-            <div className="set-row-t">致谢</div>
+            <div className="set-row-t">{t("settings.credits")}</div>
             <div className="set-row-d">MIT License · 第三方组件清单</div>
           </div>
           <Icon name="logout" size={14} className="rb-row-link-icon" />
         </div>
       </div>
       <div style={{ textAlign: "center", fontSize: 11, color: "var(--rb-text-tertiary)", paddingTop: 6 }}>
-        © 2026 ReadBrief
+        {t("settings.copyright")}
       </div>
 
       {/* 更新内容模态框：查看更新说明 + 右下角前往下载（含架构兜底入口） */}
@@ -825,21 +827,21 @@ function AboutPage() {
             <button className="rb-modal-close" onClick={() => setShowRelease(false)} aria-label="关闭">
               <Icon name="close" size={14} />
             </button>
-            <div className="rb-release-modal-head">
-              <div className="rb-release-modal-title">更新到 v{update.latestVersion}</div>
-              <div className="rb-release-modal-sub">当前版本 v{update.currentVersion}</div>
+              <div className="rb-release-modal-head">
+              <div className="rb-release-modal-title">{t("settings.viewUpdateTitle", { version: update.latestVersion ?? "" })}</div>
+              <div className="rb-release-modal-sub">{t("settings.viewUpdateCurrent", { version: update.currentVersion })}</div>
             </div>
             <div
               className="rb-release-modal-body"
-              dangerouslySetInnerHTML={{ __html: renderMarkdown(update.releaseNotes ?? "（无更新说明）") }}
+              dangerouslySetInnerHTML={{ __html: renderMarkdown(update.releaseNotes ?? t("settings.noReleaseNotes")) }}
             />
             <div className="rb-release-modal-foot">
               {update.dmgAssets.length > 1 ? (
                 <div className="rb-release-links">
-                  <span className="rb-release-links-label">其他版本：</span>
+                  <span className="rb-release-links-label">{t("settings.otherVersions")}</span>
                   {update.dmgAssets.map((d) => (
                     <button key={d.url} className="rb-release-link" onClick={() => void openUrl(d.url)}>
-                      {archLabel(d.name)} 下载
+                      {archLabel(d.name)} {t("settings.download")}
                     </button>
                   ))}
                 </div>
@@ -847,7 +849,7 @@ function AboutPage() {
                 <span />
               )}
               <button className="rb-update-popup-btn" onClick={() => void openDownload()}>
-                前往下载
+                {t("settings.download")}
               </button>
             </div>
           </div>

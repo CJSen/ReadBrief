@@ -3,15 +3,16 @@ import type { AppConfig, ShortcutConfig } from "../lib/config/types";
 import { invoke } from "@tauri-apps/api/core";
 import { BUILTIN_PROMPT_OPTIONS } from "../lib/prompts/builtins";
 import { resolveShortcutKey } from "../lib/shortcutKey";
+import { t, useLanguage } from "../lib/i18n";
 import { Icon } from "./Icon";
 
 const SYSTEM_SHORTCUTS = ["Cmd+Space", "Cmd+Tab", "Ctrl+Space"];
 
 /* 系统快捷键友好名(冲突时说明与什么冲突,设计稿 §3.5) */
 const SYSTEM_SHORTCUT_NAMES: Record<string, string> = {
-  "Cmd+Space": "系统聚焦搜索",
-  "Cmd+Tab": "系统应用切换",
-  "Ctrl+Space": "系统输入法切换",
+  "Cmd+Space": "shortcuts.sysFocusSearch",
+  "Cmd+Tab": "shortcuts.sysAppSwitch",
+  "Ctrl+Space": "shortcuts.sysImeSwitch",
 };
 
 /* 真正的修饰键(e.key 大写):单独按下时只回显、不提交 */
@@ -45,13 +46,17 @@ interface BuiltinItem {
   proOnly?: boolean;
   /** 无提示词/模型绑定(如「打开主窗口」这类纯窗口动作) */
   noPrompt?: boolean;
+  /** i18n key:内置项名称(替代硬编码 name) */
+  nameKey: string;
+  /** i18n key:内置项说明(替代硬编码 desc) */
+  descKey: string;
 }
 
 const BUILTINS: BuiltinItem[] = [
-  { id: "open-main", name: "打开主窗口", desc: "显示并聚焦 ReadBrief 主窗口", action: "open-main", noPrompt: true },
-  { id: "summarize", name: "划词总结", desc: "选中文本后触发内置总结提示词", action: "summarize" },
-  { id: "paste", name: "呼出输入框", desc: "粘贴任意文本进行问答", action: "paste" },
-  { id: "translate", name: "翻译", desc: "翻译选中内容", action: "prompt", proOnly: true },
+  { id: "open-main", name: "打开主窗口", desc: "显示并聚焦 ReadBrief 主窗口", action: "open-main", noPrompt: true, nameKey: "shortcuts.biOpenMain", descKey: "shortcuts.biOpenMainDesc" },
+  { id: "summarize", name: "划词总结", desc: "选中文本后触发内置总结提示词", action: "summarize", nameKey: "shortcuts.biSummarize", descKey: "shortcuts.biSummarizeDesc" },
+  { id: "paste", name: "呼出输入框", desc: "粘贴任意文本进行问答", action: "paste", nameKey: "shortcuts.biPaste", descKey: "shortcuts.biPasteDesc" },
+  { id: "translate", name: "翻译", desc: "翻译选中内容", action: "prompt", proOnly: true, nameKey: "shortcuts.biTranslate", descKey: "shortcuts.biTranslateDesc" },
 ];
 
 /* 内置快捷键默认绑定的内置提示词（均允许用户修改） */
@@ -67,6 +72,8 @@ interface ShortcutsPageProps {
 }
 
 export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
+  // 订阅语言变更,切语言时即时重渲染
+  useLanguage();
   const shortcuts = useMemo(() => cfg.shortcuts ?? [], [cfg.shortcuts]);
   const allPrompts = useMemo(
     () => [...BUILTIN_PROMPT_OPTIONS, ...(cfg.prompts ?? []).filter((p) => !p.isBuiltin)],
@@ -97,8 +104,8 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
       const sc = shortcuts.find((s) => s.id === bi.id);
       return {
         id: bi.id,
-        name: bi.name,
-        desc: bi.desc,
+        name: t(bi.nameKey),
+        desc: t(bi.descKey),
         action: bi.action,
         proOnly: bi.proOnly ?? false,
         noPrompt: bi.noPrompt ?? false,
@@ -208,15 +215,15 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
     setDraft("");
 
     if (SYSTEM_SHORTCUTS.includes(live)) {
-      const sysName = SYSTEM_SHORTCUT_NAMES[live] ?? "系统";
-      setConflict(`与「${sysName}」冲突，请改用其他组合`);
+      const sysName = t(SYSTEM_SHORTCUT_NAMES[live] ?? "shortcuts.sysOther");
+      setConflict(t("shortcuts.conflictSystem", { name: sysName }));
       setConflictId(id);
       return;
     }
     const other = shortcuts.find((s) => s.id !== id && s.accelerator === live);
     if (other) {
       const name = other.name || other.id;
-      setConflict(`与「${name}」快捷键冲突，请改用其他组合`);
+      setConflict(t("shortcuts.conflictOther", { name }));
       setConflictId(id);
       return;
     }
@@ -353,10 +360,10 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
       <div className="flex ac jb g16" style={{ marginBottom: 8 }}>
         <div>
           <div className="rb-settings-title" style={{ fontSize: "var(--rb-text-2xl)", fontWeight: 600 }}>
-            快捷键
+            {t("shortcuts.title")}
           </div>
           <div className="muted" style={{ fontSize: "var(--rb-text-xs)", marginTop: 3 }}>
-            点击按键区开始录制，点击已绑定组合可重新录制，冲突会即时标红
+            {t("shortcuts.subtitle")}
           </div>
         </div>
         <button
@@ -368,7 +375,7 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
           }}
         >
           <Icon name="plus" size={14} />
-          新增
+          {t("shortcuts.add")}
         </button>
       </div>
 
@@ -390,7 +397,7 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
                   <div className="rb-shortcut-name">
                     {item.isDefault ? (
                       <span className="tag tag-gray" style={{ fontSize: 10 }}>
-                        内置
+                        {t("shortcuts.builtin")}
                       </span>
                     ) : null}
                     {item.name}
@@ -406,7 +413,7 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
                 {!item.isDefault ? (
                   <button
                     className="iconbtn"
-                    title="删除快捷键"
+                    title={t("shortcuts.confirmDelete", { name: item.name })}
                     onClick={() => setConfirmDel({ id: item.id, name: item.name })}
                     style={{ color: "var(--rb-error)", opacity: 0.65 }}
                   >
@@ -430,7 +437,7 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
                     }${isConflictRow ? " rb-recorder--conflict" : ""}`}
                     tabIndex={0}
                     role="button"
-                    title={bound ? "点击重新录制" : "点击录制"}
+                    title={bound ? t("shortcuts.reopenRecord") : t("shortcuts.record")}
                     onClick={() => {
                       if (!isRecording) startRecord(item.id);
                     }}
@@ -448,7 +455,7 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
                                 {draft.split("+").map(keySymbol).join("")}
                               </span>
                             ) : (
-                              <span className="rb-recorder-wait">等待按键…</span>
+                              <span className="rb-recorder-wait">{t("shortcuts.waitKey")}</span>
                             )}
                           </>
                         ) : bound ? (
@@ -460,7 +467,7 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
                         ) : (
                           <>
                             <Icon name="plus" size={13} />
-                            点击录制
+                            {t("shortcuts.clickRecord")}
                           </>
                         )}
                       </span>
@@ -468,7 +475,7 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
                       {isRecording ? (
                         <span
                           className="rb-recorder-hint"
-                          title="取消录制 (Esc)"
+                          title={t("shortcuts.escCancel")}
                           onClick={(e) => {
                             e.stopPropagation();
                             cancelRecord();
@@ -479,7 +486,7 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
                       ) : bound ? (
                         <span
                           className="rb-recorder-hint"
-                          title="清除快捷键"
+                          title={t("shortcuts.clear")}
                           onClick={(e) => {
                             e.stopPropagation();
                             clearShortcut(item.id);
@@ -515,7 +522,7 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
                           value={item.serviceId ?? ""}
                           onChange={(e) => handleServiceChange(item.id, e.target.value)}
                         >
-                          <option value="">默认服务</option>
+                          <option value="">{t("shortcuts.defaultService")}</option>
                           {services.map((s) => (
                             <option key={s.value} value={s.value}>
                               {s.label}
@@ -549,65 +556,65 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
               if (e.key === "Escape") setShowDialog(false);
             }}
           >
-            <div className="rb-dialog-hd">
-              <div className="flex ac g9">
-                <span className="rb-dialog-mark">
-                  <Icon name="plus" size={14} />
-                </span>
-                <div>
-                  <div style={{ fontWeight: 500, fontSize: "var(--rb-text-sm)" }}>新增快捷键</div>
-                  <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-                    添加后点击「录制」录入组合键
+              <div className="rb-dialog-hd">
+                <div className="flex ac g9">
+                  <span className="rb-dialog-mark">
+                    <Icon name="plus" size={14} />
+                  </span>
+                  <div>
+                    <div style={{ fontWeight: 500, fontSize: "var(--rb-text-sm)" }}>{t("shortcuts.recTitle")}</div>
+                    <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+                      {t("shortcuts.recHint")}
+                    </div>
                   </div>
                 </div>
+                <button className="iconbtn" onClick={() => setShowDialog(false)}>
+                  <Icon name="close" size={14} />
+                </button>
               </div>
-              <button className="iconbtn" onClick={() => setShowDialog(false)}>
-                <Icon name="close" size={14} />
-              </button>
-            </div>
 
-            <div className="rb-dialog-body">
-              <div className="set-row">
-                <div className="rb-setting-label">名称</div>
-                <input
-                  className="inp"
-                  style={{ width: "100%", maxWidth: 260 }}
-                  placeholder="例如：快速翻译"
-                  value={newName}
-                  onChange={(e) => setNewName(e.currentTarget.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") handleAdd();
-                  }}
-                  autoFocus
-                />
+              <div className="rb-dialog-body">
+                <div className="set-row">
+                  <div className="rb-setting-label">{t("shortcuts.nameLabel")}</div>
+                  <input
+                    className="inp"
+                    style={{ width: "100%", maxWidth: 260 }}
+                    placeholder={t("shortcuts.namePlaceholder")}
+                    value={newName}
+                    onChange={(e) => setNewName(e.currentTarget.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleAdd();
+                    }}
+                    autoFocus
+                  />
+                </div>
+                <div className="set-row">
+                  <div className="rb-setting-label">{t("shortcuts.descLabel")}</div>
+                  <input
+                    className="inp"
+                    style={{ width: "100%", maxWidth: 260 }}
+                    placeholder={t("shortcuts.descPlaceholder")}
+                    value={newDesc}
+                    onChange={(e) => setNewDesc(e.currentTarget.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleAdd();
+                    }}
+                  />
+                </div>
               </div>
-              <div className="set-row">
-                <div className="rb-setting-label">说明</div>
-                <input
-                  className="inp"
-                  style={{ width: "100%", maxWidth: 260 }}
-                  placeholder="快捷键用途（选填）"
-                  value={newDesc}
-                  onChange={(e) => setNewDesc(e.currentTarget.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") handleAdd();
-                  }}
-                />
-              </div>
-            </div>
 
-            <div className="rb-dialog-foot">
-              <button className="btn btn-sm btn-secondary" onClick={() => setShowDialog(false)}>
-                取消
-              </button>
-              <button
-                className="btn btn-sm btn-primary"
-                onClick={handleAdd}
-                disabled={!newName.trim()}
-              >
-                添加
-              </button>
-            </div>
+              <div className="rb-dialog-foot">
+                <button className="btn btn-sm btn-secondary" onClick={() => setShowDialog(false)}>
+                  {t("prompts.cancel")}
+                </button>
+                <button
+                  className="btn btn-sm btn-primary"
+                  onClick={handleAdd}
+                  disabled={!newName.trim()}
+                >
+                  {t("shortcuts.add")}
+                </button>
+              </div>
           </div>
         </div>
       ) : null}
@@ -621,38 +628,38 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
               if (e.key === "Escape") setConfirmDel(null);
             }}
           >
-            <div className="rb-dialog-hd">
-              <div className="flex ac g9">
-                <span className="rb-dialog-mark">
-                  <Icon name="trash" size={14} />
-                </span>
-                <div>
-                  <div style={{ fontWeight: 500, fontSize: "var(--rb-text-sm)" }}>删除快捷键</div>
-                  <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>此操作不可撤销</div>
+              <div className="rb-dialog-hd">
+                <div className="flex ac g9">
+                  <span className="rb-dialog-mark">
+                    <Icon name="trash" size={14} />
+                  </span>
+                  <div>
+                    <div style={{ fontWeight: 500, fontSize: "var(--rb-text-sm)" }}>{t("shortcuts.deleteTitle")}</div>
+                    <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>{t("shortcuts.deleteDesc")}</div>
+                  </div>
                 </div>
+                <button className="iconbtn" onClick={() => setConfirmDel(null)}>
+                  <Icon name="close" size={14} />
+                </button>
               </div>
-              <button className="iconbtn" onClick={() => setConfirmDel(null)}>
-                <Icon name="close" size={14} />
-              </button>
-            </div>
-            <div className="rb-dialog-body">
-              <div className="rb-confirm-msg">确定删除快捷键「{confirmDel.name}」吗？</div>
-            </div>
-            <div className="rb-dialog-foot">
-              <button className="btn btn-sm btn-ghost" onClick={() => setConfirmDel(null)}>
-                取消
-              </button>
-              <button
-                className="btn btn-sm rb-confirm-del"
-                onClick={() => {
-                  const id = confirmDel.id;
-                  setConfirmDel(null);
-                  handleDelete(id);
-                }}
-              >
-                删除
-              </button>
-            </div>
+              <div className="rb-dialog-body">
+                <div className="rb-confirm-msg">{t("shortcuts.confirmDelete", { name: confirmDel.name })}</div>
+              </div>
+              <div className="rb-dialog-foot">
+                <button className="btn btn-sm btn-ghost" onClick={() => setConfirmDel(null)}>
+                  {t("prompts.cancel")}
+                </button>
+                <button
+                  className="btn btn-sm rb-confirm-del"
+                  onClick={() => {
+                    const id = confirmDel.id;
+                    setConfirmDel(null);
+                    handleDelete(id);
+                  }}
+                >
+                  {t("prompts.delete")}
+                </button>
+              </div>
           </div>
         </div>
       ) : null}

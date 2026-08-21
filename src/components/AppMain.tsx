@@ -5,7 +5,7 @@ import { getServices } from "../lib/config/types";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, emit } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { t } from "../lib/i18n";
+import { t, useLanguage } from "../lib/i18n";
 import { Icon } from "./Icon";
 import { LogoMark } from "./LogoMark";
 import { Onboarding } from "./Onboarding";
@@ -106,6 +106,8 @@ function randomTagColor(): string {
 }
 
 export function AppMain() {
+  // 订阅语言变更,切语言时即时重渲染
+  useLanguage();
   const [cfg, setCfg] = useState<AppConfig | null>(null);
   const [records, setRecords] = useState<HistoryListItem[]>([]);
   const [detail, setDetail] = useState<HistoryRecord | null>(null);
@@ -727,7 +729,7 @@ export function AppMain() {
             }}
           >
             <Icon name="history" size={14} />
-            历史记录
+            {t("update.historyAll")}
             <span className="rb-nav-count">{ready ? totalCount : "…"}</span>
           </div>
           <div
@@ -738,7 +740,7 @@ export function AppMain() {
             }}
           >
             <Icon name="favorite" size={14} />
-            收藏
+            {t("update.favorites")}
             <span className="rb-nav-count">{ready ? favCount : "…"}</span>
           </div>
         </div>
@@ -795,9 +797,9 @@ export function AppMain() {
               <div style={{ width: "75%" }} />
             </div>
           ) : filteredTags.length === 0 ? (
-            <div className="rb-nav-item" style={{ color: "var(--rb-text-tertiary)", cursor: "default" }}>
+              <div className="rb-nav-item" style={{ color: "var(--rb-text-tertiary)", cursor: "default" }}>
               <span className="rb-tag-dot" style={{ background: "var(--rb-neutral-300)" }} />
-              暂无标签
+              {t("update.noTags")}
             </div>
           ) : (
             filteredTags.map((def) => (
@@ -837,7 +839,7 @@ export function AppMain() {
         <div className="rb-sidebar-footer">
           <div className="rb-nav-item" onClick={() => invoke("open_settings")}>
             <Icon name="settings" size={14} />
-            设置
+            {t("update.settings")}
             <span className="rb-nav-kbd">⌘ + ,</span>
           </div>
         </div>
@@ -882,21 +884,21 @@ export function AppMain() {
                   style={{ flex: 1, textAlign: "center" }}
                   onClick={() => setTimeFilter("all")}
                 >
-                  全部
+                  {t("update.all")}
                 </span>
                 <span
                   className={timeFilter === "today" ? "on" : ""}
                   style={{ flex: 1, textAlign: "center" }}
                   onClick={() => setTimeFilter("today")}
                 >
-                  今天
+                  {t("update.today")}
                 </span>
                 <span
                   className={timeFilter === "week" ? "on" : ""}
                   style={{ flex: 1, textAlign: "center" }}
                   onClick={() => setTimeFilter("week")}
                 >
-                  本周
+                  {t("update.week")}
                 </span>
               </div>
             </div>
@@ -923,7 +925,7 @@ export function AppMain() {
                     onClick={() => setSelectedId(r.id)}
                   >
                     <div className="rb-list-card-head">
-                      <span className="rb-list-title">{r.aiTitle || r.summary.split("\n")[0] || "总结"}</span>
+                      <span className="rb-list-title">{r.aiTitle || r.summary.split("\n")[0] || t("update.summaryTitle")}</span>
                       {/* 收藏常显(未收藏灰色描边) + 快捷删除(与右侧详情区删除一致,直接删无确认) */}
                       <div className="rb-list-card-actions">
                         <button
@@ -958,7 +960,7 @@ export function AppMain() {
                     <div className="rb-list-meta">
                       <span>{formatTime(r.createdAt)}</span>
                       <span className="rb-meta-dot" />
-                      <span>{r.sourceCharCount} 字</span>
+                      <span>{t("update.words", { n: r.sourceCharCount })}</span>
                       {r.promptName ? (
                         <span className="tag tag-brand rb-list-tag">{r.promptName}</span>
                       ) : null}
@@ -980,7 +982,7 @@ export function AppMain() {
                   </div>
                 ))
               )}
-              {hasMore ? <div className="rb-list-more">{loading ? "加载中…" : ""}</div> : null}
+              {hasMore ? <div className="rb-list-more">{loading ? t("update.loadingMore") : ""}</div> : null}
             </div>
 
             {/* 回到顶部:固定悬浮于列表右下角,对全部/今天/本周均生效(列表用同一滚动容器) */}
@@ -1008,7 +1010,7 @@ export function AppMain() {
             ) : detail ? (
               <>
                 <div className="rb-detail-head">
-                  <span className="tag tag-brand">{detail.promptName || "要点总结"}</span>
+                  <span className="tag tag-brand">{detail.promptName || t("update.summaryTitle")}</span>
                   <span className="muted rb-detail-model">
                     {detail.model} · {formatTime(detail.createdAt)}
                   </span>
@@ -1122,7 +1124,7 @@ export function AppMain() {
                 {/* 上方 2/3：总结（标题 + 要点，可滚动） */}
                 <div className="rb-detail-body">
                   <h3 className="rb-detail-h3">
-                    {detail.aiTitle || detail.summary.split("\n")[0] || "总结"}
+                    {detail.aiTitle || detail.summary.split("\n")[0] || t("update.summaryTitle")}
                   </h3>
                   <div className="rb-points">
                     {detail.summary
@@ -1289,18 +1291,18 @@ export function AppMain() {
                     <Icon name="refresh" size={16} />
                   </div>
                   <div className="rb-update-popup-body">
-                    <div className="rb-update-popup-title">发现新版本 v{updateInfo.latestVersion}</div>
+                    <div className="rb-update-popup-title">{t("update.found", { version: updateInfo.latestVersion ?? "" })}</div>
                     <div className="rb-update-popup-desc">
-                      当前 v{updateInfo.currentVersion} · 前往设置-关于更新
+                      {t("update.desc", { current: updateInfo.currentVersion })}
                     </div>
                   </div>
                   <button className="rb-update-popup-btn" onClick={() => void handleGoUpdate()}>
-                    去更新
+                    {t("update.go")}
                   </button>
                   <button
                     className="rb-update-popup-close"
                     onClick={() => setShowUpdatePopup(false)}
-                    aria-label="关闭"
+                    aria-label={t("history.close")}
                   >
                     <Icon name="close" size={12} />
                   </button>

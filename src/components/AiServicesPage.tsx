@@ -5,7 +5,7 @@ import { getServices } from "../lib/config/types";
 import { testConnection, listModels } from "../lib/ai/provider";
 import { invoke } from "@tauri-apps/api/core";
 import { Icon } from "./Icon";
-import { t } from "../lib/i18n";
+import { t, useLanguage } from "../lib/i18n";
 
 const FORMAT_META: Record<ProviderType, { name: string; desc: string; mark: string }> = {
   openai: { name: "OpenAI 格式", desc: "官方 API 及绝大多数兼容网关", mark: "O" },
@@ -47,6 +47,8 @@ interface LatencyMap {
 }
 
 export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
+  // 订阅语言变更,切语言时即时重渲染
+  useLanguage();
   const services = useMemo(() => getServices(cfg), [cfg]);
   const [editing, setEditing] = useState<ApiConfig | null>(null);
   const [confirmDel, setConfirmDel] = useState<ApiConfig | null>(null);
@@ -122,7 +124,7 @@ export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
   async function handleExportConfig() {
     const payload = JSON.stringify(services, null, 2);
     await invoke("clipboard_write_text", { text: payload });
-    setToast("服务配置已复制到剪贴板");
+    setToast(t("ai.exportDone"));
   }
 
   async function handleTestAll() {
@@ -165,13 +167,13 @@ export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
   return (
     <div>
       <div className="flex ac jb g16">
-        <div style={{ fontSize: "var(--rb-text-2xl)", fontWeight: 600 }}>AI 服务</div>
-        <button className="svc-add" title="新增服务" onClick={openNewForm}>
+        <div style={{ fontSize: "var(--rb-text-2xl)", fontWeight: 600 }}>{t("ai.title")}</div>
+        <button className="svc-add" title={t("ai.add")} onClick={openNewForm}>
           <Icon name="plus" size={14} />
         </button>
       </div>
       <div className="muted rb-svc-subtitle">
-        可同时配置多个服务，拖动排序即失效转移顺序。密钥仅保存在本机，不会上传到任何服务器。始终保留一个默认服务且不可删除。
+        {t("ai.subtitle")}
       </div>
 
       {/* 服务列表 */}
@@ -203,7 +205,7 @@ export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
               <div className="grow" style={{ minWidth: 0 }}>
                 <div className="flex ac g6">
                   <span className="svc-name">{svc.name || FORMAT_META[svc.protocol as ProviderType]?.name || svc.protocol}</span>
-                  {svc.isDefault ? <span className="tag tag-brand">默认</span> : null}
+                  {svc.isDefault ? <span className="tag tag-brand">{t("ai.default")}</span> : null}
                 </div>
                 <div className="svc-meta">
                   <span>{FORMAT_META[svc.protocol as ProviderType]?.name}</span>
@@ -225,16 +227,16 @@ export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
                     {lat.ms}ms
                   </span>
                 ) : (
-                  <span className="tag rb-svc-failed-tag">已停用</span>
+                  <span className="tag rb-svc-failed-tag">{t("ai.disabled")}</span>
                 )
               ) : (
-                <span className="tag tag-gray">未测速</span>
+                <span className="tag tag-gray">{t("ai.untested")}</span>
               )}
               {/* 行操作三图标:重新测速 → 修改 → 删除 */}
               <div className="flex ac g2">
                 <button
                   className="iconbtn"
-                  title="重新测速"
+                  title={t("ai.retest")}
                   disabled={!svc.apiKey || testingIds.has(svc.id!)}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -245,7 +247,7 @@ export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
                 </button>
                 <button
                   className="iconbtn"
-                  title="修改"
+                  title={t("ai.edit")}
                   onClick={(e) => {
                     e.stopPropagation();
                     setEditing(svc);
@@ -255,7 +257,7 @@ export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
                 </button>
                 <button
                   className="iconbtn rb-svc-del"
-                  title={svc.isDefault ? "默认服务不可删除" : "删除"}
+                  title={svc.isDefault ? t("ai.deleteDefaultDisabled") : t("ai.delete")}
                   disabled={svc.isDefault}
                   style={
                     svc.isDefault
@@ -274,7 +276,7 @@ export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
           );
         })}
         {services.length === 0 ? (
-          <div className="rb-empty-list">暂无服务，点击右上角 + 新增</div>
+          <div className="rb-empty-list">{t("ai.add")} · +</div>
         ) : null}
       </div>
 
@@ -282,11 +284,11 @@ export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
       <div className="flex ac g8" style={{ marginBottom: 14 }}>
         <button className="btn btn-secondary btn-sm" onClick={() => void handleTestAll()} disabled={testing}>
           <Icon name="refresh" size={14} className={testing ? "rb-spin" : ""} />
-          {testing ? "测速中…" : "全部重新测速"}
+          {testing ? t("ai.testing") : t("ai.testAll")}
         </button>
-        <span className="muted rb-svc-last">上次测速 {services.length ? "刚刚" : "—"}</span>
+        <span className="muted rb-svc-last">{t("ai.lastTest", { when: services.length ? t("ai.lastTestNow") : "—" })}</span>
         <button className="btn btn-ghost btn-sm" style={{ marginLeft: "auto" }} onClick={() => void handleExportConfig()}>
-          导出配置
+          {t("ai.exportConfig")}
         </button>
       </div>
 
@@ -297,7 +299,7 @@ export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
         <div className="rb-svc-form-overlay" onClick={() => setConfirmDel(null)}>
           <div className="rb-svc-confirm" onClick={(e) => e.stopPropagation()}>
             <div className="rb-confirm-msg">
-              确定删除服务「{confirmDel.name || FORMAT_META[confirmDel.protocol as ProviderType]?.name || confirmDel.protocol}」吗？
+              {t("ai.confirmDelete", { name: confirmDel.name || FORMAT_META[confirmDel.protocol as ProviderType]?.name || confirmDel.protocol })}
             </div>
             <div className="rb-confirm-actions">
               <button
@@ -394,7 +396,7 @@ function ServiceForm({ svc, isNew, onSave, onCancel, onTest, latency }: ServiceF
       });
       setModels(list);
       setLoadingModels(false);
-      if (!list.length) setModelErr("未获取到模型列表，可手动输入");
+      if (!list.length) setModelErr(t("ai.noModelList"));
     }
   }
 
@@ -443,7 +445,7 @@ function ServiceForm({ svc, isNew, onSave, onCancel, onTest, latency }: ServiceF
   /** 保存校验:API Key 必填;锁定格式强制固定 Base URL */
   function handleSaveClick() {
     if (!form.apiKey.trim()) {
-      setSaveErr("API Key 是必填项");
+      setSaveErr(t("ai.apiKeyRequired"));
       return;
     }
     onSave(lockedBase ? { ...form, baseUrl: lockedBase } : form);
@@ -459,9 +461,9 @@ function ServiceForm({ svc, isNew, onSave, onCancel, onTest, latency }: ServiceF
             </span>
             <div>
               <div style={{ fontWeight: 500, fontSize: "var(--rb-text-sm)" }}>
-                {isNew ? "新增服务" : "编辑服务"}
+                {isNew ? t("ai.newService") : t("ai.editService")}
               </div>
-              <div className="muted rb-svc-form-hint">选择格式后填写字段，修改时也可重新选择格式</div>
+              <div className="muted rb-svc-form-hint">{t("ai.formHint")}</div>
             </div>
           </div>
           <button className="iconbtn" onClick={onCancel}>
@@ -473,8 +475,8 @@ function ServiceForm({ svc, isNew, onSave, onCancel, onTest, latency }: ServiceF
           {/* 格式:新增/编辑均可下拉选择,选格式同时切换默认模型 */}
           <div className="set-row">
             <div className="set-row-label">
-              <div>格式</div>
-              <div className="muted rb-setting-hint">官方 API 或兼容网关类型</div>
+              <div>{t("ai.format")}</div>
+              <div className="muted rb-setting-hint">{t("ai.formatHint")}</div>
             </div>
             <div className="rb-svc-drop">
               <div
@@ -512,8 +514,8 @@ function ServiceForm({ svc, isNew, onSave, onCancel, onTest, latency }: ServiceF
 
           <div className="set-row">
             <div className="set-row-label">
-              <div>显示名称</div>
-              <div className="muted rb-setting-hint">列表里怎么称呼它</div>
+              <div>{t("ai.displayName")}</div>
+              <div className="muted rb-setting-hint">{t("ai.displayNameHint")}</div>
             </div>
             <input
               className="inp rb-svc-input"
@@ -525,14 +527,14 @@ function ServiceForm({ svc, isNew, onSave, onCancel, onTest, latency }: ServiceF
 
           <div className="set-row">
             <div className="set-row-label">
-              <div>API Base URL</div>
-              <div className="muted rb-setting-hint">兼容网关填自定义地址</div>
+              <div>{t("ai.baseUrl")}</div>
+              <div className="muted rb-setting-hint">{t("ai.baseUrlHint")}</div>
             </div>
             <input
               className="inp mono rb-svc-input"
               value={lockedBase ?? form.baseUrl}
               disabled={Boolean(lockedBase)}
-              title={lockedBase ? "DeepSeek 官方格式固定使用该地址" : undefined}
+              title={lockedBase ? t("ai.baseUrlLocked") : undefined}
               onChange={(e) => set({ baseUrl: e.currentTarget.value })}
               placeholder={form.protocol === "openai" ? "https://api.openai.com/v1" : form.protocol === "claude" ? "https://api.anthropic.com" : form.protocol === "deepseek" ? "https://api.deepseek.com" : "https://generativelanguage.googleapis.com"}
             />
@@ -540,8 +542,8 @@ function ServiceForm({ svc, isNew, onSave, onCancel, onTest, latency }: ServiceF
 
           <div className="set-row">
             <div className="set-row-label">
-              <div>API Key</div>
-              <div className="muted rb-setting-hint">存于本机 config.json</div>
+              <div>{t("ai.apiKey")}</div>
+              <div className="muted rb-setting-hint">{t("ai.apiKeyHint")}</div>
             </div>
             <div className="rb-key-input rb-svc-key">
               <input
@@ -564,8 +566,8 @@ function ServiceForm({ svc, isNew, onSave, onCancel, onTest, latency }: ServiceF
           {/* 模型:组合框(可手输 + 下拉调接口拉取) */}
           <div className="set-row">
             <div className="set-row-label">
-              <div>模型</div>
-              <div className="muted rb-setting-hint">点右侧图标从接口拉取，也可手输</div>
+              <div>{t("ai.model")}</div>
+              <div className="muted rb-setting-hint">{t("ai.modelHint")}</div>
             </div>
             <div className="rb-svc-model" ref={modelInputRef}>
               <input
@@ -593,7 +595,7 @@ function ServiceForm({ svc, isNew, onSave, onCancel, onTest, latency }: ServiceF
                   >
                     {loadingModels ? (
                       <div className="rb-svc-model-loading" style={{ cursor: "default", color: "var(--rb-text-tertiary)" }}>
-                        加载中…
+                        {t("ai.loading")}
                       </div>
                     ) : (
                       <>
@@ -625,8 +627,8 @@ function ServiceForm({ svc, isNew, onSave, onCancel, onTest, latency }: ServiceF
 
           <div className="set-row">
             <div className="set-row-label">
-              <div>流式输出</div>
-              <div className="muted rb-setting-hint">逐字显示总结</div>
+              <div>{t("ai.stream")}</div>
+              <div className="muted rb-setting-hint">{t("ai.streamHint")}</div>
             </div>
             <div className={`sw${form.stream ? " on" : ""}`} onClick={() => set({ stream: !form.stream })} />
           </div>
@@ -635,22 +637,22 @@ function ServiceForm({ svc, isNew, onSave, onCancel, onTest, latency }: ServiceF
         <div className="rb-svc-form-foot">
           <button className="btn btn-secondary btn-sm" onClick={() => void handleTestClick()} disabled={!form.apiKey || testing}>
             <Icon name="refresh" size={14} className={testing ? "rb-spin" : ""} />
-            测试连接
+            {t("ai.testConnection")}
           </button>
           {latency ? (
             latency.ok ? (
-              <span className="tag tag-ok">响应 {latency.ms}ms</span>
+              <span className="tag tag-ok">{t("ai.responseMs", { ms: latency.ms })}</span>
             ) : (
-              <span className="tag rb-tag-err">连接失败</span>
+              <span className="tag rb-tag-err">{t("ai.connectFailed")}</span>
             )
           ) : null}
           {saveErr ? <span className="rb-svc-save-err">{saveErr}</span> : null}
           <div style={{ marginLeft: "auto" }} className="flex g8">
             <button className="btn btn-ghost btn-sm" onClick={onCancel}>
-              取消
+              {t("prompts.cancel")}
             </button>
             <button className="btn btn-primary btn-sm" onClick={handleSaveClick}>
-              保存
+              {t("prompts.save")}
             </button>
           </div>
         </div>

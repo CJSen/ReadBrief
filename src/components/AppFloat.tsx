@@ -2,9 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getDefaultService } from "../lib/config/types";
-import { t } from "../lib/i18n";
 import { useConfig } from "../lib/config/useConfig";
 import { useSummarySession } from "../lib/ai/useSummarySession";
+import { t, useLanguage } from "../lib/i18n";
 import { Button } from "./Button";
 import { Icon } from "./Icon";
 
@@ -52,6 +52,8 @@ function tagTextColor(color: string): string {
 }
 
 export function AppFloat() {
+  // 订阅语言变更,切语言时即时重渲染(浮窗在前台时切换也能生效)
+  useLanguage();
   const [capture, setCapture] = useState<CaptureResult | null>(null);
   /** 浮窗内「去授权」进行中:禁用按钮并显示「检测中…」,防止重复点击(对齐 Onboarding/设置) */
   const [authInProgress, setAuthInProgress] = useState(false);
@@ -416,14 +418,14 @@ export function AppFloat() {
 
   // 标题栏:默认显示当前生效提示词名称;仅生成失败态显示「生成失败」(流式/完成态均显示提示词名)。
   // 此前写死「要点总结」,与历史 promptName 错显同源 —— 现统一由 session.promptName 驱动。
-  const title = state === "error" ? "生成失败" : promptName || "要点总结";
+  const title = state === "error" ? t("float.titleError") : promptName || t("float.titleDefault");
   const dotColor =
     state === "streaming" ? "brand" : state === "error" ? "error" : state === "done" ? "success" : "brand";
 
   // 标题栏展示的「使用模型」= 本次会话实际将调用的模型:
   // 快捷键绑定了具体模型优先(如绑定到某服务的特定模型),否则用当前默认服务模型。
   // cfg 经 config-changed 实时同步,改 AI 服务后立即反映最新默认模型,避免显示陈旧模型。
-  const displayModel = boundModel || "未配置模型";
+  const displayModel = boundModel || t("float.notConfiguredModel");
 
   // 捕获模式标签:selection=划词 / clipboard=托盘粘贴 / history=历史重新生成 / empty=未捕获
   const captureMode =
@@ -461,7 +463,7 @@ export function AppFloat() {
         <div className="tbar rb-float-tbar" onMouseDown={handleTitleBarMouseDown}>
           <span className={`rb-status-dot rb-status-${dotColor}`} />
           <span className="tbar-title">{title}</span>
-          {cfg ? <span className="tag tag-gray">{displayModel || "未配置模型"}</span> : null}
+          {cfg ? <span className="tag tag-gray">{displayModel}</span> : null}
           <div style={{ marginLeft: "auto" }} className="rb-tbar-actions">
             <button className="iconbtn" title="固定" onClick={() => setPinned((v) => !v)}>
               <Icon name="pin" className={pinned ? "rb-pinned" : ""} />
@@ -476,11 +478,11 @@ export function AppFloat() {
         <div className="rb-region">
           <div className="rb-region-label">
             <span className="rb-dot" />
-            <span className="rb-region-title">划词 / 输入区</span>
+            <span className="rb-region-title">{t("float.regionTitle")}</span>
             {captureMode ? (
               <span className="tag tag-brand rb-capture-mode">{captureMode}</span>
             ) : (
-              <span className="rb-region-extra">⌘+Shift+Z 划词</span>
+              <span className="rb-region-extra">{t("float.regionHint")}</span>
             )}
           </div>
 
@@ -501,12 +503,12 @@ export function AppFloat() {
           <div className="rb-input-row">
             <span className={`rb-region-min${capture?.source === "unauthorized" ? " rb-region-warn" : ""}`}>
               {capture?.source === "unauthorized"
-                ? "未授权辅助功能 · 划词捕获不可用"
+                ? t("float.notAuthorized")
                 : capture?.source === "empty"
-                  ? "未捕获到选中文本 · 可直接粘贴或输入"
+                  ? t("float.emptyCapture")
                   : capture
-                    ? `已捕获 ${capture.text.length} 字`
-                    : "未捕获划词 · 直接粘贴文本"}
+                    ? t("float.capturedNChars", { n: capture.text.length })
+                    : t("float.noCapture")}
             </span>
             {capture?.source === "unauthorized" ? (
               <button
@@ -514,12 +516,12 @@ export function AppFloat() {
                 onClick={() => void grantAccessibility()}
                 disabled={authInProgress}
               >
-                {authInProgress ? "检测中…" : "去授权"}
+                {authInProgress ? t("float.detecting") : t("float.grant")}
               </button>
             ) : null}
             <button className="btn btn-sm btn-primary" onClick={handleSubmit} disabled={!input.trim()}>
               <Icon name="send" size={14} />
-              发送
+              {t("float.send")}
             </button>
           </div>
         </div>
@@ -609,18 +611,18 @@ export function AppFloat() {
                     </Button>
                   )}
                   <Button size="sm" onClick={() => invoke("clipboard_write_text", { text: error.message })}>
-                    复制错误详情
+                    {t("float.copyError")}
                   </Button>
                 </div>
                 <div className="rb-error-legend">
                   <div>
-                    <span style={{ color: "var(--rb-error)" }}>401</span> 鉴权失败
+                    <span style={{ color: "var(--rb-error)" }}>401</span> {t("float.err401")}
                   </div>
                   <div>
-                    <span style={{ color: "var(--rb-warning)" }}>429</span> 限流/额度
+                    <span style={{ color: "var(--rb-warning)" }}>429</span> {t("float.err429")}
                   </div>
                   <div>
-                    <span className="muted">NET</span> 网络异常
+                    <span className="muted">NET</span> {t("float.errNet")}
                   </div>
                 </div>
               </div>
@@ -633,9 +635,9 @@ export function AppFloat() {
           <div className="rb-float-actions">
             {state === "streaming" ? (
               <>
-                <span className="rb-region-min">已生成 {output.length} 字</span>
+                <span className="rb-region-min">{t("float.generating", { n: output.length })}</span>
                 <button className="btn btn-sm btn-secondary" onClick={handleEsc}>
-                  停止 <span className="kbd">⌫</span>
+                  {t("float.stop")} <span className="kbd">⌫</span>
                 </button>
               </>
             ) : (
@@ -652,7 +654,7 @@ export function AppFloat() {
                   title="使用当前输入重新生成总结"
                 >
                   <Icon name="refresh" size={14} />
-                  重新生成
+                  {t("float.regenerate")}
                 </button>
                 <div style={{ marginLeft: "auto" }} className="flex g4">
                   {/* 已选标签:显示在标签功能前方(小号字 + 底部色块,对齐主窗口),点击移除 */}
@@ -765,7 +767,7 @@ export function AppFloat() {
                   </div>
                   <button
                     className="iconbtn"
-                    title={isFavorite ? "取消收藏" : "收藏"}
+                    title={isFavorite ? t("float.unfavTitle") : t("float.favTitle")}
                     onClick={() => void handleFavorite()}
                     disabled={!canFavorite}
                   >
