@@ -331,6 +331,14 @@ pub async fn ai_stream(
     request: AiRequest,
     request_id: String,
 ) -> AppResult<()> {
+    let started = std::time::Instant::now();
+    // 只记元数据(协议/模型/长度),不落任何文本与密钥
+    log::info!(
+        "AI 请求开始: id={request_id} protocol={} model={} 输入{}字符",
+        config.protocol,
+        request.model.as_deref().unwrap_or(&config.model),
+        request.user.chars().count()
+    );
     let user = truncate_input(&request.user);
     let req = AiRequest {
         system: request.system.map(|s| truncate_input(&s)),
@@ -343,6 +351,7 @@ pub async fn ai_stream(
     let (url, headers, body) = match build_request(&req, &config) {
         Ok(v) => v,
         Err(e) => {
+            log::warn!("AI 请求构建失败: id={request_id}: {e}");
             emit_error(&app, &request_id, &e);
             // 错误已随 ai-error 事件回传,invoke 正常 resolve(避免前端双发错误)
             return Ok(());
@@ -352,6 +361,7 @@ pub async fn ai_stream(
     let client = match reqwest::Client::builder().timeout(REQUEST_TIMEOUT).build() {
         Ok(c) => c,
         Err(e) => {
+            log::warn!("HTTP 客户端构建失败: id={request_id}: {e}");
             emit_error(&app, &request_id, &AppError::from(e));
             return Ok(());
         }
@@ -374,8 +384,12 @@ pub async fn ai_stream(
         .send()
         .await
     {
-        Ok(r) => r,
+        Ok(r) => {
+            log::debug!("AI 响应就绪: id={request_id} HTTP {}", r.status());
+            r
+        }
         Err(e) => {
+            log::warn!("AI 网络错误: id={request_id}: {e}");
             emit_error(&app, &request_id, &AppError::from(e));
             return Ok(());
         }
@@ -392,6 +406,7 @@ pub async fn ai_stream(
             500..=599 | 408 => ("network", format!("服务端异常(HTTP {status})")),
             _ => ("unknown", format!("HTTP {status}: {body_snippet}")),
         };
+        log::warn!("AI 上游错误: id={request_id} HTTP {status}");
         let _ = app.emit(
             "ai-error",
             AiEvent { request_id: request_id.clone(), text: None, error: Some(serde_json::json!({ "type": err_type, "message": message })), done: None },
@@ -416,6 +431,7 @@ pub async fn ai_stream(
     let mut saw_reasoning = false;
     let mut saw_content = false;
     let mut truncated = false;
+    let mut out_chars: usize = 0;
 
     while let Some(chunk) = stream.next().await {
         match chunk {
@@ -453,6 +469,7 @@ pub async fn ai_stream(
                                     );
                                 } else if !d.text.is_empty() {
                                     saw_content = true;
+                                    out_chars += d.text.chars().count();
                                     let _ = app.emit(
                                         "ai-delta",
                                         AiEvent { request_id: request_id.clone(), text: Some(d.text), error: None, done: None },
@@ -461,6 +478,7 @@ pub async fn ai_stream(
                             }
                             Err(msg) => {
                                 failed = true;
+                                log::warn!("SSE 解析失败: id={request_id}: {msg}");
                                 let _ = app.emit(
                                     "ai-error",
                                     AiEvent { request_id: request_id.clone(), text: None, error: Some(serde_json::json!({ "type": "unknown", "message": msg })), done: None },
@@ -472,6 +490,7 @@ pub async fn ai_stream(
             }
             Err(e) => {
                 failed = true;
+                log::warn!("流读取中断: id={request_id}: {e}");
                 let _ = app.emit(
                     "ai-error",
                     AiEvent { request_id: request_id.clone(), text: None, error: Some(serde_json::json!({ "type": "network", "message": e.to_string() })), done: None },
@@ -482,6 +501,10 @@ pub async fn ai_stream(
 
     // 仅成功路径 emit done —— 失败/中止绝不触发前端落库(P0-3 门控,与前端双保险)
     if !failed {
+        log::info!(
+            "AI 请求完成: id={request_id} 耗时{}ms 输出{out_chars}字符",
+            started.elapsed().as_millis()
+        );
         // 思考型模型「只思考未输出」:思考耗尽 max_tokens → 明确提示配额不足,不再静默空结果
         if saw_reasoning && truncated && !saw_content {
             let _ = app.emit(
@@ -544,12 +567,14 @@ pub async fn ai_test(config: AiServiceConfig) -> AppResult<serde_json::Value> {
             500..=599 | 408 => "network",
             _ => "unknown",
         };
+        log::info!("连接测试失败: protocol={} HTTP {status} 耗时{elapsed}ms", config.protocol);
         return Ok(serde_json::json!({
             "ok": false,
             "latencyMs": elapsed,
             "error": { "type": err_type, "status": status, "message": format!("HTTP {status}: {snippet}") },
         }));
     }
+    log::info!("连接测试通过: protocol={} model={} 耗时{elapsed}ms", config.protocol, config.model);
     Ok(serde_json::json!({ "ok": true, "latencyMs": elapsed }))
 }
 

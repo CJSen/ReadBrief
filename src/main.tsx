@@ -3,9 +3,11 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./styles/global.css";
 import { initTheme } from "./lib/theme";
+import { initErrorLogging } from "./lib/logging";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 initTheme();
+initErrorLogging();
 
 // 浮窗窗口背景必须透明(transparent: true),否则显示不透明底色
 try {

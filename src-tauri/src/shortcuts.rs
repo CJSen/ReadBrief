@@ -53,6 +53,7 @@ pub fn float_mark_ready(app: tauri::AppHandle) -> AppResult<()> {
     FLOAT_READY.store(true, Ordering::SeqCst);
     if let Ok(mut pending) = PENDING_CAPTURE.lock() {
         if let Some(cap) = pending.take() {
+            log::debug!("浮窗就绪,补发缓存的捕获结果");
             let _ = app.emit("capture-result", cap);
         }
     }
@@ -68,8 +69,10 @@ pub fn dispatch_capture(app: &tauri::AppHandle, captured: CapturedText) {
     // 若在此处提前 return,unauthorized 事件丢失:浮窗既无授权引导,标题又回退成「要点总结」,
     // 与授权后行为不一致。
     if FLOAT_READY.load(Ordering::SeqCst) {
+        log::debug!("捕获结果派发到浮窗");
         let _ = app.emit("capture-result", captured);
     } else if let Ok(mut pending) = PENDING_CAPTURE.lock() {
+        log::debug!("浮窗未就绪,捕获结果缓存待补发");
         *pending = Some(captured);
     }
 }
@@ -153,10 +156,18 @@ pub fn reload_shortcuts(app: &tauri::AppHandle) -> AppResult<()> {
 }
 
 fn handle_trigger(app: tauri::AppHandle, action: String, prompt_id: Option<String>, service_id: Option<String>) {
+    // 只记 action/绑定标识等元数据,不记任何文本内容
+    log::info!(
+        "快捷键触发: action={action} prompt={} service={}",
+        prompt_id.as_deref().unwrap_or("-"),
+        service_id.as_deref().unwrap_or("-")
+    );
     match action.as_str() {
         // 划词总结 / 呼出输入框:通过 Accessibility 捕获选中文本(纯 AX,暂不回退剪贴板)
         "summarize" | "paste" => {
             if is_capture_paused() && action == "summarize" {
+                // warn 级别:关闭诊断时也落盘 —— 「按快捷键没反应」最常见原因就是暂停忘开
+                log::warn!("划词监听已暂停,忽略本次触发(可在托盘菜单或设置中恢复)");
                 return;
             }
             // 只在面板从隐藏→显示时发 float-shown(触发前端 resetSession 新会话)。
@@ -187,6 +198,7 @@ fn handle_trigger(app: tauri::AppHandle, action: String, prompt_id: Option<Strin
         // 绑定到具体提示词:携带 promptId 触发
         _ if !action.is_empty() => {
             if is_capture_paused() {
+                log::warn!("划词监听已暂停,忽略本次触发(可在托盘菜单或设置中恢复)");
                 return;
             }
             let was_visible = crate::windows::is_float_visible();
@@ -217,6 +229,7 @@ fn capture_selection(app: tauri::AppHandle) -> CapturedText {
         let _ = &app;
         // 先检查授权:未授权时前端引导去系统设置开启辅助功能,而非静默空白
         if !accessibility_trusted() {
+            log::warn!("划词捕获失败: 未授权辅助功能");
             return CapturedText {
                 text: String::new(),
                 source: "unauthorized".to_string(),
@@ -226,6 +239,8 @@ fn capture_selection(app: tauri::AppHandle) -> CapturedText {
         }
         let text = read_selection_text().unwrap_or_default();
         if !text.trim().is_empty() {
+            // 只记长度,不记内容(隐私承诺:日志不含任何文本)
+            log::info!("划词捕获成功: source=selection len={}", text.chars().count());
             return CapturedText {
                 text,
                 source: "selection".to_string(),
@@ -234,6 +249,7 @@ fn capture_selection(app: tauri::AppHandle) -> CapturedText {
             };
         }
         // 无选中文本:输入区留空,由用户手动粘贴或输入
+        log::info!("划词捕获为空: source=empty");
         CapturedText {
             text: String::new(),
             source: "empty".to_string(),
@@ -262,6 +278,9 @@ fn read_selection_text() -> Option<String> {
         return None;
     }
     let text = selection::get_text();
+    // debug 细分:AX 返回 0 字符多为目标应用不支持辅助功能属性(如 Safari 部分场景),
+    // 与「有选中文本但为纯空白」区分,便于定位划词失败原因
+    log::debug!("AX 选中文本读取: len={}", text.chars().count());
     if text.trim().is_empty() {
         return None;
     }

@@ -10,6 +10,7 @@
     "global-shortcut:allow-unregister",
     "global-shortcut:allow-is-registered",
     "clipboard-manager:allow-read-text",
-    "clipboard-manager:allow-write-text"
+    "clipboard-manager:allow-write-text",
+    "log:default"
   ]
 }

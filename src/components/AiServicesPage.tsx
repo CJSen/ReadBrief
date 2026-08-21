@@ -56,7 +56,7 @@ export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
   const [testing, setTesting] = useState(false);
   const [testingIds, setTestingIds] = useState<Set<string>>(new Set());
   const [dragId, setDragId] = useState<string | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ text: string; ok: boolean } | null>(null);
   const idCounter = useRef(1);
 
   useEffect(() => {
@@ -124,7 +124,7 @@ export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
   async function handleExportConfig() {
     const payload = JSON.stringify(services, null, 2);
     await invoke("clipboard_write_text", { text: payload });
-    setToast(t("ai.exportDone"));
+    setToast({ text: t("ai.exportDone"), ok: true });
   }
 
   async function handleTestAll() {
@@ -292,7 +292,16 @@ export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
         </button>
       </div>
 
-      {toast ? <div className="rb-toast rb-toast-static">{toast}</div> : null}
+      {toast ? (
+        <div className="rb-toast rb-toast-static">
+          <Icon
+            className={`rb-toast-icon rb-toast-icon--${toast.ok ? "ok" : "err"}`}
+            name={toast.ok ? "check" : "alert"}
+            size={15}
+          />
+          {toast.text}
+        </div>
+      ) : null}
 
       {/* 删除服务二次确认 */}
       {confirmDel ? (

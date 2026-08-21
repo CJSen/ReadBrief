@@ -2852,13 +2852,45 @@
   margin-left: auto;
 }
 
-/* 设置页静态 toast(导出 / 清空结果) */
+/* 设置页通知浮窗(导出 / 清空结果):
+   按设计规范 §2.4 —— 浮窗级容器:12px 圆角 + 双层景深阴影,
+   200ms macOS 缓动自底部上浮,成功/失败以图标+语义色区分 */
 .rb-toast-static {
-  position: static;
-  transform: none;
-  margin-top: 12px;
-  display: inline-flex;
-  animation: none;
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 0;
+  max-width: min(520px, calc(100vw - 48px));
+  white-space: normal;
+  word-break: break-all;
+  background: var(--rb-bg-surface);
+  color: var(--rb-text-primary);
+  border: 1px solid var(--rb-border-default);
+  border-radius: var(--rb-radius-xl);
+  box-shadow: var(--rb-shadow-float);
+  animation: rb-toast-static-in 200ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.rb-toast-icon {
+  flex: none;
+}
+
+.rb-toast-icon--ok {
+  color: var(--rb-success);
+}
+
+.rb-toast-icon--err {
+  color: var(--rb-error);
+}
+
+@keyframes rb-toast-static-in {
+  from { opacity: 0; transform: translate(-50%, 10px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rb-toast-static { animation: none; }
 }
 
 /* 快捷键页:锁定项置灰(免费额度用尽 / Pro 功能) */

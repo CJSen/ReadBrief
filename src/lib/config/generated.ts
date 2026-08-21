@@ -16,4 +16,10 @@ isBuiltin: boolean,
  */
 tag: string, };
 
-export type ShortcutConfig = { id: string, accelerator: string, promptId?: string | null, action: string, name?: string | null, description?: string | null, isDefault: boolean, model?: string | null, serviceId?: string | null, };
+export type ShortcutConfig = { id: string, accelerator: string, promptId?: string | null, action: string, name?: string | null, description?: string | null, isDefault: boolean, model?: string | null, 
+/**
+ * 快捷键绑定的 AI 服务 id(引用式):模型/密钥/协议均从该服务解析,
+ * 改 AI 服务配置后快捷键自动跟随,无需任何回写逻辑。
+ * 旧 `model` 字段为迁移遗留,已不再使用(迁移后清空)。
+ */
+serviceId?: string | null, };

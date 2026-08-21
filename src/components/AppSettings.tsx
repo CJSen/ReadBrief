@@ -583,7 +583,7 @@ function PrivacyPage({
   cfg: AppConfig;
   onConfigChange: (c: AppConfig) => void;
 }) {
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ text: string; ok: boolean } | null>(null);
   const [diagnostics, setDiagnostics] = useState(cfg.diagnostics ?? false);
 
   useEffect(() => {
@@ -602,9 +602,22 @@ function PrivacyPage({
   async function handleExport() {
     try {
       const path = await invoke<string>("export_data");
-      setToast(t("settings.exportDone", { path }));
+      setToast({ text: t("settings.exportDone", { path }), ok: true });
     } catch {
-      setToast(t("settings.exportFail"));
+      setToast({ text: t("settings.exportFail"), ok: false });
+    }
+  }
+
+  async function handleExportLogs() {
+    try {
+      const path = await invoke<string>("export_logs");
+      setToast({ text: t("settings.exportDone", { path }), ok: true });
+      // 打开时机在通知浮窗消失后(与 toast 同为 4s)
+      setTimeout(() => {
+        void invoke("reveal_path", { path }).catch(() => {});
+      }, 4000);
+    } catch {
+      setToast({ text: t("settings.exportFail"), ok: false });
     }
   }
 
@@ -614,9 +627,9 @@ function PrivacyPage({
     try {
       await invoke("history_clear");
       await invoke("tray_refresh");
-      setToast(t("settings.clearDone"));
+      setToast({ text: t("settings.clearDone"), ok: true });
     } catch {
-      setToast(t("settings.clearFail"));
+      setToast({ text: t("settings.clearFail"), ok: false });
     }
   }
 
@@ -670,6 +683,15 @@ function PrivacyPage({
         </div>
         <div className="set-row">
           <div>
+            <div className="set-row-t">{t("settings.exportLogs")}</div>
+            <div className="set-row-d">{t("settings.exportLogsDesc")}</div>
+          </div>
+          <button className="btn btn-secondary btn-sm" onClick={() => void handleExportLogs()}>
+            {t("settings.exportLogs")}
+          </button>
+        </div>
+        <div className="set-row">
+          <div>
             <div className="set-row-t">{t("settings.keyStore")}</div>
             <div className="set-row-d">{t("settings.keyStoreDesc")}</div>
           </div>
@@ -680,7 +702,16 @@ function PrivacyPage({
         </div>
       </div>
 
-      {toast ? <div className="rb-toast rb-toast-static">{toast}</div> : null}
+      {toast ? (
+        <div className="rb-toast rb-toast-static">
+          <Icon
+            className={`rb-toast-icon rb-toast-icon--${toast.ok ? "ok" : "err"}`}
+            name={toast.ok ? "check" : "alert"}
+            size={15}
+          />
+          {toast.text}
+        </div>
+      ) : null}
     </div>
   );
 }

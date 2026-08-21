@@ -34,11 +34,13 @@ mod history_tests;
 use history::AppState;
 use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(build_log_plugin())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_autostart::init(
@@ -55,7 +57,9 @@ pub fn run() {
             commands::config_reset,
             commands::set_capture_paused,
             commands::export_data,
+            commands::export_logs,
             commands::open_data_dir,
+            commands::reveal_path,
             commands::autostart_status,
             commands::autostart_set,
             commands::get_app_arch,
@@ -134,9 +138,10 @@ pub fn run() {
 
 /// 初始化数据库:失败时弹可读错误弹窗并终止启动(而非静默 panic)
 fn setup_app<R: tauri::Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::Error>> {
-    // 按配置的 diagnostics 开关初始化日志级别:开启才输出 debug/info
+    // 按配置的 diagnostics 开关设置运行时日志级别(开=Debug 全量,关=仅 warn/error)
     let diagnostics = crate::config::load_config().diagnostics;
-    init_logger(diagnostics);
+    apply_diagnostics_level(diagnostics);
+    install_panic_hook();
 
     match db::open_connection() {
         Ok(conn) => {
@@ -160,17 +165,63 @@ fn setup_app<R: tauri::Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn s
     }
 }
 
-/// 统一日志门面(P3-1):按 diagnostics 开关决定输出级别。
-/// 开启 → info/debug 全量输出;关闭 → 仅 warn/error。
-fn init_logger(diagnostics: bool) {
-    let filter = if diagnostics {
+/// 日志插件:Stdout(开发可见) + 文件轮转落盘。
+/// 日志与配置/数据库同目录(~/Library/Application Support/ReadBrief/),「打开数据文件夹」一键可达。
+/// 级别上限 Debug,实际输出由 apply_diagnostics_level 运行时控制。
+fn build_log_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
+    tauri_plugin_log::Builder::new()
+        .targets([
+            Target::new(TargetKind::Stdout),
+            Target::new(TargetKind::Folder {
+                path: crate::db::app_data_dir(),
+                file_name: Some("readbrief".into()),
+            }),
+        ])
+        .level(log::LevelFilter::Debug)
+        .max_file_size(5 * 1024 * 1024)
+        .rotation_strategy(RotationStrategy::KeepSome(3))
+        .format(|out, message, record| {
+            out.finish(format_args!(
+                "[{}][{}][{}] {}",
+                chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
+                record.level(),
+                record.target(),
+                message
+            ))
+        })
+        .build()
+}
+
+/// 运行时切换日志级别(诊断开关即时生效,无需重启):
+/// 开 → Debug 全量;关 → 仅 warn/error(warn/error 始终落盘,崩溃类信息不丢)
+pub fn apply_diagnostics_level(enabled: bool) {
+    let level = if enabled {
         log::LevelFilter::Debug
     } else {
         log::LevelFilter::Warn
     };
-    env_logger::Builder::new()
-        .filter_level(filter)
-        .format_timestamp_secs()
-        .try_init()
-        .ok(); // 重复初始化静默忽略
+    log::set_max_level(level);
+    // 启动/切换留痕。warn 级别:任何状态下都落盘 —— 用户导出的日志无论开关与否都带版本号,
+    // 且开启动作本身(远程支持工作流:「打开开关再复现」)会在日志中留下明确起点。
+    log::warn!(
+        "ReadBrief v{} 诊断日志已{}",
+        env!("CARGO_PKG_VERSION"),
+        if enabled { "开启(Debug 全量)" } else { "关闭(仅 warn/error)" }
+    );
+}
+
+/// panic 时把崩溃信息追加写入数据目录 crash.log(先调默认 hook 保留原有行为)
+fn install_panic_hook() {
+    let log_dir = crate::db::app_data_dir();
+    let original = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        original(info);
+        let line = format!("[{}] PANIC: {info}\n\n", chrono::Local::now().to_rfc3339());
+        let _ = std::fs::create_dir_all(&log_dir);
+        let _ = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(log_dir.join("crash.log"))
+            .and_then(|mut f| std::io::Write::write_all(&mut f, line.as_bytes()));
+    }));
 }
