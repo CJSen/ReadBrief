@@ -4,17 +4,18 @@ import { FREE_PROMPT_LIMIT } from "../lib/license";
 import { useLicense } from "../lib/license/useLicense";
 import { BUILTIN_PROMPTS, BUILTIN_ICONS, TAG_OPTIONS, TAG_LABELS, TAG_TIPS } from "../lib/prompts/builtins";
 import type { PromptTag } from "../lib/prompts/builtins";
+import { t } from "../lib/i18n";
 import { invoke } from "@tauri-apps/api/core";
 import { Icon } from "./Icon";
 
 function HighlightText({ content }: { content: string }) {
-  const parts = content.split(/(\{\{text\}\})/g);
+  const parts = content.split(/(\{\{(?:text|language)\}\})/g);
   return (
     <>
       {parts.map((p, i) =>
-        p === "{{text}}" ? (
+        p === "{{text}}" || p === "{{language}}" ? (
           <span key={i} style={{ color: "var(--rb-brand-600)" }}>
-            {"{{text}}"}
+            {p}
           </span>
         ) : (
           <span key={i}>{p}</span>
@@ -257,6 +258,40 @@ export function PromptManager({ cfg, onConfigChange }: PromptManagerProps) {
               })}
             </div>
           </div>
+          {/* 翻译类型提示:目标语言由提示词写明,或引用 {{language}} 跟随「输出语言」设置 */}
+          {newTag === "translate" ? (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 6,
+                fontSize: 12,
+                lineHeight: 1.6,
+                color: "var(--rb-text-secondary)",
+                background: "var(--rb-brand-50)",
+                border: "1px solid var(--rb-border-default)",
+                borderRadius: "var(--rb-radius-sm)",
+                padding: "7px 10px",
+                marginBottom: 8,
+              }}
+            >
+              <svg
+                className="ic"
+                viewBox="0 0 24 24"
+                style={{ width: 14, height: 14, flex: "none", marginTop: 2 }}
+              >
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 8h.01M12 12v4" />
+              </svg>
+              <span>
+                {t("prompts.translateTargetHintBefore")}{" "}
+                <span style={{ color: "var(--rb-brand-600)", fontFamily: "var(--rb-font-mono)" }}>
+                  {"{{language}}"}
+                </span>{" "}
+                {t("prompts.translateTargetHintAfter")}
+              </span>
+            </div>
+          ) : null}
           <div className="rb-prompt-editor-row">
             <span className="muted" style={{ fontSize: 11 }}>模型在「快捷键」中为每个快捷键分别选择</span>
             <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>

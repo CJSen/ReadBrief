@@ -71,6 +71,8 @@ const zh = {
     new: "新建提示词",
     pro: "Pro",
     reachLimit: "免费版最多 3 个提示词",
+    translateTargetHintBefore: "翻译类型需指定目标语言：提示词中写明（如「翻译为日语」），或使用",
+    translateTargetHintAfter: "跟随「输出语言」设置",
   },
   shortcuts: {
     title: "快捷键",
@@ -233,6 +235,9 @@ const en: typeof zh = {
     new: "New Prompt",
     pro: "Pro",
     reachLimit: "Free plan allows up to 3 prompts",
+    translateTargetHintBefore:
+      "Translate prompts need a target language: write it in the prompt (e.g. \"translate to Japanese\"), or use",
+    translateTargetHintAfter: "to follow the Output Language setting",
   },
   shortcuts: {
     title: "Shortcuts",

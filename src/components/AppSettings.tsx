@@ -13,6 +13,7 @@ import { ShortcutsPage } from "./ShortcutsPage";
 import { PromptManager } from "./PromptManager";
 import { AiServicesPage } from "./AiServicesPage";
 import { Onboarding } from "./Onboarding";
+import { SUMMARY_LANGUAGES, normalizeSummaryLang } from "../lib/prompts/languages";
 import { checkUpdate, RELEASE_PAGE, type UpdateInfo } from "../lib/update/checkUpdate";
 import { renderMarkdown, archLabel } from "../lib/update/markdown";
 
@@ -428,27 +429,6 @@ function GeneralPage({
 }
 
 /* ═══ 外观与语言 ═══ */
-
-/** 输出语言可选项(与系统提示词中的语言指令一一对应) */
-const SUMMARY_LANGUAGES: Array<{ code: string; label: string }> = [
-  { code: "zh-CN", label: "简体中文" },
-  { code: "zh-TW", label: "繁體中文" },
-  { code: "en", label: "English" },
-  { code: "ja", label: "日本語" },
-  { code: "ko", label: "한국어" },
-  { code: "fr", label: "Français" },
-  { code: "de", label: "Deutsch" },
-  { code: "es", label: "Español" },
-  { code: "ru", label: "Русский" },
-  { code: "pt", label: "Português" },
-];
-const DEFAULT_SUMMARY_LANG = "zh-CN";
-/** 旧版单值(system/zh/en)迁移到新多语言码,保证升级后选中态不丢失 */
-const LEGACY_LANG_MAP: Record<string, string> = { system: "zh-CN", zh: "zh-CN", en: "en" };
-function normalizeSummaryLang(v: string | undefined): string {
-  if (v && SUMMARY_LANGUAGES.some((l) => l.code === v)) return v;
-  return LEGACY_LANG_MAP[v ?? ""] ?? DEFAULT_SUMMARY_LANG;
-}
 
 interface AppearancePageProps {
   theme: ThemePreference;

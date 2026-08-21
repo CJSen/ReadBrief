@@ -13,6 +13,7 @@ import {
   findBuiltinPrompt,
   BUILTIN_PROMPTS,
 } from "../prompts/builtins";
+import { isSummaryLang, summaryLangLabel, langInstruction } from "../prompts/languages";
 
 export type FloatState = "idle" | "streaming" | "done" | "error";
 
@@ -65,11 +66,14 @@ function parseOutput(
   return { title, body: body || text };
 }
 
-/** 解析总结输出语言:system = 跟随界面语言 */
-function resolveSummaryLang(cfg: AppConfig | null): "zh" | "en" {
-  const lang = cfg?.summaryLanguage ?? "system";
-  if (lang === "zh" || lang === "en") return lang;
-  return getLanguage() === "en" ? "en" : "zh";
+/**
+ * 解析输出语言 code(「输出语言」设置):
+ * 非法/缺失时保留「跟随界面语言」的隐式行为 —— 界面英文 → en,否则 zh-CN。
+ */
+function resolveSummaryLang(cfg: AppConfig | null): string {
+  const lang = cfg?.summaryLanguage;
+  if (isSummaryLang(lang)) return lang;
+  return getLanguage() === "en" ? "en" : "zh-CN";
 }
 
 export interface SummarySession {
@@ -140,22 +144,32 @@ export function useSummarySession(
     const prompt = promptIdRef.current
       ? (findBuiltinPrompt(promptIdRef.current) ?? userPrompts.find((p) => p.id === promptIdRef.current))
       : fallbackList[0];
-    const lang = resolveSummaryLang(cfgRef.current);
+    // 界面语言 → 决定角色/格式规则文本用中文还是英文书写(规则只谈格式、不谈语言)
+    const uiLang: "zh" | "en" = getLanguage() === "en" ? "en" : "zh";
+    // 输出语言设置 → 决定注入的语言指令 / {{language}} 替换值(非法时跟随界面语言)
+    const outLang = resolveSummaryLang(cfgRef.current);
     // 按提示词类别取格式规则:summary 沿用原总结规则;translate/qa 用各自带标题前缀的规则;
     // general 无规则(空串),仅保留角色基线。修复「隐藏系统提示词把一切强转总结」的问题。
     const tag: PromptTag = (prompt?.tag as PromptTag) ?? "summary";
-    const role = getRole(tag, lang);
-    const rule = getFormatRule(tag, lang);
-    const system = rule ? `${role}\n\n${rule}` : role;
-    // name 始终取提示词名称;仅极端无提示词时才回退「要点总结」
-    const name = prompt?.name ?? (lang === "en" ? "Summary" : "要点总结");
+    const role = getRole(tag, uiLang);
+    const rule = getFormatRule(tag, uiLang);
+    let system = rule ? `${role}\n\n${rule}` : role;
+    // 语言指令注入:翻译场景豁免 —— 翻译目标语言由提示词里的 {{language}} 表达,
+    // 避免与提示词(如「翻译为英文」)冲突;总结/问答/通用由设置全局约束输出语言。
+    if (tag !== "translate") {
+      const instr = langInstruction(outLang);
+      if (instr) system = `${system}\n\n${instr}`;
+    }
+    // name 始终取提示词名称;仅极端无提示词时才回退「要点总结」(按界面语言)
+    const name = prompt?.name ?? (uiLang === "en" ? "Summary" : "要点总结");
     if (prompt?.content) {
       // 提示词含 {{text}} 占位符则替换为包裹文本;不含则把原文以分隔符附在其后,避免丢失且防注入
       const user =
         prompt.content.indexOf("{{text}}") >= 0
           ? prompt.content.replace(/\{\{text\}\}/g, wrapText(text))
           : `${prompt.content}\n\n${wrapText(text)}`;
-      return { system, user, name, tag };
+      // {{language}} 无条件替换为输出语言全名(内置翻译提示词;自定义提示词也可引用)
+      return { system, user: user.replace(/\{\{language\}\}/g, summaryLangLabel(outLang)), name, tag };
     }
     // 无 content(极少见):仍用提示词名称,保证浮窗标题/历史 promptName 显示一致,不悬空成「要点总结」
     return { system, user: wrapText(text), name, tag };
@@ -355,8 +369,7 @@ export function useSummarySession(
     const prompt = id
       ? findBuiltinPrompt(id) ?? userPrompts.find((p) => p.id === id)
       : fallbackList[0];
-    const lang = resolveSummaryLang(cfgRef.current);
-    setPromptName(prompt?.name ?? (lang === "en" ? "Summary" : "要点总结"));
+    setPromptName(prompt?.name ?? (getLanguage() === "en" ? "Summary" : "要点总结"));
   }, [cfgRef]);
 
   const setServiceId = useCallback((serviceId: string | null) => {
