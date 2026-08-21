@@ -134,6 +134,12 @@
   color: var(--rb-text-tertiary);
 }
 
+/* 未授权辅助功能的警告态:红色高亮,强提示用户去授权 */
+.rb-region-warn {
+  color: var(--rb-error);
+  font-weight: var(--rb-weight-medium);
+}
+
 /* 下半段 AI 输出区:内容区滚动 + 操作栏沉底 */
 .rb-float-output {
   flex: 1;

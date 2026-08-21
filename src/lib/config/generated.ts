@@ -16,4 +16,4 @@ isBuiltin: boolean,
  */
 tag: string, };
 
-export type ShortcutConfig = { id: string, accelerator: string, promptId?: string | null, action: string, name?: string | null, description?: string | null, isDefault: boolean, model?: string | null, };
+export type ShortcutConfig = { id: string, accelerator: string, promptId?: string | null, action: string, name?: string | null, description?: string | null, isDefault: boolean, model?: string | null, serviceId?: string | null, };

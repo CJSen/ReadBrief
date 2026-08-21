@@ -91,8 +91,8 @@ export interface SummarySession {
   switchPrompt: (currentInput: string) => void;
   /** 由捕获事件设置本次会话使用的提示词 id */
   setPromptId: (id: string | null) => void;
-  /** 由捕获事件设置本次会话使用的模型(快捷键绑定;为空则用默认服务模型) */
-  setModelId: (model: string | null) => void;
+  /** 由捕获事件设置本次会话使用的 AI 服务 id(快捷键引用式绑定;为空则用默认服务) */
+  setServiceId: (serviceId: string | null) => void;
   /** 当前生效提示词名称(供浮窗标题栏/历史展示) */
   promptName: string;
 }
@@ -123,7 +123,10 @@ export function useSummarySession(
   const abortRef = useRef<AbortController | null>(null);
   const outputRef = useRef("");
   const promptIdRef = useRef<string | null>(null);
-  const modelRef = useRef<string | null>(null);
+  /** 当前生效 AI 服务 id(快捷键引用式绑定;为空则用默认服务) */
+  const serviceIdRef = useRef<string | null>(null);
+  /** 运行期解析出的服务模型(供 run 设置请求模型 / saveHistory 落库,二者保持一致) */
+  const serviceModelRef = useRef<string>("");
   /** historyId 的可变镜像:供 run/saveHistory 在流式期间读取原记录 id(重新生成替换用),避免闭包过期 */
   const historyIdRef = useRef<number | null>(null);
 
@@ -172,7 +175,11 @@ export function useSummarySession(
     ) => {
       try {
         const { title, body } = parseOutput(summary, meta.tag, meta.name);
-        const model = cfgRef.current ? getDefaultService(cfgRef.current).model : "";
+        // 落库模型 = 运行期解析出的服务模型(快捷键引用的服务决定;未绑定服务则用默认服务),
+        // 与 run() 中 config.model = service.model 保持一致,避免历史库与请求模型不一致
+        const model =
+          serviceModelRef.current ||
+          (cfgRef.current ? getDefaultService(cfgRef.current).model : "");
         const promptName = meta.name;
         if (replaceId != null) {
           await invoke("history_update_summary", {
@@ -229,11 +236,11 @@ export function useSummarySession(
         : cfgRef.current
           ? [cfgRef.current.api]
           : [];
-      // 快捷键绑定模型时:优先在服务列表中按模型匹配,保证该模型所在服务的协议/密钥正确;
-      // 未命中或未绑定时回退默认服务
+      // 快捷键绑定 AI 服务(引用式):按其 id 解析该服务的协议/密钥/模型;
+      // 未绑定或绑定服务已删除时回退默认服务(改 AI 服务配置后快捷键自动跟随)
       const service =
-        (modelRef.current
-          ? services.find((s) => s.model === modelRef.current)
+        (serviceIdRef.current
+          ? services.find((s) => s.id === serviceIdRef.current)
           : undefined) ??
         (cfgRef.current ? getDefaultService(cfgRef.current) : null);
       if (!service?.apiKey || !text.trim()) return;
@@ -253,9 +260,10 @@ export function useSummarySession(
         type: service.protocol as ProviderType,
         apiKey: service.apiKey,
         baseUrl: service.baseUrl,
-        // 快捷键绑定模型优先;未绑定用服务默认模型
-        model: modelRef.current || service.model,
+        model: service.model,
       };
+      // 解析出的服务模型同步给 serviceModelRef,供 saveHistory 落库(二者保持一致)
+      serviceModelRef.current = service.model;
 
       try {
         // 本次会话是否已失败:流中 error 事件后即使再收到 done 也绝不落库
@@ -340,10 +348,19 @@ export function useSummarySession(
 
   const setPromptId = useCallback((id: string | null) => {
     promptIdRef.current = id;
-  }, []);
+    // 捕获即确定本次会话的提示词名(供标题栏即时展示),与 run() 中 resolvePrompt 的回退规则一致:
+    // 带 promptId 取对应提示词,否则取默认提示词(用户提示词优先,内置兜底)。
+    const userPrompts = cfgRef.current?.prompts ?? [];
+    const fallbackList = [...userPrompts, ...BUILTIN_PROMPTS];
+    const prompt = id
+      ? findBuiltinPrompt(id) ?? userPrompts.find((p) => p.id === id)
+      : fallbackList[0];
+    const lang = resolveSummaryLang(cfgRef.current);
+    setPromptName(prompt?.name ?? (lang === "en" ? "Summary" : "要点总结"));
+  }, [cfgRef]);
 
-  const setModelId = useCallback((model: string | null) => {
-    modelRef.current = model;
+  const setServiceId = useCallback((serviceId: string | null) => {
+    serviceIdRef.current = serviceId;
   }, []);
 
   const reset = useCallback(() => {
@@ -359,7 +376,7 @@ export function useSummarySession(
     historyIdRef.current = null;
     setHistoryId(null);
     promptIdRef.current = null;
-    modelRef.current = null;
+    serviceIdRef.current = null;
     setPromptName("");
   }, []);
 
@@ -376,7 +393,7 @@ export function useSummarySession(
     outputRef,
     switchPrompt,
     setPromptId,
-    setModelId,
+    setServiceId,
     promptName,
   };
 }

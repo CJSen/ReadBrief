@@ -11,9 +11,9 @@ pub struct ShortcutBinding {
     pub accelerator: String,
     pub action: String,
     pub prompt_id: Option<String>,
-    /// 快捷键绑定的模型(与 ShortcutConfig.model 一致)
+    /// 快捷键绑定的 AI 服务 id(引用式,与 ShortcutConfig.service_id 一致)
     #[serde(default)]
-    pub model: Option<String>,
+    pub service_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -22,9 +22,9 @@ pub struct CapturedText {
     pub text: String,
     pub source: String,
     pub prompt_id: Option<String>,
-    /// 触发该次总结的快捷键绑定的模型(模型由快捷键决定,而非提示词)
+    /// 触发该次总结的快捷键绑定的 AI 服务 id(服务由快捷键决定,模型从服务解析)
     #[serde(default)]
-    pub model: Option<String>,
+    pub service_id: Option<String>,
 }
 
 /// 已注册的快捷键列表(用于热更新前 unregister)
@@ -63,9 +63,10 @@ pub fn float_mark_ready(app: tauri::AppHandle) -> AppResult<()> {
 /// 空捕获(无选中文本)不上报 —— 浮窗弹出后 ReadBrief 自身成为前台应用,
 /// 若快捷键再次触发,AX 读到的是浮窗自身(必然为空),上报会清空输入区已有内容。
 pub fn dispatch_capture(app: &tauri::AppHandle, captured: CapturedText) {
-    if captured.text.trim().is_empty() {
-        return;
-    }
+    // 注意:空文本(unauthorized/empty)也要上报。前端依据 source 展示「未授权辅助功能」引导或
+    // 「未捕获到选中文本」提示;且前端已对空文本跳过 setInput/run(不会清空已有输入)。
+    // 若在此处提前 return,unauthorized 事件丢失:浮窗既无授权引导,标题又回退成「要点总结」,
+    // 与授权后行为不一致。
     if FLOAT_READY.load(Ordering::SeqCst) {
         let _ = app.emit("capture-result", captured);
     } else if let Ok(mut pending) = PENDING_CAPTURE.lock() {
@@ -123,16 +124,16 @@ pub fn reload_shortcuts(app: &tauri::AppHandle) -> AppResult<()> {
                 s.accelerator.clone(),
                 s.action.clone(),
                 s.prompt_id.clone(),
-                s.model.clone(),
+                s.service_id.clone(),
             )
         })
         .collect();
 
     // 3. 注册(非法快捷键跳过并打印警告，不阻塞应用启动)
-    for (accelerator, action, prompt_id, model) in bindings {
+    for (accelerator, action, prompt_id, service_id) in bindings {
         let action_c = action.clone();
         let prompt_id_c = prompt_id.clone();
-        let model_c = model.clone();
+        let service_id_c = service_id.clone();
         match app.global_shortcut().on_shortcut(accelerator.as_str(), move |app, _shortcut, event| {
             // 插件对「按下 + 抬起」各回调一次(global-hotkey HotKeyState),
             // 只响应按下 —— 否则 capture/show_overlay/emit 全流程执行两遍,
@@ -140,7 +141,7 @@ pub fn reload_shortcuts(app: &tauri::AppHandle) -> AppResult<()> {
             if event.state != tauri_plugin_global_shortcut::ShortcutState::Pressed {
                 return;
             }
-            handle_trigger(app.clone(), action_c.clone(), prompt_id_c.clone(), model_c.clone());
+            handle_trigger(app.clone(), action_c.clone(), prompt_id_c.clone(), service_id_c.clone());
         }) {
             Ok(()) => registered.push(accelerator),
             Err(e) => {
@@ -151,7 +152,7 @@ pub fn reload_shortcuts(app: &tauri::AppHandle) -> AppResult<()> {
     Ok(())
 }
 
-fn handle_trigger(app: tauri::AppHandle, action: String, prompt_id: Option<String>, model: Option<String>) {
+fn handle_trigger(app: tauri::AppHandle, action: String, prompt_id: Option<String>, service_id: Option<String>) {
     match action.as_str() {
         // 划词总结 / 呼出输入框:通过 Accessibility 捕获选中文本(纯 AX,暂不回退剪贴板)
         "summarize" | "paste" => {
@@ -165,7 +166,10 @@ fn handle_trigger(app: tauri::AppHandle, action: String, prompt_id: Option<Strin
             // 预捕获鼠标位置:在 capture_selection(耗时 AX 读取)之前采集,
             // 避免到 show_overlay 主线程执行时鼠标已移动 → 浮窗跟随鼠标。
             crate::native::stash_cursor_position();
-            let captured = capture_selection(app.clone());
+            let mut captured = capture_selection(app.clone());
+            // 快捷键若绑定了 AI 服务(引用式),经此分支带到前端,
+            // 前端按 service_id 解析出该服务的模型/密钥,改服务配置即自动跟随。
+            captured.service_id = service_id;
             crate::windows::show_float(&app);
             if !was_visible {
                 let _ = app.emit("float-shown", ());
@@ -190,7 +194,7 @@ fn handle_trigger(app: tauri::AppHandle, action: String, prompt_id: Option<Strin
             let captured = capture_selection(app.clone());
             let mut with_prompt = captured;
             with_prompt.prompt_id = prompt_id;
-            with_prompt.model = model;
+            with_prompt.service_id = service_id;
             crate::windows::show_float(&app);
             if !was_visible {
                 let _ = app.emit("float-shown", ());
@@ -217,7 +221,7 @@ fn capture_selection(app: tauri::AppHandle) -> CapturedText {
                 text: String::new(),
                 source: "unauthorized".to_string(),
                 prompt_id: None,
-                model: None,
+                service_id: None,
             };
         }
         let text = read_selection_text().unwrap_or_default();
@@ -226,7 +230,7 @@ fn capture_selection(app: tauri::AppHandle) -> CapturedText {
                 text,
                 source: "selection".to_string(),
                 prompt_id: None,
-                model: None,
+                service_id: None,
             };
         }
         // 无选中文本:输入区留空,由用户手动粘贴或输入
@@ -234,7 +238,7 @@ fn capture_selection(app: tauri::AppHandle) -> CapturedText {
             text: String::new(),
             source: "empty".to_string(),
             prompt_id: None,
-            model: None,
+            service_id: None,
         }
     }
     #[cfg(not(target_os = "macos"))]
@@ -244,7 +248,7 @@ fn capture_selection(app: tauri::AppHandle) -> CapturedText {
             text: String::new(),
             source: "empty".to_string(),
             prompt_id: None,
-            model: None,
+            service_id: None,
         }
     }
 }
@@ -312,7 +316,7 @@ pub fn shortcut_get_bindings() -> AppResult<Vec<ShortcutBinding>> {
             accelerator: s.accelerator.clone(),
             action: s.action.clone(),
             prompt_id: s.prompt_id.clone(),
-            model: s.model.clone(),
+            service_id: s.service_id.clone(),
         })
         .collect();
     Ok(bindings)

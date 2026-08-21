@@ -73,11 +73,11 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
     [cfg.prompts],
   );
 
-  /* AI 服务模型列表(来自已配置的服务) */
-  const models = useMemo(() => {
-    const services = cfg.services?.length ? cfg.services : [cfg.api];
-    return services.map((s) => ({
-      value: s.model,
+  /* AI 服务列表(供快捷键「选择 AI 服务」下拉;引用式绑定,模型由服务决定) */
+  const services = useMemo(() => {
+    const list = cfg.services?.length ? cfg.services : [cfg.api];
+    return list.map((s) => ({
+      value: s.id ?? "",
       label: `${s.name || s.protocol} · ${s.model}`,
     }));
   }, [cfg]);
@@ -104,7 +104,7 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
         noPrompt: bi.noPrompt ?? false,
         accelerator: sc?.accelerator ?? "",
         promptId: sc?.promptId ?? BUILTIN_DEFAULT_PROMPT[bi.id] ?? null,
-        model: sc?.model ?? "",
+        serviceId: sc?.serviceId ?? "",
         isDefault: true,
       };
     });
@@ -119,7 +119,7 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
         noPrompt: false,
         accelerator: s.accelerator ?? "",
         promptId: s.promptId ?? "builtin-summarize",
-        model: s.model ?? "",
+        serviceId: s.serviceId ?? "",
         isDefault: false,
       }));
     return [...builtin, ...custom];
@@ -231,7 +231,7 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
       accelerator: live,
       action: promptId ? "prompt" : (item?.action ?? "summarize"),
       promptId,
-      model: existing?.model,
+      serviceId: existing?.serviceId,
       name: item?.name,
       description: item?.desc,
       isDefault: item?.isDefault ?? false,
@@ -271,7 +271,7 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
       accelerator: "",
       action: existing.action ?? item?.action ?? "summarize",
       promptId: existing.promptId ?? item?.promptId ?? null,
-      model: existing.model,
+      serviceId: existing.serviceId,
       name: item?.name,
       description: item?.desc,
       isDefault: item?.isDefault ?? false,
@@ -287,7 +287,7 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
       accelerator: existing?.accelerator ?? "",
       action: promptId ? "prompt" : (item?.action ?? "summarize"),
       promptId,
-      model: existing?.model,
+      serviceId: existing?.serviceId,
       name: item?.name,
       description: item?.desc,
       isDefault: item?.isDefault ?? false,
@@ -299,7 +299,7 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
     );
   }
 
-  function handleModelChange(id: string, model: string) {
+  function handleServiceChange(id: string, serviceId: string) {
     const existing = shortcuts.find((s) => s.id === id);
     const item = items.find((it) => it.id === id);
     const promptId = existing?.promptId ?? item?.promptId ?? null;
@@ -308,7 +308,7 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
       accelerator: existing?.accelerator ?? "",
       action: promptId ? "prompt" : (existing?.action ?? item?.action ?? "summarize"),
       promptId,
-      model: model || undefined,
+      serviceId: serviceId || undefined,
       name: item?.name,
       description: item?.desc,
       isDefault: item?.isDefault ?? false,
@@ -508,17 +508,17 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
                         ))}
                       </select>
 
-                      {/* AI 服务模型下拉 */}
-                      {models.length > 0 ? (
+                      {/* AI 服务下拉(引用式:选服务即选其模型,改服务配置后快捷键自动跟随) */}
+                      {services.length > 0 ? (
                         <select
                           className="rb-sc-prompt-select rb-sc-model-select"
-                          value={item.model ?? ""}
-                          onChange={(e) => handleModelChange(item.id, e.target.value)}
+                          value={item.serviceId ?? ""}
+                          onChange={(e) => handleServiceChange(item.id, e.target.value)}
                         >
-                          <option value="">默认模型</option>
-                          {models.map((m) => (
-                            <option key={m.value} value={m.value}>
-                              {m.label}
+                          <option value="">默认服务</option>
+                          {services.map((s) => (
+                            <option key={s.value} value={s.value}>
+                              {s.label}
                             </option>
                           ))}
                         </select>

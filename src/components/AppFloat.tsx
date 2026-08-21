@@ -12,7 +12,7 @@ interface CaptureResult {
   text: string;
   source: string;
   promptId?: string | null;
-  model?: string | null;
+  serviceId?: string | null;
 }
 
 interface TagDef {
@@ -53,6 +53,8 @@ function tagTextColor(color: string): string {
 
 export function AppFloat() {
   const [capture, setCapture] = useState<CaptureResult | null>(null);
+  /** 浮窗内「去授权」进行中:禁用按钮并显示「检测中…」,防止重复点击(对齐 Onboarding/设置) */
+  const [authInProgress, setAuthInProgress] = useState(false);
   const [input, setInput] = useState("");
   const [copied, setCopied] = useState(false);
   const [pinned, setPinned] = useState(false);
@@ -67,8 +69,8 @@ export function AppFloat() {
   const [pickerInput, setPickerInput] = useState("");
   const [tagSearch, setTagSearch] = useState("");
   const [currentTags, setCurrentTags] = useState<string[]>([]);
-  /** 本次会话实际绑定的模型(来自快捷键/捕获);为空表示用默认服务模型。用于标题栏展示「实际将使用的模型」 */
-  const [boundModel, setBoundModel] = useState<string | null>(null);
+  /** 本次会话实际绑定的 AI 服务 id(来自快捷键/捕获);为空表示用默认服务。用于按引用解析模型 */
+  const [boundServiceId, setBoundServiceId] = useState<string | null>(null);
   /** 思考过程折叠:done 且存在思考内容时,点击展开/收起本次会话的思考内容 */
   const [showReasoning, setShowReasoning] = useState(false);
   const pickerInputRef = useRef<HTMLInputElement>(null);
@@ -88,9 +90,15 @@ export function AppFloat() {
     reset: resetSession,
     outputRef,
     setPromptId,
-    setModelId,
+    setServiceId,
     promptName,
   } = useSummarySession(cfgRef);
+
+  /** 派生:按绑定服务 id 解析出的实际模型(改 AI 服务配置后自动跟随);未绑定回退默认服务模型 */
+  const boundModel =
+    boundServiceId && cfg
+      ? (cfg.services?.find((s) => s.id === boundServiceId)?.model ?? getDefaultService(cfg).model)
+      : (cfg ? getDefaultService(cfg).model : "");
 
   // 思考内容流式追加 → 滚到最新(overflow hidden 仍可编程式 scrollTop,无滚动条视觉噪音)
   useEffect(() => {
@@ -176,6 +184,33 @@ export function AppFloat() {
     void runSummary(inputRef.current, { replace: true });
   }, [runSummary]);
 
+  // 浮窗内「去授权」:对齐 Onboarding 的辅助功能授权流程。
+  // macOS 原生弹窗一生只弹一次,弹过/被拒后要回退到系统设置面板,否则点按钮像"没反应"。
+  const grantAccessibility = useCallback(async () => {
+    setAuthInProgress(true);
+    try {
+      // 首次会弹系统原生授权窗;之后(用户取消/曾拒绝)不再弹,需走 open_privacy_settings 兜底
+      await invoke("request_accessibility");
+      let ok = false;
+      for (let i = 0; i < 4; i++) {
+        await new Promise((r) => setTimeout(r, 500));
+        ok = await invoke<boolean>("accessibility_status").catch(() => false);
+        if (ok) break;
+      }
+      if (ok) {
+        // 授权成功:清掉 unauthorized 态(红条+按钮消失),用户重新划词即可正常捕获
+        setCapture((c) => (c && c.source === "unauthorized" ? { ...c, source: "empty" } : c));
+        return;
+      }
+      // 未授权:打开系统设置 → 隐私与安全性 → 辅助功能,引导手动开启
+      await invoke("open_privacy_settings", { kind: "accessibility" }).catch(() => {});
+    } catch {
+      await invoke("open_privacy_settings", { kind: "accessibility" }).catch(() => {});
+    } finally {
+      setAuthInProgress(false);
+    }
+  }, []);
+
   // 确保当前总结已落库,返回 historyId(收藏/打标签共用;停止后未落库时先手动保存)
   const ensureHistory = useCallback(async (): Promise<number | null> => {
     if (historyId != null) return historyId;
@@ -186,14 +221,15 @@ export function AppFloat() {
         summary: outputRef.current,
         // 与 useSummarySession.parseOutput 的 summary 分支一致(停止后未走自动落库时的兜底):标题取首行、全量保留不截断
         aiTitle: outputRef.current.split("\n")[0]?.trim() || "总结",
-        model: cfgRef.current ? getDefaultService(cfgRef.current).model : "",
+        // 与 useSummarySession.saveHistory 对齐:落库模型 = 本次快捷键绑定模型(未绑定回退默认服务)
+        model: boundModel || (cfgRef.current ? getDefaultService(cfgRef.current).model : ""),
         promptName: "",
         tags: [],
       });
     } catch {
       return null;
     }
-  }, [historyId, outputRef, inputRef, cfgRef]);
+  }, [historyId, outputRef, inputRef, cfgRef, boundModel]);
 
   // 收藏:真实写入历史收藏标记,并用返回值同步本地状态(图标即时切换)
   const handleFavorite = useCallback(async () => {
@@ -288,7 +324,7 @@ export function AppFloat() {
       setIsFavorite(false);
       setElapsed(0);
       setCurrentTags([]);
-      setBoundModel(null);
+      setBoundServiceId(null);
       setShowReasoning(false);
       setPickerOpen(false);
       setPickerInput("");
@@ -298,8 +334,8 @@ export function AppFloat() {
     const unlistenCapture = listen<CaptureResult>("capture-result", (event) => {
       setCapture(event.payload);
       setPromptId(event.payload.promptId ?? null);
-      setModelId(event.payload.model ?? null);
-      setBoundModel(event.payload.model ?? null);
+      setServiceId(event.payload.serviceId ?? null);
+      setBoundServiceId(event.payload.serviceId ?? null);
       // 空捕获不清空已有输入:浮窗弹出后自身成为前台应用,AX 可能读到空文本
       // (双保险,配合 Rust 侧 dispatch_capture 的空文本过滤)
       // 未捕获到任何有效文本(含纯空白)时绝不调用大模型接口
@@ -367,7 +403,7 @@ export function AppFloat() {
       window.removeEventListener("keydown", keyHandler);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runSummary, handleEsc, resetSession, setPromptId, setModelId]);
+  }, [runSummary, handleEsc, resetSession, setPromptId, setServiceId]);
 
   const errorKey =
     error?.type === "auth"
@@ -387,7 +423,7 @@ export function AppFloat() {
   // 标题栏展示的「使用模型」= 本次会话实际将调用的模型:
   // 快捷键绑定了具体模型优先(如绑定到某服务的特定模型),否则用当前默认服务模型。
   // cfg 经 config-changed 实时同步,改 AI 服务后立即反映最新默认模型,避免显示陈旧模型。
-  const displayModel = boundModel || (cfg ? getDefaultService(cfg).model : "") || "";
+  const displayModel = boundModel || "未配置模型";
 
   // 捕获模式标签:selection=划词 / clipboard=托盘粘贴 / history=历史重新生成 / empty=未捕获
   const captureMode =
@@ -463,7 +499,7 @@ export function AppFloat() {
             }}
           />
           <div className="rb-input-row">
-            <span className="rb-region-min">
+            <span className={`rb-region-min${capture?.source === "unauthorized" ? " rb-region-warn" : ""}`}>
               {capture?.source === "unauthorized"
                 ? "未授权辅助功能 · 划词捕获不可用"
                 : capture?.source === "empty"
@@ -475,9 +511,10 @@ export function AppFloat() {
             {capture?.source === "unauthorized" ? (
               <button
                 className="btn btn-sm btn-ghost"
-                onClick={() => void invoke("request_accessibility")}
+                onClick={() => void grantAccessibility()}
+                disabled={authInProgress}
               >
-                去授权
+                {authInProgress ? "检测中…" : "去授权"}
               </button>
             ) : null}
             <button className="btn btn-sm btn-primary" onClick={handleSubmit} disabled={!input.trim()}>

@@ -63,6 +63,12 @@ pub struct ShortcutConfig {
     #[serde(default)]
     #[ts(optional = nullable)]
     pub model: Option<String>,
+    /// 快捷键绑定的 AI 服务 id(引用式):模型/密钥/协议均从该服务解析,
+    /// 改 AI 服务配置后快捷键自动跟随,无需任何回写逻辑。
+    /// 旧 `model` 字段为迁移遗留,已不再使用(迁移后清空)。
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub service_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -159,6 +165,7 @@ fn default_shortcuts() -> Vec<ShortcutConfig> {
             description: Some("选中文本后触发内置总结提示词".to_string()),
             is_default: true,
             model: None,
+            service_id: None,
         },
         ShortcutConfig {
             id: "open-main".to_string(),
@@ -169,6 +176,7 @@ fn default_shortcuts() -> Vec<ShortcutConfig> {
             description: Some("显示并聚焦 ReadBrief 主窗口".to_string()),
             is_default: true,
             model: None,
+            service_id: None,
         },
         ShortcutConfig {
             id: "paste".to_string(),
@@ -179,6 +187,7 @@ fn default_shortcuts() -> Vec<ShortcutConfig> {
             description: Some("粘贴任意文本进行问答".to_string()),
             is_default: true,
             model: None,
+            service_id: None,
         },
         ShortcutConfig {
             id: "translate".to_string(),
@@ -189,6 +198,7 @@ fn default_shortcuts() -> Vec<ShortcutConfig> {
             description: Some("翻译后总结选中内容".to_string()),
             is_default: true,
             model: None,
+            service_id: None,
         },
     ]
 }
@@ -344,6 +354,28 @@ pub fn parse_config(content: &str) -> AppConfig {
             s.prompt_id = Some("builtin-qa".to_string());
         }
     }
+
+    // 迁移(service_id):旧设计把 model 字符串直接复制进快捷键,导致改 AI 服务后快捷键仍走旧 model。
+    // 改为引用式 service_id —— 按旧 model 反查所属服务回填 service_id,并清空遗留 model 字段
+    // (此后快捷键不再存 model 副本,改服务配置自动跟随,无需回写)。
+    for s in cfg.shortcuts.iter_mut() {
+        if s.service_id.is_none() {
+            let mut found: Option<Option<String>> = None;
+            if let Some(old_model) = s.model.clone() {
+                found = cfg
+                    .services
+                    .iter()
+                    .find(|sv| sv.model == old_model)
+                    .map(|sv| sv.id.clone());
+                if found.is_none() && cfg.api.model == old_model {
+                    found = Some(cfg.api.id.clone());
+                }
+            }
+            s.service_id = found.flatten();
+            s.model = None;
+        }
+    }
+
     cfg
 }
 

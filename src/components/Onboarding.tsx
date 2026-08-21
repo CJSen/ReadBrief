@@ -218,7 +218,7 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
     try {
       await invoke("request_accessibility");
       let ok = false;
-      for (let i = 0; i < 12; i++) {
+      for (let i = 0; i < 4; i++) {
         await new Promise((r) => setTimeout(r, 500));
         ok = await invoke<boolean>("accessibility_status").catch(() => false);
         setAccessibility(ok);
@@ -239,7 +239,7 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
     try {
       await invoke("request_screen_recording");
       let ok = false;
-      for (let i = 0; i < 12; i++) {
+      for (let i = 0; i < 4; i++) {
         await new Promise((r) => setTimeout(r, 500));
         ok = await invoke<boolean>("screen_recording_status").catch(() => false);
         setScreenRecording(ok);
