@@ -2600,13 +2600,6 @@
   color: var(--rb-text-tertiary);
 }
 
-.rb-font-pct {
-  font-size: 12px;
-  color: var(--rb-text-secondary);
-  min-width: 36px;
-  text-align: center;
-}
-
 .rb-about-logo {
   margin: 0 auto 11px;
 }
@@ -2825,8 +2818,18 @@
 }
 
 /* ============================================================
-   字体缩放覆盖(设置中心「外观与语言」A-/A+)
+   字体缩放覆盖(设置中心「外观与语言」字体大小五档)
    ============================================================ */
+.font-xs {
+  --rb-text-2xs: 9px;
+  --rb-text-xs: 10px;
+  --rb-text-sm: 10px;
+  --rb-text-md: 11px;
+  --rb-text-lg: 12px;
+  --rb-text-xl: 13px;
+  --rb-text-2xl: 14px;
+}
+
 .font-sm {
   --rb-text-2xs: 10px;
   --rb-text-xs: 11px;
@@ -2845,6 +2848,16 @@
   --rb-text-lg: 16px;
   --rb-text-xl: 18px;
   --rb-text-2xl: 20px;
+}
+
+.font-xl {
+  --rb-text-2xs: 13px;
+  --rb-text-xs: 14px;
+  --rb-text-sm: 16px;
+  --rb-text-md: 17px;
+  --rb-text-lg: 18px;
+  --rb-text-xl: 19px;
+  --rb-text-2xl: 22px;
 }
 
 /* 浮窗捕获来源模式标签(划词 / 剪贴板 / 历史) */

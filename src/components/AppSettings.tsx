@@ -27,6 +27,9 @@ type SettingsSection =
   | "subscription"
   | "about";
 
+/** 字体大小五档(设置中心「外观与语言」) */
+const FONT_SCALES = [0.8, 0.9, 1.0, 1.1, 1.2];
+
 const NAV_ITEMS: Array<{ id: SettingsSection; icon: string; pro?: boolean }> = [
   { id: "general", icon: "tag" },
   { id: "ai", icon: "globe" },
@@ -452,7 +455,6 @@ function AppearancePage({
   onFontScale,
 }: AppearancePageProps) {
   const scale = cfg.fontScale ?? 1.0;
-  const pct = Math.round(scale * 100);
   const summaryLang = normalizeSummaryLang(cfg.summaryLanguage);
   const [langMenuOpen, setLangMenuOpen] = useState(false);
   const langMenuRef = useRef<HTMLDivElement>(null);
@@ -475,11 +477,6 @@ function AppearancePage({
       window.removeEventListener("keydown", onKey);
     };
   }, [langMenuOpen]);
-
-  function shiftFont(delta: number) {
-    const next = Math.min(1.2, Math.max(0.9, Math.round((scale + delta) * 10) / 10));
-    onFontScale(next);
-  }
 
   return (
     <div>
@@ -509,14 +506,12 @@ function AppearancePage({
             <div className="set-row-t">{t("settings.fontSize")}</div>
             <div className="set-row-d">{t("settings.fontSizeDesc")}</div>
           </div>
-          <div className="flex ac g8">
-            <button className="iconbtn" onClick={() => shiftFont(-0.1)} disabled={scale <= 0.9}>
-              <Icon name="minus" size={14} />
-            </button>
-            <span className="mono rb-font-pct">{pct}%</span>
-            <button className="iconbtn" onClick={() => shiftFont(0.1)} disabled={scale >= 1.2}>
-              <Icon name="plus" size={14} />
-            </button>
+          <div className="seg">
+            {FONT_SCALES.map((s) => (
+              <span key={s} className={scale === s ? "on" : ""} onClick={() => onFontScale(s)}>
+                {Math.round(s * 100)}%
+              </span>
+            ))}
           </div>
         </div>
       </div>
