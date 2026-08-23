@@ -368,10 +368,14 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
       onboardingStep: undefined,
       launchOnStart,
     };
-    // 同步开机启动到系统 LaunchAgent:无条件按最终值写入。
-    // 此前仅在「与 cfg 不一致」时才写,但全新安装 cfg 默认 true 而系统 LaunchAgent 尚未注册,
-    // 两者相同导致跳过写入 → 引导里显示「开」实际系统并未自启。无条件写入(幂等)保证一致。
-    await invoke("autostart_set", { enabled: launchOnStart }).catch(() => {});
+    // 同步开机启动到系统 LaunchAgent:仅当系统真实状态与目标不一致时才写。
+    // 此前无条件写入,看似幂等,但 OS 层面重复 enable 会重新 load LaunchAgent,
+    // 触发 macOS「登录项」通知;且同一次引导内若拨过开关(toggle 已写过一次)会重复弹。
+    // 比对「系统真实状态」而非 cfg:保证「引导显示开但系统未注册」时仍会写入,已一致则跳过。
+    const sysEnabled = await invoke<boolean>("autostart_status").catch(() => launchOnStart);
+    if (sysEnabled !== launchOnStart) {
+      await invoke("autostart_set", { enabled: launchOnStart }).catch(() => {});
+    }
     // 步骤3 快捷键若已改则落库
     if (shortcutAccel !== defaultAccel) {
       const shortcuts = (base.shortcuts ?? []).map((s) =>
