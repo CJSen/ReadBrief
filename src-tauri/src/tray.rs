@@ -120,19 +120,39 @@ pub fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
             _ => {}
         });
 
-    // 状态栏图标:使用新设计的圆形白线 tray 图标(模板模式,系统按菜单栏明暗自动反色)
+    // 状态栏图标:
+    // - macOS: 白线模板图标,由系统按菜单栏明暗自动反色
+    // - Windows/Linux: 品牌彩色图标
     // 编译期嵌入 PNG 并解码为 RGBA,避免 dev/build 资源路径差异
-    let tray_icon = (|| -> Option<tauri::image::Image<'static>> {
-        let bytes = include_bytes!("../icons/tray-iconTemplate@2x.png");
-        let decoder = png::Decoder::new(std::io::Cursor::new(bytes.as_ref()));
+    fn decode_tray_png(bytes: &[u8]) -> Option<tauri::image::Image<'static>> {
+        let decoder = png::Decoder::new(std::io::Cursor::new(bytes));
         let mut reader = decoder.read_info().ok()?;
         let mut buf = vec![0u8; reader.output_buffer_size()];
         let info = reader.next_frame(&mut buf).ok()?;
         buf.truncate(info.buffer_size());
         tauri::image::Image::new_owned(buf, info.width, info.height).into()
-    })();
+    }
+
+    fn tray_icon_data() -> (&'static [u8], bool) {
+        #[cfg(target_os = "macos")]
+        return (
+            include_bytes!("../icons/tray-iconTemplate@2x.png").as_slice(),
+            true,
+        );
+        #[cfg(not(target_os = "macos"))]
+        return (
+            include_bytes!("../icons/tray-iconColorful@2x.png").as_slice(),
+            false,
+        );
+    }
+
+    let (tray_icon_bytes, is_template) = tray_icon_data();
+    let tray_icon = decode_tray_png(tray_icon_bytes);
     if let Some(icon) = tray_icon {
-        builder = builder.icon(icon).icon_as_template(true);
+        builder = builder.icon(icon);
+        if is_template {
+            builder = builder.icon_as_template(true);
+        }
     } else {
         log::warn!("加载托盘图标失败,回退到默认窗口图标");
         if let Some(icon) = app.default_window_icon() {
