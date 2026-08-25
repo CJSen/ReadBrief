@@ -6,6 +6,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, emit } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { t, useLanguage } from "../lib/i18n";
+import { isMac } from "../lib/platform";
 import { Icon } from "./Icon";
 import { LogoMark } from "./LogoMark";
 import { Onboarding } from "./Onboarding";
@@ -895,7 +896,7 @@ export function AppMain() {
           <div className="rb-nav-item" onClick={() => invoke("open_settings")}>
             <Icon name="settings" size={14} />
             {t("update.settings")}
-            <span className="rb-nav-kbd">⌘ + ,</span>
+            <span className="rb-nav-kbd">{isMac() ? "Cmd + ," : "Ctrl + ,"}</span>
           </div>
         </div>
       </aside>

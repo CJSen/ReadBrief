@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AppConfig, ShortcutConfig } from "../lib/config/types";
 import { invoke } from "@tauri-apps/api/core";
 import { BUILTIN_PROMPT_OPTIONS } from "../lib/prompts/builtins";
-import { resolveShortcutKey } from "../lib/shortcutKey";
+import { resolveShortcutKey, keySymbol } from "../lib/shortcutKey";
 import { t, useLanguage } from "../lib/i18n";
 import { Icon } from "./Icon";
 
@@ -19,19 +19,6 @@ const SYSTEM_SHORTCUT_NAMES: Record<string, string> = {
 const MODIFIER_KEYS = new Set(["CONTROL", "SHIFT", "ALT", "META"]);
 /* 录制中应忽略、不计入组合的键 */
 const IGNORE_KEYS = new Set(["CAPSLOCK", "FN", "FUNCTION", "NUMLOCK"]);
-
-/* ═══ 修饰键符号显示(对齐设计稿:⌥⌘⇧⌃) ═══ */
-const MOD_SYMBOLS: Record<string, string> = {
-  CMD: "⌘",
-  CTRL: "⌃",
-  ALT: "⌥",
-  SHIFT: "⇧",
-};
-
-function keySymbol(k: string): string {
-  if (!k || k === " ") return "Space";
-  return MOD_SYMBOLS[k.toUpperCase()] ?? k;
-}
 
 function newScId(): string {
   return `sc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;

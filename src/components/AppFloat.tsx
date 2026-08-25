@@ -6,6 +6,8 @@ import { getDefaultService } from "../lib/config/types";
 import { useConfig } from "../lib/config/useConfig";
 import { useSummarySession } from "../lib/ai/useSummarySession";
 import { t, useLanguage } from "../lib/i18n";
+import { keySymbol } from "../lib/shortcutKey";
+import { isMac } from "../lib/platform";
 import { Button } from "./Button";
 import { Icon } from "./Icon";
 
@@ -81,6 +83,9 @@ export function AppFloat() {
   const thinkingStreamRef = useRef<HTMLDivElement>(null);
 
   const { cfg, ref: cfgRef } = useConfig();
+  const summonAccel =
+    cfg?.shortcuts?.find((s) => s.id === "summarize")?.accelerator ??
+    (isMac() ? "Cmd+Shift+Z" : "Ctrl+Shift+Z");
   const {
     output,
     state,
@@ -590,7 +595,16 @@ export function AppFloat() {
             {captureMode ? (
               <span className="tag tag-brand rb-capture-mode">{captureMode}</span>
             ) : (
-              <span className="rb-region-extra">{t("float.regionHint")}</span>
+              <span className="rb-region-extra">
+                {t("float.regionHint")}
+                {summonAccel ? (
+                  <span style={{ display: "inline-flex", gap: 4, marginLeft: 6, alignItems: "center" }}>
+                    {summonAccel.split("+").map((k, i) => (
+                      <span className="kbd" key={`${k}-${i}`}>{keySymbol(k)}</span>
+                    ))}
+                  </span>
+                ) : null}
+              </span>
             )}
           </div>
 
@@ -753,7 +767,7 @@ export function AppFloat() {
                 <button className="btn btn-sm btn-primary" onClick={handleCopy} disabled={!canCopy}>
                   <Icon name="copy" size={14} />
                   {copied ? t("float.copied") : t("float.copy")}
-                  <span className="rb-action-kbd">⌘C</span>
+                  <span className="rb-action-kbd">{isMac() ? "Cmd C" : "Ctrl C"}</span>
                 </button>
                 <button
                   className="btn btn-sm btn-ghost"

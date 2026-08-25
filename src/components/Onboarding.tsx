@@ -6,7 +6,8 @@ import type { AppConfig, ApiConfig, ProviderType } from "../lib/config/types";
 import { testConnection, listModels } from "../lib/ai/provider";
 import { t } from "../lib/i18n";
 import { Icon, type IconName } from "./Icon";
-import { resolveShortcutKey } from "../lib/shortcutKey";
+import { resolveShortcutKey, keySymbol } from "../lib/shortcutKey";
+import { isMac } from "../lib/platform";
 import "./Onboarding.css";
 
 /* ═══ 步骤定义 ═══ */
@@ -42,22 +43,18 @@ const MODEL_SUGGESTIONS: string[] = ["deepseek-chat", "deepseek-reasoner", "gpt-
 const MODIFIER_KEYS = new Set(["CONTROL", "SHIFT", "ALT", "META"]);
 const IGNORE_KEYS = new Set(["CAPSLOCK", "FN", "FUNCTION", "NUMLOCK"]);
 const SYSTEM_SHORTCUTS = ["Cmd+Space", "Cmd+Tab", "Ctrl+Space"];
+/* 系统快捷键友好名(冲突说明用,复用 ShortcutsPage 的 i18n key) */
 const SYSTEM_SHORTCUT_NAMES: Record<string, string> = {
-  "Cmd+Space": "系统聚焦搜索",
-  "Cmd+Tab": "系统应用切换",
-  "Ctrl+Space": "系统输入法切换",
+  "Cmd+Space": "shortcuts.sysFocusSearch",
+  "Cmd+Tab": "shortcuts.sysAppSwitch",
+  "Ctrl+Space": "shortcuts.sysImeSwitch",
 };
-const MOD_SYMBOLS: Record<string, string> = { CMD: "⌘", CTRL: "⌃", ALT: "⌥", SHIFT: "⇧" };
-function keySymbol(k: string): string {
-  if (!k || k === " ") return "Space";
-  return MOD_SYMBOLS[k.toUpperCase()] ?? k;
-}
 
 /** 将 "Cmd+Shift+Z" 之类的快捷键串渲染为 <kbd> 元素序列 */
 function accelKbds(accel: string): React.ReactNode {
   return accel.split("+").map((k, i) => (
     <span className="kbd" key={`${k}-${i}`}>
-      {MOD_SYMBOLS[k.toUpperCase()] ?? k}
+      {keySymbol(k)}
     </span>
   ));
 }
@@ -329,7 +326,8 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
     setRecording(false);
     setDraft("");
     if (SYSTEM_SHORTCUTS.includes(live)) {
-      setConflict(`与「${SYSTEM_SHORTCUT_NAMES[live] ?? "系统"}」冲突，请改用其他组合`);
+      const sysName = t(SYSTEM_SHORTCUT_NAMES[live] ?? "shortcuts.sysOther");
+      setConflict(t("shortcuts.conflictSystem", { name: sysName }));
       return;
     }
     const other = (cfg.shortcuts ?? []).find((s) => s.id !== "summarize" && s.accelerator === live);
@@ -467,9 +465,9 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
                   <div className="rb-ob-ov-list">
                     {[
                       { label: t("onboarding.shortcutLabel"), accel: shortcutAccel },
-                      { label: t("onboarding.shortcutCopy"), accel: "Cmd+C" },
-                      { label: t("onboarding.shortcutRegenerate"), accel: "Cmd+R" },
-                      { label: t("onboarding.shortcutPin"), accel: "Cmd+P" },
+                      { label: t("onboarding.shortcutCopy"), accel: isMac() ? "Cmd+C" : "Ctrl+C" },
+                      { label: t("onboarding.shortcutRegenerate"), accel: isMac() ? "Cmd+R" : "Ctrl+R" },
+                      { label: t("onboarding.shortcutPin"), accel: isMac() ? "Cmd+P" : "Ctrl+P" },
                     ].map((s) => (
                       <div className="flex ac jb" key={s.label}>
                         <span className="rb-ob-ov-name">{s.label}</span>
@@ -566,7 +564,7 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
 
               {step === 2 ? (
                 <div className="rb-ob-perms">
-                  <div className={`rb-ob-perm${accessibility === false ? " rb-ob-perm-error" : ""}`}>
+                  {isMac() && (<div className={`rb-ob-perm${accessibility === false ? " rb-ob-perm-error" : ""}`}>
                     <div className="flex ac g8">
                       <span className={`rb-ob-perm-ic${accessibility === false ? " rb-ob-perm-ic-error" : ""}`}>
                         <Icon name="shield" size={14} />
@@ -597,9 +595,9 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
                     ) : (
                       <span className="tag tag-gray">{t("onboarding.detecting")}</span>
                     )}
-                  </div>
+                  </div>)}
 
-                  <div className="rb-ob-perm">
+                  {isMac() && (<div className="rb-ob-perm">
                     <div className="flex ac g8">
                       <span className="rb-ob-perm-ic rb-ob-perm-ic-pro">
                         <Icon name="screen" size={14} />
@@ -629,7 +627,7 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
                         {t("onboarding.screenRestartHint")}
                       </div>
                     ) : null}
-                  </div>
+                  </div>)}
 
                   <div className="rb-ob-perm">
                     <div className="flex ac g8">
@@ -665,7 +663,7 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
                     }${conflict ? " rb-recorder--conflict" : ""}`}
                     tabIndex={0}
                     role="button"
-                    title={shortcutAccel ? "点击重新录制" : "点击录制"}
+                    title={shortcutAccel ? t("shortcuts.reopenRecord") : t("shortcuts.clickRecord")}
                     onClick={() => {
                       if (!recording) startRecord();
                     }}
@@ -694,14 +692,14 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
                       ) : (
                         <>
                           <Icon name="plus" size={13} />
-                          点击录制
+                          {t("shortcuts.clickRecord")}
                         </>
                       )}
                     </span>
                     {recording ? (
                       <span
                         className="rb-recorder-hint"
-                        title="取消录制 (Esc)"
+                        title={t("shortcuts.escCancel")}
                         onClick={(e) => {
                           e.stopPropagation();
                           cancelRecord();
@@ -712,7 +710,7 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
                     ) : shortcutAccel ? (
                       <span
                         className="rb-recorder-hint"
-                        title="清除快捷键"
+                        title={t("shortcuts.clear")}
                         onClick={(e) => {
                           e.stopPropagation();
                           clearShortcut();

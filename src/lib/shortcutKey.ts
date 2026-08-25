@@ -15,3 +15,23 @@ export function resolveShortcutKey(e: React.KeyboardEvent): string {
   }
   return e.key.toUpperCase();
 }
+
+/**
+ * 将快捷键 token（Cmd/Ctrl/Alt/Shift 或实体键）渲染为显示标签。
+ *
+ * 两端统一用文字（Cmd/Ctrl/Alt/Shift），不再使用 ⌘⌃⌥⇧ 符号，
+ * 避免 Windows 用户不熟悉 ⌃ 代表的困惑，且 Mac/Win 视觉一致。
+ * 加速器字符串本身已按平台携带 Cmd / Ctrl（见 config.rs 默认绑定），
+ * 因此本函数无需再做平台分支。
+ */
+const MOD_LABELS: Record<string, string> = {
+  CMD: "Cmd",
+  CTRL: "Ctrl",
+  ALT: "Alt",
+  SHIFT: "Shift",
+};
+
+export function keySymbol(k: string): string {
+  if (!k || k === " ") return "Space";
+  return MOD_LABELS[k.toUpperCase()] ?? k;
+}
