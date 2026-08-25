@@ -1099,10 +1099,10 @@ function AboutPage() {
               dangerouslySetInnerHTML={{ __html: renderMarkdown(update.releaseNotes ?? t("settings.noReleaseNotes")) }}
             />
             <div className="rb-release-modal-foot">
-              {update.dmgAssets.length > 1 ? (
+              {update.platformAssets.length > 1 ? (
                 <div className="rb-release-links">
                   <span className="rb-release-links-label">{t("settings.otherVersions")}</span>
-                  {update.dmgAssets.map((d) => (
+                  {update.platformAssets.map((d) => (
                     <button key={d.url} className="rb-release-link" onClick={() => void openUrl(d.url)}>
                       {archLabel(d.name)} {t("settings.download")}
                     </button>

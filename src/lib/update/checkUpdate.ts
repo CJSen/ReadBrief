@@ -1,8 +1,8 @@
 import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 
-export interface DmgAsset {
-  /** 资产文件名，如 ReadBrief_aarch64.dmg */
+export interface AssetItem {
+  /** 资产文件名，如 ReadBrief_aarch64.dmg 或 ReadBrief_x.y.z_x64-setup.exe */
   name: string;
   /** 浏览器下载直链 */
   url: string;
@@ -15,14 +15,14 @@ export interface UpdateInfo {
   currentVersion: string;
   /** 远端最新版本号（已去掉前缀 v），无数据时为 null */
   latestVersion: string | null;
-  /** 自动匹配本机架构后的下载地址（优先对应架构 dmg 直链，否则首个 dmg，再否则 Release 页）；无数据时为 null */
+  /** 自动匹配本机平台+架构后的下载地址（优先对应平台安装包，否则首个同平台资产，再否则 Release 页）；无数据时为 null */
   releaseUrl: string | null;
   /** Release 标题/名称，无数据时为 null */
   releaseName: string | null;
   /** Release 更新说明（body），无数据时为 null */
   releaseNotes: string | null;
-  /** 所有 .dmg 资产（已过滤出有效下载直链），供兜底手动选择 Apple 芯片 / Intel */
-  dmgAssets: DmgAsset[];
+  /** 当前平台匹配到的全部安装包资产（按架构细分），供「其他版本」兜底手动选择；无则为空 */
+  platformAssets: AssetItem[];
   /** 检查失败时的错误信息，成功为 null */
   error: string | null;
   /** 诊断提示：针对常见失败原因给出的排查建议，成功为 null */
@@ -94,16 +94,31 @@ function errHint(msg: string): string | null {
   return null;
 }
 
-/** 根据架构从 dmg 中找到匹配的下载项（兼容 aarch64/arm64 与 x86_64/x64/intel 命名） */
-function pickDmg(dmgs: DmgAsset[], arch: string): DmgAsset | undefined {
+/**
+ * 按本机架构从「当前平台资产」中挑出最匹配的下载项。
+ * @param assets 已按当前平台过滤的资产（mac→.dmg / win→.exe）
+ * @param arch   编译架构（aarch64 / x86_64 等，来自 get_app_arch）
+ * @param isWin  是否为 Windows（exe 命名与 mac dmg 不同，需分开匹配）
+ */
+function pickAsset(assets: AssetItem[], arch: string, isWin: boolean): AssetItem | undefined {
   const a = arch.toLowerCase();
-  if (a.includes("aarch64") || a.includes("arm64") || a.includes("arm")) {
-    return dmgs.find((d) => /aarch64|arm64|apple/i.test(d.name));
+  if (isWin) {
+    if (a.includes("aarch64") || a.includes("arm64") || a.includes("arm")) {
+      return assets.find((d) => /aarch64|arm64/i.test(d.name));
+    }
+    if (a.includes("x86_64") || a.includes("x64") || a.includes("amd64") || a.includes("intel")) {
+      return assets.find((d) => /x64|x86_64|amd64/i.test(d.name));
+    }
+    return assets[0];
+  }
+  // macOS
+  if (a.includes("aarch64") || a.includes("arm64") || a.includes("apple")) {
+    return assets.find((d) => /aarch64|arm64|apple/i.test(d.name));
   }
   if (a.includes("x86_64") || a.includes("x64") || a.includes("intel")) {
-    return dmgs.find((d) => /x64|x86_64|intel/i.test(d.name));
+    return assets.find((d) => /x64|x86_64|intel/i.test(d.name));
   }
-  return undefined;
+  return assets[0];
 }
 
 // 同一窗口内短期缓存，避免重复请求（多窗口各自独立）
@@ -120,15 +135,25 @@ export async function checkUpdate(opts?: { force?: boolean }): Promise<UpdateInf
 
   const promise = (async (): Promise<UpdateInfo> => {
     const currentVersion = normalize(await getVersion().catch(() => "0.0.0"));
-    // 架构检测：用于匹配正确的 dmg（Apple 芯片 / Intel）。失败则回退到首个 dmg。
+    // 平台检测：决定按哪种安装包筛选（mac→.dmg / win→.exe / 其它→Release 页）
+    let plat = "";
+    try {
+      plat = await invoke<string>("get_platform");
+    } catch {
+      /* 忽略：拿不到平台时回退到 Release 页 */
+    }
+    const isWin = plat === "windows";
+    const isMac = plat === "macos";
+    const ext = isWin ? ".exe" : isMac ? ".dmg" : "";
+    // 架构检测：用于在「同平台资产」中匹配正确的架构（Apple 芯片 / Intel / Windows x64）。失败则回退首个。
     let arch = "";
     try {
       arch = await invoke<string>("get_app_arch");
     } catch {
-      /* 忽略：拿不到架构时回退到首个 dmg */
+      /* 忽略：拿不到架构时回退到首个同平台资产 */
     }
     const url = `https://api.github.com/repos/${REPO}/releases/latest`;
-    log("开始检查更新", { url, currentVersion, arch, force: opts?.force ?? false });
+    log("开始检查更新", { url, currentVersion, plat, isWin, arch, force: opts?.force ?? false });
     try {
       const res = await fetch(url, {
         headers: { Accept: "application/vnd.github+json", "User-Agent": "ReadBrief" },
@@ -144,19 +169,41 @@ export async function checkUpdate(opts?: { force?: boolean }): Promise<UpdateInf
           releaseUrl: null,
           releaseName: null,
           releaseNotes: null,
-          dmgAssets: [],
+          platformAssets: [],
           error: `HTTP ${res.status} ${res.statusText}`,
           hint: statusHint(res.status),
         };
       }
       const data = (await res.json()) as GhRelease;
       const latestVersion = normalize(data.tag_name ?? "");
-      const dmgs: DmgAsset[] = (data.assets ?? [])
-        .filter((a) => !!a.name && a.name.toLowerCase().endsWith(".dmg") && !!a.browser_download_url)
+      // 仅筛选当前平台的安装包资产（GitHub latest Release 同时含 mac dmg 与 win exe，
+      // 必须按平台过滤，否则 Windows 会误匹配到 mac 的 dmg）。
+      const assets: AssetItem[] = (data.assets ?? [])
+        .filter(
+          (a) =>
+            !!a.name &&
+            !!a.browser_download_url &&
+            (ext === "" ? true : a.name.toLowerCase().endsWith(ext)),
+        )
         .map((a) => ({ name: a.name as string, url: a.browser_download_url as string }));
-      const matched = pickDmg(dmgs, arch);
-      const releaseUrl = matched?.url ?? dmgs[0]?.url ?? data.html_url ?? null;
-      log("远端版本", latestVersion, "dmg 资产", dmgs, "本机架构", arch, "匹配", matched?.name ?? "（回退首个/Release页）", "→", releaseUrl);
+      const matched = pickAsset(assets, arch, isWin);
+      // 命中架构 → 同平台首个 → Release 页（无平台资产时，如 Linux，直接给 Release 页）
+      const releaseUrl =
+        matched?.url ?? (ext !== "" ? assets[0]?.url : null) ?? data.html_url ?? null;
+      log(
+        "远端版本",
+        latestVersion,
+        "平台",
+        plat || "(未知)",
+        "匹配资产",
+        assets,
+        "本机架构",
+        arch,
+        "命中",
+        matched?.name ?? "（回退首个/Release页）",
+        "→",
+        releaseUrl,
+      );
       if (!latestVersion) {
         return {
           hasUpdate: false,
@@ -165,7 +212,7 @@ export async function checkUpdate(opts?: { force?: boolean }): Promise<UpdateInf
           releaseUrl: null,
           releaseName: null,
           releaseNotes: null,
-          dmgAssets: [],
+          platformAssets: [],
           error: null,
           hint: null,
         };
@@ -179,7 +226,7 @@ export async function checkUpdate(opts?: { force?: boolean }): Promise<UpdateInf
         releaseUrl,
         releaseName: (data.name ?? data.tag_name ?? null) as string | null,
         releaseNotes: (data.body ?? null) as string | null,
-        dmgAssets: dmgs,
+        platformAssets: assets,
         error: null,
         hint: null,
       };
@@ -193,7 +240,7 @@ export async function checkUpdate(opts?: { force?: boolean }): Promise<UpdateInf
         releaseUrl: null,
         releaseName: null,
         releaseNotes: null,
-        dmgAssets: [],
+        platformAssets: [],
         error: msg,
         hint: errHint(msg),
       };

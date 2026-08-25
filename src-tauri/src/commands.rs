@@ -187,8 +187,14 @@ pub fn autostart_set(app: tauri::AppHandle, enabled: bool) -> AppResult<()> {
     Ok(())
 }
 
-/// 返回当前应用编译目标架构（aarch64 / x86_64 等），供前端匹配正确的 dmg 安装包
+/// 返回当前应用编译目标架构（aarch64 / x86_64 等），供前端匹配正确的安装包
 #[tauri::command]
 pub fn get_app_arch() -> AppResult<String> {
     Ok(std::env::consts::ARCH.to_string())
+}
+
+/// 返回当前应用编译目标平台（macos / windows / linux），供前端按平台筛选对应安装包
+#[tauri::command]
+pub fn get_platform() -> AppResult<String> {
+    Ok(std::env::consts::OS.to_string())
 }

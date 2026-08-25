@@ -23,11 +23,16 @@ function inline(s: string): string {
   return s;
 }
 
-/** 由 dmg 文件名推断架构中文标签 */
+/** 由安装包文件名推断架构中文标签（兼容 mac dmg 与 win exe） */
 export function archLabel(name: string): string {
   const n = name.toLowerCase();
-  if (n.includes("aarch64") || n.includes("arm64") || n.includes("apple")) return "Apple 芯片";
-  if (n.includes("x86_64") || n.includes("intel") || n.includes("x64")) return "Intel";
+  const isExe = n.endsWith(".exe");
+  if (n.includes("aarch64") || n.includes("arm64") || n.includes("apple")) {
+    return isExe ? "Windows ARM64" : "Apple 芯片";
+  }
+  if (n.includes("x86_64") || n.includes("x64") || n.includes("amd64") || n.includes("intel")) {
+    return isExe ? "Windows 64 位" : "Intel";
+  }
   return name;
 }
 

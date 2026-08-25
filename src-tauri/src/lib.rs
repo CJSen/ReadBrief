@@ -63,6 +63,7 @@ pub fn run() {
             commands::autostart_status,
             commands::autostart_set,
             commands::get_app_arch,
+            commands::get_platform,
             history::history_create,
             history::history_list,
             history::history_count,

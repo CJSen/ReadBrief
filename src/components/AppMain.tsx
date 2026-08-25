@@ -223,7 +223,7 @@ export function AppMain() {
         releaseName: "v1.2.0",
         releaseNotes:
           "## 更新内容\n\n- 新增轻量版更新检查（自动匹配本机架构）\n- 关于页可「查看更新」查看更新说明\n- 修复若干已知问题\n\n详情见 [Release 页面](https://github.com/CJSen/ReadBrief/releases/tag/v1.2.0)",
-        dmgAssets: [
+        platformAssets: [
           { name: "ReadBrief_aarch64.dmg", url: "https://github.com/CJSen/ReadBrief/releases/download/v1.2.0/ReadBrief_aarch64.dmg" },
           { name: "ReadBrief_x86_64.dmg", url: "https://github.com/CJSen/ReadBrief/releases/download/v1.2.0/ReadBrief_x86_64.dmg" },
         ],

@@ -63,8 +63,10 @@ function App() {
     };
   }, []);
 
-  // 主窗口显示:统一交由 Rust(reveal_main_window)在主线程 show + set_focus。
-  // 初始:本 effect 在 React 首帧提交后触发,此时页面已渲染,无白屏;
+  // 启动默认后台、不弹主窗口:主窗口保持 tauri.conf.json 的 visible:false(后台常驻),
+  // 用户通过状态栏/Dock/快捷键的 show_main 主动唤起。
+  // 仅「首次未完成初始化引导(onboardingDone=false)」时仍自动显示主窗口,
+  // 让 AppMain 内的 Onboarding 覆盖层可见;完成引导后启动才真正后台不弹。
   // 重新唤起(托盘/Dock/快捷键)由 Rust 侧 show_main 直接显示(窗口内容已存在,亦无白屏)。
   // 关键:ReadBrief 是 macOS Accessory 应用,从 JS 回调直接 window.show() 无法激活 App,
   // 窗口会停在其它应用后方/根本不显示,因此显示动作必须在 Rust 主线程执行(与浮窗一致)。
@@ -77,7 +79,13 @@ function App() {
         void w.show().catch(() => {});
         void w.setFocus().catch(() => {});
       });
-    reveal();
+    // 读配置判断是否为首次未完成引导:是则弹窗跑引导,否则保持后台不弹。
+    // config 读取失败(极端)退回原行为,显示主窗口以保证可用。
+    invoke<{ onboardingDone?: boolean }>("config_get")
+      .then((c) => {
+        if (c.onboardingDone === false) reveal();
+      })
+      .catch(() => reveal());
   }, [winLabel]);
 
   if (winLabel === "float") {
