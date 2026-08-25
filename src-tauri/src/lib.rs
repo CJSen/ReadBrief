@@ -93,8 +93,8 @@ pub fn run() {
             windows::float_hide,
             windows::float_toggle,
             windows::float_set_state,
+            windows::float_drag_move,
             windows::float_regenerate,
-            windows::float_start_drag,
             windows::open_settings,
             windows::open_settings_section,
             windows::open_privacy_settings,
@@ -121,6 +121,7 @@ pub fn run() {
     #[cfg(not(target_os = "macos"))]
     let builder = builder.setup(|app| {
         setup_app(app)?;
+        windows::setup_window_handlers(app.handle());
         shortcuts::register_default_shortcut(app.handle())?;
         shortcuts::register_open_settings_shortcut(app.handle())?;
         tray::setup_tray(app.handle())?;
@@ -132,9 +133,12 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app_handle, event| {
             // macOS:点击 Dock 图标 → 重新打开主窗口(窗口隐藏或销毁后均需恢复入口)
+            #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Reopen { .. } = event {
                 let _ = windows::show_main(app_handle.clone());
             }
+            #[cfg(not(target_os = "macos"))]
+            let _ = (app_handle, event);
         });
 }
 

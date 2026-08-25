@@ -25,6 +25,15 @@
   user-select: none;
 }
 
+/* 拖拽改由 JS + set_position 实现(见 AppFloat.tsx onTitlePointer*),
+   不再用 CSS app-region:拖拽在 Windows 透明 WebView2 + WS_EX_NOACTIVATE 浮窗上会重载丢数据。
+   按钮区在 JS 处理器内已按 closest("button") 排除,无需 no-drag。 */
+.rb-float-tbar .rb-tbar-actions,
+.rb-float-tbar .iconbtn,
+.rb-float-tbar button {
+  cursor: pointer;
+}
+
 .rb-status-dot {
   width: 7px;
   height: 7px;

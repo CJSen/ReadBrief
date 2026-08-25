@@ -389,14 +389,47 @@ export function AppMain() {
     }
   }, []);
 
+  // 初始数据加载(Windows 冷启动兜底):
+  // 主窗口以 visible:false 创建、后由 Rust 显示。Windows WebView2 冷启动早期 invoke 可能尚未就绪,
+  // 首次加载被各 loader 内部的 catch 静默吞掉 → 主窗口空白,需点击/获焦触发 onFocusChanged 才成功。
+  // 故先以一次直接 invoke 探测 IPC 是否就绪(失败会抛错、可被检测);未就绪则按递增间隔重试,
+  // 直到通道可用再正式加载一次。macOS 探测首试即成功,不会反复重载。
   useEffect(() => {
-    void loadCounts();
-    void loadTags();
+    let cancelled = false;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const doLoad = () => {
+      void loadCounts();
+      void loadTags();
+      void loadPage(true);
+    };
+    const probe = async (attempt: number) => {
+      if (cancelled) return;
+      try {
+        await invoke("history_count", { favorite: false }); // 探测通道是否就绪
+      } catch {
+        if (attempt < 8) {
+          timers.push(setTimeout(() => void probe(attempt + 1), 150 * (attempt + 1)));
+        }
+        return;
+      }
+      doLoad(); // IPC 就绪:正式加载一次(后续不再重试)
+    };
+    void probe(0);
+    return () => {
+      cancelled = true;
+      timers.forEach((t) => clearTimeout(t));
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 视图/时间/标签 过滤变化 → 重置回第一页(并回到顶部)
+  // 视图/时间/标签 过滤变化 → 重置回第一页(并回到顶部)。
+  // 首帧跳过:初始数据由上方带重试的 loader 负责,避免冷启动竞态失败留下空态。
+  const skipFirstFilter = useRef(true);
   useEffect(() => {
+    if (skipFirstFilter.current) {
+      skipFirstFilter.current = false;
+      return;
+    }
     void loadPage(true);
   }, [view, timeFilter, selectedTags, loadPage]);
 
@@ -479,6 +512,28 @@ export function AppMain() {
         if (disposed) fn();
         else unlisten = fn;
       });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [loadCounts, loadTags, refreshList]);
+
+  // 窗口显示后强制刷新一次(Windows WebView2 首帧不提交合成的兜底):
+  // 主窗口以 visible:false 创建、后由 Rust 显示,WebView2 首帧可能不绘制 —— 即便数据已加载,
+  // 也需点击/获焦才显示。Rust 在显示后 emit "main-shown",本监听重拉数据并触发重渲染,
+  // 与 Rust 侧 force_webview_repaint 形成双保险,确保首次启动即显示已加载的内容。
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let disposed = false;
+    void listen("main-shown", () => {
+      void loadCounts();
+      void loadTags();
+      void refreshList();
+      setDetailTick((t) => t + 1);
+    }).then((fn) => {
+      if (disposed) fn();
+      else unlisten = fn;
+    });
     return () => {
       disposed = true;
       unlisten?.();

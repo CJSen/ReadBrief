@@ -1,4 +1,4 @@
-use crate::error::{AppError, AppResult};
+use crate::error::AppResult;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicI32, AtomicU8, Ordering};
 use tauri::{Emitter, Manager, WindowEvent};
@@ -95,11 +95,6 @@ pub fn float_regenerate(app: tauri::AppHandle, text: String) -> AppResult<()> {
 }
 
 #[tauri::command]
-pub fn float_start_drag(win: tauri::WebviewWindow) -> AppResult<()> {
-    win.start_dragging().map_err(|e| AppError::from(e.to_string()))
-}
-
-#[tauri::command]
 pub fn float_toggle(app: tauri::AppHandle) -> AppResult<()> {
     if FLOAT_VISIBLE.load(Ordering::SeqCst) == 0 {
         show_float(&app);
@@ -175,9 +170,13 @@ pub fn show_main(app: tauri::AppHandle) -> AppResult<()> {
             // Accessory 应用下从 JS 直接 show 无法激活 App(窗口会停在后台/不显示),
             // 故显示动作必须在 Rust 主线程执行(与浮窗 show_overlay 同一可靠路径)。
             // 此时窗口内容此前已渲染完成,直接显示不会白屏。
+            let app2 = app.clone();
             let _ = app.run_on_main_thread(move || {
                 let _ = win.show();
                 let _ = win.set_focus();
+                crate::native::force_webview_repaint(&win);
+                // 通知前端「主窗口已显示」,触发一次数据重载(Windows WebView2 首帧不提交的兜底)
+                let _ = app2.emit_to("main", "main-shown", ());
             });
         }
         // 窗口已被销毁(关闭「最小化到托盘」后点红叉):重建为 hidden,由前端挂载后 invoke reveal_main_window 显示
@@ -200,9 +199,13 @@ pub fn show_main(app: tauri::AppHandle) -> AppResult<()> {
 #[tauri::command]
 pub fn reveal_main_window(app: tauri::AppHandle) -> AppResult<()> {
     if let Some(win) = app.get_webview_window("main") {
+        let app2 = app.clone();
         let _ = app.run_on_main_thread(move || {
             let _ = win.show();
             let _ = win.set_focus();
+            crate::native::force_webview_repaint(&win);
+            // 通知前端「主窗口已显示」,触发一次数据重载(Windows WebView2 首帧不提交的兜底)
+            let _ = app2.emit_to("main", "main-shown", ());
         });
     }
     Ok(())
@@ -241,7 +244,8 @@ pub fn hide_float(app: &tauri::AppHandle) {
         // 确保窗口进入隐藏态时 alpha 属性已是 0 —— 否则下次 show_overlay 的 orderFront
         // 会用旧 alpha=1 在旧位置合成一帧(闪现),alpha=0 才随后提交(用户看到「先闪现再消失」)。
         crate::native::set_float_alpha(&win, 0.0);
-        let _ = win.hide();
+        // Windows:移出屏幕外(保持 visible)避免透明 WebView2 重载;其余平台直接 hide。
+        crate::native::hide_float_window(&win);
         // 窗口隐藏后通知前端清空 UI 状态(input/capture/output 等)。
         // 必须在 win.hide() 之后 emit:窗口已不可见,前端清空过程用户看不到。
         // 下次 show_overlay 时 WebView 已是空白态,不会闪现上次内容(首次正常、后续闪现的根因)。
@@ -249,6 +253,18 @@ pub fn hide_float(app: &tauri::AppHandle) {
             let _ = app.emit("float-hidden", ());
         }
     }
+}
+
+/// 拖拽浮窗:用 set_position 移动窗口(等价 hide_float_window 移出屏幕外的同源安全移动,
+/// 不会触发透明 WebView2 重载)。前端用 Pointer 事件 + setPointerCapture 跟手拖拽,
+/// 替代 OS 原生拖拽(start_dragging / CSS app-region)——后者在 Windows 透明 WebView2
+/// + WS_EX_NOACTIVATE 浮窗上会触发 WebView 重载、丢失数据。x/y 为设备像素(前端已乘 scaleFactor)。
+#[tauri::command]
+pub fn float_drag_move(app: tauri::AppHandle, x: i32, y: i32) -> AppResult<()> {
+    if let Some(win) = app.get_webview_window("float") {
+        let _ = win.set_position(tauri::PhysicalPosition::new(x, y));
+    }
+    Ok(())
 }
 
 /// 主窗口关闭处理:min_to_tray 开启时隐藏而非退出;关闭时窗口销毁后,show_main 会重建
@@ -294,6 +310,8 @@ pub fn setup_window_handlers(app: &tauri::AppHandle) {
         // 初始化(主线程)即面板化为系统级浮层:
         // CanJoinAllSpaces | Transient | FullScreenAuxiliary + StatusBar level, 持久生效
         crate::native::make_floating_panel(&win);
+        // Windows:安装「点击外部关闭」低级鼠标钩子(WS_EX_NOACTIVATE 下 Focused 不触发)
+        crate::native::install_click_outside_hook(app);
         let app_handle = app.clone();
         win.on_window_event(move |event| match event {
             WindowEvent::CloseRequested { api, .. } => {

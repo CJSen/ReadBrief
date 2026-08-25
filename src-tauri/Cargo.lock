@@ -3347,6 +3347,7 @@ dependencies = [
  "tauri-plugin-opener",
  "tokio",
  "ts-rs",
+ "windows 0.61.3",
 ]
 
 [[package]]

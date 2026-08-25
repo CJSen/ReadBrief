@@ -45,3 +45,13 @@ objc2-foundation = "0.3"
 # 划词捕获:AX 优先 + AppleScript(模拟 ⌘C,自动恢复剪贴板)兜底 —— pot-desktop 同款成熟方案,
 # 解决纯 AX 在部分应用(Safari 等)读不到选中文本的问题
 selection = "1.2.0"
+
+# Windows 平台层依赖(仅 Windows 编译)
+[target.'cfg(windows)'.dependencies]
+# 取词:UIA(UI Automation)优先 + 模拟 Ctrl+C 兜底,与 macOS 同源
+selection = "1.2"
+# Win32 API:不激活浮层(NSPanel → TOPMOST+NOACTIVATE+TOOLWINDOW)、光标定位、点击外部关闭钩子
+# 版本必须与 Tauri 所依赖的 windows 对齐(本仓库 Tauri 用 0.61.x),否则 win.hwnd() 返回的 HWND
+# 类型(来自 Tauri 的 windows 版本)与我们 Win32 调用的 HWND 类型分属不同 crate 版本而拒绝编译。
+# selection 仍在其内部依赖 0.56(互不影响)。feature 取所需并集。
+windows = { version = "0.61", features = ["Win32_UI_WindowsAndMessaging", "Win32_Foundation", "Win32_UI_Input_KeyboardAndMouse"] }

@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getDefaultService } from "../lib/config/types";
 import { useConfig } from "../lib/config/useConfig";
 import { useSummarySession } from "../lib/ai/useSummarySession";
@@ -165,6 +166,107 @@ export function AppFloat() {
       void invoke("float_hide");
     }
   }, [pinned, state, stop, cfgRef]);
+
+  // 拖拽浮窗:用 JS + set_position 实现,避免 OS 原生拖拽(无论 start_dragging 还是 CSS
+  // app-region)在 Windows 透明 WebView2 + WS_EX_NOACTIVATE 浮窗上触发 WebView 重载丢数据。
+  // set_position 移动与 hide_float_window 移出屏幕外同源,安全不重载。
+  // 用 Pointer 事件 + setPointerCapture:光标移出浮窗外(到桌面)时也持续派发 move,拖拽跟手。
+  //
+  // 防抖动关键:
+  // 1) 位移用 e.movementX/Y(原始鼠标位移,与窗口当前位置无关)做【累积】,而非
+  //    e.clientX - startX。后者 clientX 是相对窗口坐标,窗口一旦移动就把「已移动量」算进
+  //    位移,在 set_position 的异步 IPC 延迟下形成自反馈振荡 → 抖动。
+  // 2) 用 requestAnimationFrame 节流:每帧只发一次 float_drag_move,避免 pointermove 高频
+  //    触发大量异步 invoke 堆积造成跳变。
+  const dragState = useRef<{
+    winX: number;
+    winY: number;
+    sf: number;
+    ready: boolean;
+    pointerId: number;
+    lastClientX: number;
+    lastClientY: number;
+  } | null>(null);
+  // 拖拽目标窗口位置(设备像素),随 movement 累积;rAF 帧末发给 Rust
+  const dragTarget = useRef<{ x: number; y: number } | null>(null);
+  const dragRaf = useRef(0);
+
+  const flushDrag = useCallback(() => {
+    dragRaf.current = 0;
+    const t = dragTarget.current;
+    if (t) void invoke("float_drag_move", { x: Math.round(t.x), y: Math.round(t.y) });
+  }, []);
+
+  const onTitlePointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (target.closest("button")) return; // 按钮区不触发拖拽(钉住/关闭点不动)
+    e.preventDefault();
+    const pid = e.pointerId;
+    const el = e.currentTarget;
+    // 同步先建占位(记录 pointerId + client 初值),窗口位置/scale 异步取回后 ready
+    dragState.current = {
+      winX: 0,
+      winY: 0,
+      sf: 1,
+      ready: false,
+      pointerId: pid,
+      lastClientX: e.clientX,
+      lastClientY: e.clientY,
+    };
+    const win = getCurrentWindow();
+    void Promise.all([win.outerPosition(), win.scaleFactor()]).then(([pos, sf]) => {
+      const d = dragState.current;
+      if (!d) return;
+      d.winX = pos.x;
+      d.winY = pos.y;
+      d.sf = sf;
+      d.ready = true;
+      dragTarget.current = { x: pos.x, y: pos.y };
+    });
+    try {
+      el.setPointerCapture(pid);
+    } catch {
+      // 某些环境不支持 pointer capture:降级为无捕获拖拽(光标在浮窗内仍可拖)
+    }
+  }, [flushDrag]);
+
+  const onTitlePointerMove = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    const d = dragState.current;
+    if (!d || !d.ready) return;
+    // movementX/Y 是原始鼠标位移(与窗口位置无关);WebView2 不支持时退回 clientX 增量
+    const dx =
+      typeof e.movementX === "number" && Number.isFinite(e.movementX)
+        ? e.movementX
+        : e.clientX - d.lastClientX;
+    const dy =
+      typeof e.movementY === "number" && Number.isFinite(e.movementY)
+        ? e.movementY
+        : e.clientY - d.lastClientY;
+    d.lastClientX = e.clientX;
+    d.lastClientY = e.clientY;
+    const t = dragTarget.current ?? { x: d.winX, y: d.winY };
+    t.x += dx * d.sf;
+    t.y += dy * d.sf;
+    dragTarget.current = t;
+    if (!dragRaf.current) dragRaf.current = requestAnimationFrame(flushDrag);
+  }, [flushDrag]);
+
+  const onTitlePointerUp = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    const d = dragState.current;
+    if (!d) return;
+    try {
+      e.currentTarget.releasePointerCapture(d.pointerId);
+    } catch {
+      // ignore
+    }
+    dragState.current = null;
+    dragTarget.current = null;
+    if (dragRaf.current) {
+      cancelAnimationFrame(dragRaf.current);
+      dragRaf.current = 0;
+    }
+  }, []);
 
   const handleSubmit = useCallback(() => {
     if (input.trim()) {
@@ -378,21 +480,30 @@ export function AppFloat() {
         handleEsc();
         return;
       }
-      // 键盘地图(设计稿 §10):⌘C 复制,⌘R 重新生成,⌘P 固定
-      if (e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
-        if (e.key.toLowerCase() === "c") {
-          e.preventDefault();
+      // 跨平台快捷键:macOS 用 ⌘(metaKey),Windows/Linux 用 Ctrl(ctrlKey)。
+      // 键盘地图(设计稿 §10):⌘/Ctrl+C 复制,⌘/Ctrl+R 重新生成,⌘/Ctrl+P 固定。
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && !e.altKey && !e.shiftKey) {
+        const k = e.key.toLowerCase();
+        if (k === "c") {
+          // 仅在有可复制输出时拦截并复制整段输出;否则交给浏览器默认(选中文本复制),
+          // 避免「未生成完成时按 Ctrl+C 反而被吞掉、什么都没复制」。
           if (stateRef.current === "done" && outputRef.current) {
+            e.preventDefault();
             void handleCopyRef.current();
           }
-        } else if (e.key.toLowerCase() === "r") {
+        } else if (k === "r") {
+          // ⌘/Ctrl+R 必须 preventDefault:否则 WebView2 执行默认「刷新页面」→ 浮窗全部数据丢失。
           e.preventDefault();
-          // ⌘R 重新生成:update 原历史记录而非新建
+          // 重新生成:update 原历史记录而非新建
           if (inputRef.current) void runSummary(inputRef.current, { replace: true });
-        } else if (e.key.toLowerCase() === "p") {
+        } else if (k === "p") {
           e.preventDefault();
           setPinned((v) => !v);
         }
+      } else if (e.key === "F5") {
+        // F5 / Ctrl+F5 同样是刷新:阻止浮窗 WebView 重载丢失数据(与 Ctrl+R 同类风险)。
+        e.preventDefault();
       }
     };
     window.addEventListener("keydown", keyHandler);
@@ -441,15 +552,6 @@ export function AppFloat() {
   const canRegenerate = Boolean(input && state === "done");
   const canFavorite = Boolean(output && state === "done");
 
-  // 标题栏拖拽：调用 Tauri start_dragging() 实现系统级窗口拖动
-  const handleTitleBarMouseDown = useCallback((e: React.MouseEvent) => {
-    // 仅在鼠标左键按下且未点在按钮/可交互元素上时触发拖拽
-    const target = e.target as HTMLElement;
-    if (e.button === 0 && target.tagName !== "BUTTON" && !target.closest("button")) {
-      void invoke("float_start_drag");
-    }
-  }, []);
-
   // 完成态:首行作为标题,全量显示不截断(rb-summary-title 已设 word-break:break-all 可换行)
   const summaryLines = output.split("\n").filter((l) => l.trim());
   const summaryTitle = summaryLines[0]?.trim() ?? "";
@@ -459,8 +561,14 @@ export function AppFloat() {
   return (
     <div className="float-root">
       <div className="rb-float win">
-        {/* 自绘标题栏 38px */}
-        <div className="tbar rb-float-tbar" onMouseDown={handleTitleBarMouseDown}>
+        {/* 自绘标题栏 38px:整条可拖拽(JS + set_position,见 onTitlePointer* 处理器),
+            按钮区在处理器内排除,不触发拖拽 */}
+        <div
+          className="tbar rb-float-tbar"
+          onPointerDown={onTitlePointerDown}
+          onPointerMove={onTitlePointerMove}
+          onPointerUp={onTitlePointerUp}
+        >
           <span className={`rb-status-dot rb-status-${dotColor}`} />
           <span className="tbar-title">{title}</span>
           {cfg ? <span className="tag tag-gray">{displayModel}</span> : null}

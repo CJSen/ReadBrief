@@ -220,9 +220,9 @@ fn handle_trigger(app: tauri::AppHandle, action: String, prompt_id: Option<Strin
     }
 }
 
-/// 划词捕获:仅走 macOS Accessibility(AX),读取失败返回空文本,不自动回退剪贴板。
-/// 暂时搁置剪贴板方案,对齐 pot-desktop 的「快捷键 → AX 读取选中文本」路径。
-/// source 语义: selection=捕获成功 / empty=无选中文本 / unauthorized=未授权辅助功能
+/// 划词捕获:Windows 走 selection crate(UIA 优先 + Ctrl+C 兜底,自动恢复剪贴板);
+/// macOS 走 Accessibility(AX)。读取失败/无选中文本返回 source=empty。
+/// source 语义: selection=捕获成功 / empty=无选中文本 / unauthorized=未授权辅助功能(macOS)
 fn capture_selection(app: tauri::AppHandle) -> CapturedText {
     #[cfg(target_os = "macos")]
     {
@@ -257,9 +257,33 @@ fn capture_selection(app: tauri::AppHandle) -> CapturedText {
             service_id: None,
         }
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(windows)]
     {
-        let _ = app;
+        let _ = &app;
+        // Windows 取词:selection crate(UIA 优先 + Ctrl+C 兜底,自动恢复剪贴板)。
+        // UIA 对未提升权限的普通应用通用;目标进程以管理员运行时取词会被 UIPI 拦截
+        // (与 mac 上辅助功能授权同理,需以管理员身份运行 ReadBrief 才能取提权窗口的词)。
+        let text = read_selection_text().unwrap_or_default();
+        if !text.trim().is_empty() {
+            log::info!("划词捕获成功(windows): source=selection len={}", text.chars().count());
+            return CapturedText {
+                text,
+                source: "selection".to_string(),
+                prompt_id: None,
+                service_id: None,
+            };
+        }
+        log::info!("划词捕获为空(windows): source=empty");
+        CapturedText {
+            text: String::new(),
+            source: "empty".to_string(),
+            prompt_id: None,
+            service_id: None,
+        }
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let _ = &app;
         CapturedText {
             text: String::new(),
             source: "empty".to_string(),
@@ -312,7 +336,18 @@ fn prompt_accessibility() {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(windows)]
+fn read_selection_text() -> Option<String> {
+    let text = selection::get_text();
+    log::debug!("Windows 选中文本读取: len={}", text.chars().count());
+    if text.trim().is_empty() {
+        None
+    } else {
+        Some(text)
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn read_selection_text() -> Option<String> {
     None
 }

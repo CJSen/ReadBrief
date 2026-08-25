@@ -17,9 +17,29 @@
 //!    —— 不激活应用, 不切换 Space。
 //! 5. `becomesKeyOnlyIfNeeded = YES` —— 仅在点击输入框等需要键盘的控件时才成为 key window。
 
+#[cfg(target_os = "macos")]
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 use tauri::{AppHandle, Manager, PhysicalPosition};
+
+// ═══════════════ Windows 平台层：不激活浮层（NSPanel → TOPMOST+NOACTIVATE+TOOLWINDOW） ═══════════════
+// 把 macOS 上验证过的「不激活浮层」设计翻译成 Win32 语汇：
+//   NSPanel(NonactivatingPanel) → WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW
+//   orderFront（非 makeKeyAndOrderFront）→ ShowWindow(SW_SHOWNA)（显示但不激活）
+//   CanJoinAllSpaces+FullScreenAuxiliary → Windows 无 Space 概念，TOPMOST 天然全屏覆盖
+//   AX 取词 → selection crate 的 UIA 路径
+#[cfg(windows)]
+use windows::Win32::Foundation::{HWND, HINSTANCE, LPARAM, LRESULT, POINT, RECT, WPARAM};
+#[cfg(windows)]
+use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
+#[cfg(windows)]
+use windows::Win32::UI::Input::KeyboardAndMouse::SetFocus;
+#[cfg(windows)]
+use windows::Win32::UI::WindowsAndMessaging::*;
+#[cfg(windows)]
+use std::ffi::c_void;
+#[cfg(windows)]
+use std::sync::atomic::{AtomicPtr, Ordering};
 
 // ═══════════════ CoreGraphics:光标位置 ═══════════════
 
@@ -52,7 +72,19 @@ pub fn cursor_position() -> Option<(f64, f64)> {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(windows)]
+pub fn cursor_position() -> Option<(f64, f64)> {
+    unsafe {
+        let mut pt = POINT::default();
+        if GetCursorPos(&mut pt).is_ok() {
+            Some((pt.x as f64, pt.y as f64))
+        } else {
+            None
+        }
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 pub fn cursor_position() -> Option<(f64, f64)> {
     None
 }
@@ -116,6 +148,57 @@ pub fn set_float_alpha(win: &tauri::WebviewWindow, alpha: f64) {
 
 #[cfg(not(target_os = "macos"))]
 pub fn set_float_alpha(_win: &tauri::WebviewWindow, _alpha: f64) {}
+
+/// 隐藏浮窗(跨平台)。
+///
+/// Windows 关键修复:透明 WebView2 窗口若用 `ShowWindow(SW_HIDE)` 隐藏,再次
+/// `SW_SHOWNA` 显示时 compositor 会重建 → WebView 重载(表现为「点外部/X/Esc 不消失却刷新、
+/// 数据丢失」)。改为移到屏幕外(-20000,-20000)并保持 visible,等价于不可见但**不触发重载**,
+/// 关闭/点外部动作即时生效,下次显示数据不丢。
+/// macOS/Linux:直接 `hide()`,无此重载问题。
+#[cfg(windows)]
+pub fn hide_float_window(win: &tauri::WebviewWindow) {
+    if let Ok(hwnd) = win.hwnd() {
+        unsafe {
+            let _ = SetWindowPos(
+                hwnd,
+                Some(HWND_TOPMOST),
+                -20000,
+                -20000,
+                0,
+                0,
+                SWP_NOSIZE | SWP_NOACTIVATE,
+            );
+        }
+    }
+    let _ = win.set_position(tauri::PhysicalPosition::new(-20000, -20000));
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn hide_float_window(win: &tauri::WebviewWindow) {
+    let _ = win.hide();
+}
+
+/// 强制 WebView2 立即重绘(Windows 专用)。
+///
+/// 根因:主窗口以 `visible:false` 创建、再由 Rust 主线程 `ShowWindow` 显示时,WebView2 的
+/// DirectComposition 合成层常不提交「显示后」的首帧 —— 前端数据已加载进 React state、DOM 已更新,
+/// 但合成层未绘制,表现为「主窗口空白、需点击/获焦才显示数据」。
+/// 修法:显示后微调窗口尺寸(+1 再还原),触发 WM_SIZE → WebView2 重排并立即重绘,
+/// 等价于强制首帧提交,无需用户交互即可显示已加载的内容。
+#[cfg(windows)]
+pub fn force_webview_repaint(win: &tauri::WebviewWindow) {
+    if let Ok(size) = win.inner_size() {
+        // 先 +1 触发 WM_SIZE(WebView2 重排重绘),再还原回原尺寸(消除可见位移)。
+        let w = size.width;
+        let h = size.height;
+        let _ = win.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(w, h + 1)));
+        let _ = win.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(w, h)));
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn force_webview_repaint(_win: &tauri::WebviewWindow) {}
 
 /// 在 NSView 子视图树中查找 WKWebView(Tauri/wry 的 WebView 即此类型)并返回其引用。
 ///
@@ -312,7 +395,26 @@ pub fn make_floating_panel(win: &tauri::WebviewWindow) {
     PANEL_CONVERTED.store(true, Ordering::SeqCst);
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(windows)]
+pub fn make_floating_panel(win: &tauri::WebviewWindow) {
+    let hwnd = match win.hwnd() {
+        Ok(h) => h,
+        Err(_) => return,
+    };
+    unsafe {
+        let ex = GetWindowLongW(hwnd, GWL_EXSTYLE) as u32;
+        // 注意:刻意【不】加 WS_EX_NOACTIVATE。
+        // WS_EX_NOACTIVATE 会让窗口永不激活 → 永远收不到键盘焦点 → 输入框无法聚焦、打不了字
+        // (macOS 的 NonactivatingPanel 能「不抢焦点 + 仍可输入」,但 Windows 该样式做不到)。
+        // 去掉后:show_overlay 用 SW_SHOWNA 显示(出现时不抢前台焦点,不破坏全屏源应用);
+        // 用户点击输入框时窗口正常激活 → WebView2 拿到焦点 → 文本框可输入。
+        // 拖拽(set_position)与「点外部关闭」(LL 鼠标钩子)均不依赖激活态,行为不变。
+        let new_ex = ex | WS_EX_TOPMOST.0 | WS_EX_TOOLWINDOW.0;
+        SetWindowLongW(hwnd, GWL_EXSTYLE, new_ex as i32);
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 pub fn make_floating_panel(_win: &tauri::WebviewWindow) {}
 
 // ═══════════════ 光标附近定位 ═══════════════
@@ -470,8 +572,68 @@ pub fn show_overlay(app: &AppHandle) {
     }
 }
 
-/// 非 macOS 平台浮层显示(桌面窗口, 无 Space 概念)
-#[cfg(not(target_os = "macos"))]
+/// Windows 上让浮窗「呼出即可用快捷键」:等价于 macOS 的 makeKeyWindow + makeFirstResponder。
+/// 仅 ShowWindow(SW_SHOWNA) 只能显示、窗口不持键盘焦点 → WebView 收不到 keydown,
+/// 必须点一下浮窗快捷键才生效(与 macOS 呼出即用的体验不符)。
+/// 这里显式 SetForegroundWindow + SetFocus 把窗口置前并聚焦;因浮窗进程通常非前台进程,
+/// 用 AttachThreadInput 附到当前前台线程以绕过 Windows「仅前台进程可 SetForegroundWindow」的前台锁。
+#[cfg(windows)]
+unsafe fn activate_float_window(hwnd: HWND) {
+    let fg = GetForegroundWindow();
+    let mut fg_thread = 0u32;
+    if !fg.is_invalid() {
+        GetWindowThreadProcessId(fg, Some(&mut fg_thread));
+    }
+    let cur_thread = GetCurrentThreadId();
+    let attached = fg_thread != 0 && fg_thread != cur_thread;
+    if attached {
+        let _ = AttachThreadInput(fg_thread, cur_thread, true);
+    }
+    let _ = SetForegroundWindow(hwnd);
+    let _ = SetFocus(Some(hwnd));
+    if attached {
+        let _ = AttachThreadInput(fg_thread, cur_thread, false);
+    }
+}
+
+/// Windows 浮层显示:等价于 macOS 的 orderFront(显示但不激活)。
+/// 关键:全程不调用 Tauri 的 show()/set_focus()(二者都会激活应用,挤掉全屏前台应用),
+/// 仅用 Win32 的 ShowWindow(SW_SHOWNA) + SetWindowPos(TOPMOST, NOACTIVATE)。
+#[cfg(windows)]
+pub fn show_overlay(app: &AppHandle) {
+    let Some(win) = app.get_webview_window("float") else {
+        return;
+    };
+    // 1. 面板化(幂等):注入 WS_EX_TOPMOST|TOOLWINDOW,等价于 macOS 的 NSPanel
+    make_floating_panel(&win);
+    // 2. 先定位到光标附近:SW_SHOWNA 对隐藏窗口立即生效,无需 mac 的 alpha 防闪技巧
+    if let Some(mouse) = cursor_position() {
+        position_near_cursor(app, &win, mouse);
+    }
+    // 3. 标记可见(驱动失焦 grace period 等状态机)
+    crate::windows::mark_float_visible();
+    // 4. 显示但不激活(等价于 mac 的 orderFront ≠ makeKeyAndOrderFront)
+    if let Ok(hwnd) = win.hwnd() {
+        unsafe {
+            let _ = ShowWindow(hwnd, SW_SHOWNA);
+            let _ = SetWindowPos(
+                hwnd,
+                Some(HWND_TOPMOST),
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+            );
+            // 等价于 macOS makeKeyWindow + makeFirstResponder:显式置前+聚焦,
+            // 让 WebView 立即持有键盘焦点 → 呼出后无需点击即可用 ⌘/Ctrl+C/R/P 等快捷键。
+            activate_float_window(hwnd);
+        }
+    }
+}
+
+/// 非 macOS/Windows 平台(如 Linux)浮层显示(桌面窗口, 无 Space 概念)
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 pub fn show_overlay(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("float") {
         let _ = win.set_always_on_top(true);
@@ -479,4 +641,81 @@ pub fn show_overlay(app: &AppHandle) {
         let _ = win.set_focus();
         crate::windows::mark_float_visible();
     }
+}
+
+// ═══════════════ 点击外部关闭（Windows 专用，方案 B） ═══════════════
+// WS_EX_NOACTIVATE 下窗口永不持有焦点 → Focused(false) 事件永不触发 →
+// macOS 的「点击外部关闭」链路在 Windows 上失效。改用 WH_MOUSE_LL 低级鼠标钩子,
+// 在浮窗可见时判断鼠标按下是否落在浮窗矩形外,是则隐藏。
+// 钩子在 setup(主线程,有消息泵)安装一次即可,随浮窗可见性自行判断。
+#[cfg(windows)]
+static CLICK_OUTSIDE_APP: OnceLock<tauri::AppHandle> = OnceLock::new();
+#[cfg(windows)]
+static CLICK_OUTSIDE_HOOK: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+
+/// 安装「点击外部关闭」低级鼠标钩子(幂等)。非 Windows 平台为空操作。
+#[cfg(windows)]
+pub fn install_click_outside_hook(app: &tauri::AppHandle) {
+    if !CLICK_OUTSIDE_HOOK.load(Ordering::SeqCst).is_null() {
+        return;
+    }
+    let _ = CLICK_OUTSIDE_APP.set(app.clone());
+    unsafe {
+        if let Ok(hook) = SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_proc), Some(HINSTANCE::default()), 0)
+        {
+            CLICK_OUTSIDE_HOOK.store(hook.0, Ordering::SeqCst);
+            log::debug!("已安装点击外部关闭鼠标钩子");
+        } else {
+            log::warn!("安装点击外部关闭鼠标钩子失败");
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn install_click_outside_hook(_app: &tauri::AppHandle) {}
+
+#[cfg(windows)]
+unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    if code >= 0 {
+        let msg = wparam.0 as u32;
+        if msg == WM_LBUTTONDOWN || msg == WM_RBUTTONDOWN || msg == WM_MBUTTONDOWN {
+            if let Some(app) = CLICK_OUTSIDE_APP.get() {
+                // 浮窗不可见时忽略,避免干扰正常操作
+                if crate::windows::is_float_visible() {
+                    let hs = lparam.0 as *const MOUSEHOOKSTRUCT;
+                    let pt = (*hs).pt;
+                    if let Some(win) = app.get_webview_window("float") {
+                        if let Ok(hwnd) = win.hwnd() {
+                            let mut rect = RECT::default();
+                            if GetWindowRect(hwnd, &mut rect).is_ok() {
+                                let inside = pt.x >= rect.left
+                                    && pt.x <= rect.right
+                                    && pt.y >= rect.top
+                                    && pt.y <= rect.bottom;
+                                if !inside
+                                    && !crate::windows::is_float_fixed()
+                                    && crate::windows::get_float_state()
+                                        != crate::windows::FLOAT_STATE_STREAMING
+                                {
+                                    // 严禁在 WH_MOUSE_LL 钩子回调内直接 ShowWindow/emit:
+                                    // 会打断消息泵导致 WebView2 刷新、隐藏不生效。defer 到主线程执行。
+                                    let app2 = app.clone();
+                                    let _ = app2.clone().run_on_main_thread(move || {
+                                        crate::windows::hide_float(&app2);
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let raw = CLICK_OUTSIDE_HOOK.load(Ordering::SeqCst);
+    let hhk = if raw.is_null() {
+        None
+    } else {
+        Some(HHOOK(raw))
+    };
+    CallNextHookEx(hhk, code, wparam, lparam)
 }
