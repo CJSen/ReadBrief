@@ -48,6 +48,11 @@ pub fn run() {
             None,
         ))
         .plugin(tauri_plugin_dialog::init())
+        // 单实例:Windows 下双击桌面图标/开始菜单再次启动,OS 不会像 macOS 那样阻止第二进程,
+        // 不强制则会起多个 ReadBrief。插件在主实例收到回调,把已运行实例的主窗口唤到前台。
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            let _ = crate::windows::show_main(app.clone());
+        }))
         .invoke_handler(tauri::generate_handler![
             ai::ai_stream,
             ai::ai_test,
