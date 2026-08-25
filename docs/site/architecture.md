@@ -18,6 +18,7 @@ ReadBrief 采用 **Tauri v2** 桌面框架：**Rust 后端 + WebView 前端**。
 | 数据库 | SQLite（rusqlite，WAL 模式） |
 | AI 协议 | OpenAI / Claude / Gemini 三协议（Rust 侧 `reqwest` 流式） |
 | macOS 原生 | objc2 + objc2-app-kit（NSPanel 浮层） |
+| Windows 原生 | 置顶无边框窗口（topmost borderless，等效浮层） |
 | 全局快捷键 | tauri-plugin-global-shortcut |
 | 剪贴板 | tauri-plugin-clipboard-manager |
 | 开机启动 | tauri-plugin-autostart（LaunchAgent） |
@@ -56,13 +57,15 @@ ReadBrief 采用 **Tauri v2** 桌面框架：**Rust 后端 + WebView 前端**。
 
 ## 系统级浮窗（NSPanel）原理
 
-最核心也最复杂的部分：`native.rs` 在运行期通过 `object_setClass` 将 Tauri 窗口转换为 `NSPanel` 子类，设置：
+最核心也最复杂的部分：macOS 端 `native.rs` 在运行期通过 `object_setClass` 将 Tauri 窗口转换为 `NSPanel` 子类，设置：
 
 - `NonactivatingPanel` —— 不激活应用
 - `CanJoinAllSpaces | FullScreenAuxiliary` —— 跨 Space、全屏上方悬浮
 - 面板级 `level` 置顶
 
 全程只用 `orderFront`（**绝不调用 `show`/`set_focus`**），从而做到「悬浮在任意应用（含全屏）之上、不激活应用、不切出桌面」。所有 AppKit 操作均在主线程执行，规避 macOS 静默忽略。
+
+Windows 端以**置顶无边框窗口**（always-on-top + decorations 关闭）实现等效浮层：同样悬浮于任意应用（含全屏）之上、不抢占焦点。划词、剪贴板、快捷键等其余能力已做平台无关封装，两平台共用同一套 Rust 逻辑。
 
 ## AI 调用下沉 Rust
 

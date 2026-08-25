@@ -19,6 +19,7 @@ hero:
 
 <div class="rb-platform-badges">
 <span class="rb-platform-badge">🍎 macOS 13.0+</span>
+<span class="rb-platform-badge">🪟 Windows 10/11</span>
 <span class="rb-platform-badge">🔷 Tauri 2</span>
 <span class="rb-platform-badge">⚛️ React 19</span>
 <span class="rb-platform-badge">🦀 Rust 后端</span>
@@ -51,7 +52,7 @@ hero:
 <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 18v3"/></svg>
 </div>
 <h3>系统级浮层</h3>
-<p>基于 <code>objc2</code> 将窗口转换为非激活 NSPanel：跨 Space、悬浮于任意应用（含全屏）之上，绝不打断当前工作。</p>
+<p>macOS 基于 <code>objc2</code> 将窗口转换为非激活 NSPanel：跨 Space、悬浮于任意应用（含全屏）之上；Windows 端用置顶无边框窗口实现等效浮层，绝不打断当前工作。</p>
 </div>
 
 <div class="rb-feature">
@@ -105,8 +106,10 @@ hero:
 <div class="rb-steps">
 <div class="rb-step">
 <h3>下载并安装</h3>
-<p><strong>.dmg 安装包双击打不开</strong>：前往 <strong>系统设置 → 隐私与安全性</strong> 点「仍要打开」，或终端 <code>xattr -cr &lt;dmg 路径&gt;</code> 解除隔离。</p>
-<p><strong>首次打开 App 提示「无法验证开发者」</strong>：右键点击 App → <strong>打开</strong> 即可；或前往 <strong>系统设置 → 隐私与安全性</strong> 点「仍要打开」，或终端 <code>xattr -cr /Applications/ReadBrief.app</code> 解除隔离。首次启动按提示开启「辅助功能」权限，用于划词读取选中文本。</p>
+<p><strong>macOS · .dmg 安装包双击打不开</strong>：前往 <strong>系统设置 → 隐私与安全性</strong> 点「仍要打开」，或终端 <code>xattr -cr &lt;dmg 路径&gt;</code> 解除隔离。</p>
+<p><strong>macOS · 首次打开 App 提示「无法验证开发者」</strong>：右键点击 App → <strong>打开</strong> 即可；或前往 <strong>系统设置 → 隐私与安全性</strong> 点「仍要打开」，或终端 <code>xattr -cr /Applications/ReadBrief.app</code> 解除隔离。</p>
+<p><strong>Windows · SmartScreen 拦截</strong>：在拦截页点「更多信息」→「仍要运行」即可继续安装（当前为未签名构建，属正常现象）。</p>
+<p>首次启动按系统提示开启划词所需权限：macOS 开启「辅助功能」（用于读取选中文本），Windows 一般无需额外授权。</p>
 </div>
 
 <div class="rb-step">
@@ -122,7 +125,7 @@ hero:
 
 <div class="rb-cta">
 <h2>准备好体验了吗？</h2>
-<p>划词即总结，从今天开始。支持 macOS 13.0 及以上，Apple Silicon 与 Intel 双版本。</p>
+<p>划词即总结，从今天开始。支持 macOS 13.0+ 与 Windows 10/11（64 位），Apple Silicon / Intel / x64 全覆盖。</p>
 <div class="rb-cta-btns">
 <a class="rb-btn rb-btn-primary" href="/download">
 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>

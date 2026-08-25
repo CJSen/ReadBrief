@@ -12,6 +12,8 @@ description: ReadBrief 的数据存储、密钥安全与隐私说明
 | 历史记录 | <code v-pre>~/Library/Application Support/ReadBrief/readbrief.db</code> | SQLite，WAL 模式，损坏自动重建 |
 | 配置与密钥 | <code v-pre>~/.config/ReadBrief/config.json</code> | 明文存储，MVP 阶段不做系统钥匙串加密 |
 
+> **Windows 端路径**：数据同样存于本机，位于 `%APPDATA%\ReadBrief\` 目录下（历史记录 `readbrief.db`、配置 `config.json`），结构与 macOS 一致，不写入任何云端。
+
 ## 密钥安全
 
 - AI 请求**全部由 Rust 后端发起**，前端渲染进程**拿不到密钥**

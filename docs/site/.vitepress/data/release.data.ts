@@ -57,6 +57,8 @@ export interface ReleaseData {
   assets: {
     aarch64: DownloadAsset | null
     x64: DownloadAsset | null
+    /** Windows 安装包（当前仅 x64，NSIS .exe）。 */
+    windows: DownloadAsset | null
   }
   highlights: ChangeItem[]
   history: HistoryEntry[]
@@ -245,6 +247,7 @@ export default defineLoader({
       assets: {
         aarch64: toAsset(latest?.assets?.aarch64),
         x64: toAsset(latest?.assets?.x64),
+        windows: toAsset(latest?.assets?.windows),
       },
       highlights,
       history,

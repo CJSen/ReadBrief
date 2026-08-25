@@ -6,7 +6,7 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
   title: 'ReadBrief',
   titleTemplate: ':title · ReadBrief',
-  description: '划词即总结 · macOS 上的 AI 划词总结桌面助手',
+  description: '划词即总结 · 多平台 AI 划词总结桌面助手（macOS / Windows）',
   lang: 'zh-CN',
   cleanUrls: true,
   lastUpdated: true,
@@ -17,7 +17,7 @@ export default defineConfig({
     ['meta', { name: 'theme-color', content: '#4B4BC8' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:title', content: 'ReadBrief · 划词即总结' }],
-    ['meta', { property: 'og:description', content: 'macOS 上的 AI 划词总结桌面助手：选中文字，按下快捷键，AI 流式生成要点总结，浮窗出现在光标附近。' }],
+    ['meta', { property: 'og:description', content: '多平台 AI 划词总结桌面助手：选中文字，按下快捷键，AI 流式生成要点总结，浮窗出现在光标附近。支持 macOS 与 Windows。' }],
     ['meta', { property: 'og:image', content: '/og-image.png' }],
   ],
 

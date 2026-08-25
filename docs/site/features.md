@@ -11,7 +11,7 @@ ReadBrief 不做「大而全」，只专注把「**划词 → 立即看到 AI �
 
 在任意应用中选中一段文字，按下全局快捷键（默认 <kbd>⌘</kbd><kbd>Shift</kbd><kbd>Z</kbd>），总结浮窗即时出现在光标附近，AI 开始流式输出。
 
-- 浮窗基于 macOS 原生 **NSPanel**，悬浮于**任意应用之上**——包括全屏视频、全屏 IDE
+- 浮窗基于 macOS 原生 **NSPanel**（Windows 端为置顶无边框窗口），悬浮于**任意应用之上**——包括全屏视频、全屏 IDE
 - 浮窗**不会激活应用、不会切出桌面**，全程不打断你的工作流
 - 若未能捕获选中文本（部分应用 AX 属性不完整），浮窗自动降级为输入框，支持手动粘贴后回车总结
 
@@ -25,9 +25,9 @@ ReadBrief 不做「大而全」，只专注把「**划词 → 立即看到 AI �
 
 ## 系统级浮层（NSPanel）
 
-最核心也最复杂的能力：运行期通过 `object_setClass` 将 Tauri 窗口转换为 `NSPanel` 子类，设置 `NonactivatingPanel` + `CanJoinAllSpaces | FullScreenAuxiliary`，全程只用 `orderFront`（绝不调用 `show`/`set_focus`）。
+最核心也最复杂的能力：macOS 端运行期通过 `object_setClass` 将 Tauri 窗口转换为 `NSPanel` 子类，设置 `NonactivatingPanel` + `CanJoinAllSpaces | FullScreenAuxiliary`，全程只用 `orderFront`（绝不调用 `show`/`set_focus`）；Windows 端以置顶（topmost）无边框窗口达成等效表现。
 
-- 跨 **Space**、悬浮全屏应用上方
+- 跨 **Space**（macOS）/ 全屏应用上方悬浮（Windows 同样悬浮于全屏之上）
 - 双击顶部拖拽条可**固定浮窗**，固定后不响应 <kbd>Esc</kbd>，避免误触丢失内容
 - <kbd>Esc</kbd> **分层退出**：停止生成 → 关闭浮窗 → 隐藏主窗
 

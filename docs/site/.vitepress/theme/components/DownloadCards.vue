@@ -1,15 +1,38 @@
 <script setup lang="ts">
 /**
- * 下载卡片 —— 版本号、dmg 直链与体积全部来自构建时抓取的 latest.json，
+ * 下载卡片 —— 版本号、各平台安装包直链与体积全部来自构建时抓取的 latest.json，
  * 发版后由 CI 触发官网重建自动刷新，无需手改文案。
  * 抓取失败（degraded）时不给出可能失效的直链，改为引导到 Releases 页面。
  */
 import { data as release } from '../../data/release.data'
 
-const arches = [
-  { key: 'aarch64' as const, title: 'Apple Silicon', desc: 'M1 / M2 / M3 / M4 等 M 系列芯片' },
-  { key: 'x64' as const, title: 'Intel', desc: 'x86_64 处理器机型' },
+// 平台 → 架构分组。macOS 两个架构、Windows 当前仅 x64（NSIS .exe）。
+const platforms = [
+  {
+    key: 'macos' as const,
+    label: 'macOS',
+    osReq: '要求 macOS 13.0+',
+    arches: [
+      { assetKey: 'aarch64' as const, title: 'Apple Silicon', desc: 'M1 / M2 / M3 / M4 等 M 系列芯片' },
+      { assetKey: 'x64' as const, title: 'Intel', desc: 'x86_64 处理器机型' },
+    ],
+  },
+  {
+    key: 'windows' as const,
+    label: 'Windows',
+    osReq: '要求 Windows 10 / 11（64 位）',
+    arches: [
+      { assetKey: 'windows' as const, title: 'Windows', desc: 'Windows 10 / 11 · 64 位（x86_64）' },
+    ],
+  },
 ]
+
+function btnLabel(name: string): string {
+  const n = name.toLowerCase()
+  if (n.endsWith('.exe')) return '下载 .exe'
+  if (n.endsWith('.msi')) return '下载 .msi'
+  return '下载 .dmg'
+}
 </script>
 
 <template>
@@ -17,47 +40,53 @@ const arches = [
     <div class="rb-dl-meta">
       <span v-if="release.version" class="rb-dl-ver">v{{ release.version }}</span>
       <span v-if="release.dateText" class="rb-dl-date">发布于 {{ release.dateText }}</span>
-      <span class="rb-dl-req">要求 macOS 13.0+</span>
     </div>
 
-    <div class="rb-dl-grid">
-      <div v-for="a in arches" :key="a.key" class="rb-dl-card">
-        <div class="rb-dl-hd">
-          <span class="rb-dl-icon">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
-              stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="6" y="6" width="12" height="12" rx="2" />
-              <path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3" />
-            </svg>
-          </span>
-          <div>
-            <h3>{{ a.title }}</h3>
-            <p>{{ a.desc }}</p>
+    <div v-for="p in platforms" :key="p.key" class="rb-dl-platform">
+      <div class="rb-dl-platform-hd">
+        <h3 class="rb-dl-platform-name">{{ p.label }}</h3>
+        <span class="rb-dl-req">{{ p.osReq }}</span>
+      </div>
+
+      <div class="rb-dl-grid">
+        <div v-for="a in p.arches" :key="a.assetKey" class="rb-dl-card">
+          <div class="rb-dl-hd">
+            <span class="rb-dl-icon">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+                stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="6" y="6" width="12" height="12" rx="2" />
+                <path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3" />
+              </svg>
+            </span>
+            <div>
+              <h3>{{ a.title }}</h3>
+              <p>{{ a.desc }}</p>
+            </div>
           </div>
+
+          <a
+            v-if="release.assets[a.assetKey]"
+            class="rb-dl-btn"
+            :href="release.assets[a.assetKey]!.url"
+            :download="release.assets[a.assetKey]!.name"
+          >
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+              <path d="M7 10l5 5 5-5" />
+              <path d="M12 15V3" />
+            </svg>
+            {{ btnLabel(release.assets[a.assetKey]!.name) }}
+            <span v-if="release.assets[a.assetKey]!.sizeText" class="rb-dl-size">
+              {{ release.assets[a.assetKey]!.sizeText }}
+            </span>
+          </a>
+          <a v-else class="rb-dl-btn rb-dl-btn-alt" :href="release.latestUrl" target="_blank" rel="noreferrer">
+            前往 Releases 页面
+          </a>
+
+          <code v-if="release.assets[a.assetKey]" class="rb-dl-file">{{ release.assets[a.assetKey]!.name }}</code>
         </div>
-
-        <a
-          v-if="release.assets[a.key]"
-          class="rb-dl-btn"
-          :href="release.assets[a.key]!.url"
-          :download="release.assets[a.key]!.name"
-        >
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
-            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-            <path d="M7 10l5 5 5-5" />
-            <path d="M12 15V3" />
-          </svg>
-          下载 .dmg
-          <span v-if="release.assets[a.key]!.sizeText" class="rb-dl-size">
-            {{ release.assets[a.key]!.sizeText }}
-          </span>
-        </a>
-        <a v-else class="rb-dl-btn rb-dl-btn-alt" :href="release.latestUrl" target="_blank" rel="noreferrer">
-          前往 Releases 页面
-        </a>
-
-        <code v-if="release.assets[a.key]" class="rb-dl-file">{{ release.assets[a.key]!.name }}</code>
       </div>
     </div>
 
@@ -69,7 +98,7 @@ const arches = [
     </div>
 
     <p v-if="release.degraded" class="rb-dl-note">
-      未能读取到最新发版清单，上方按钮指向 Releases 页面；请在页面内选择与你芯片对应的 <code>.dmg</code>。
+      未能读取到最新发版清单，上方按钮指向 Releases 页面；请在页面内选择与你设备对应的安装包（macOS 选 <code>.dmg</code>，Windows 选 <code>.exe</code>）。
     </p>
 
     <p class="rb-dl-links">
@@ -116,6 +145,27 @@ const arches = [
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+}
+
+.rb-dl-platform {
+  margin-bottom: 18px;
+}
+.rb-dl-platform:last-child {
+  margin-bottom: 0;
+}
+.rb-dl-platform-hd {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.rb-dl-platform-name {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  border: none;
+  padding: 0;
 }
 
 .rb-dl-card {

@@ -14,7 +14,7 @@ description: ReadBrief 的全局与浮窗内快捷键，以及录制式自定义
 | 翻译并总结 | 自定义 | 翻译为中文，保留原意与语气 |
 <!-- | 截图总结 (Pro) | <kbd>⌥</kbd><kbd>S</kbd> | 路线图能力，UI 已预埋 | -->
 
-<!-- > Windows 端 <kbd>⌘</kbd> → <kbd>Ctrl</kbd>，<kbd>⌥</kbd> → <kbd>Alt</kbd>。 -->
+> Windows 端 <kbd>⌘</kbd> → <kbd>Ctrl</kbd>，<kbd>⌥</kbd> → <kbd>Alt</kbd>。
 
 ## 浮窗内快捷键
 

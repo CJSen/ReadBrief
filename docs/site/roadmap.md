@@ -7,9 +7,7 @@ description: ReadBrief 已规划但尚未实现的功能方向
 
 下列为已规划、尚未在 MVP 中实现的后续方向：
 
-## Windows 适配
-
-划词、剪贴板、快捷键已做平台无关封装，主要补齐 Rust 侧原生窗口逻辑（非 macOS 平台当前走 `show + set_focus` 降级路径）。
+> ✅ **Windows 版已发布**（x64 / Windows 10·11）：划词总结、三协议 AI、本地历史、提示词与快捷键管理全部可用。详见 [下载页](/download)。
 
 ## PopClip 插件支持
 
