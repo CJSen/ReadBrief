@@ -81,10 +81,6 @@
       "entitlements": "entitlements.plist",
       "signingIdentity": "ReadBriefSelfSign"
     },
-    "windows": {
-      "nsis": {
-        "installerHooks": "nsis-hooks.nsh"
-      }
-    }
+    "windows": {}
   }
 }
