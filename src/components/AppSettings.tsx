@@ -193,11 +193,10 @@ function GeneralPage({
   const [screenRecording, setScreenRecording] = useState<boolean | null>(null);
   const [screenAuthing, setScreenAuthing] = useState(false);
 
-  // 开机启动读取系统真实状态(LaunchAgent 是否已注册)
+  // 辅助功能 / 屏幕录制授权状态(仅 macOS 生效):从系统真实状态读取。
+  // 注:开机启动开关改由配置意图(cfg.launchOnStart)驱动,Rust 启动时已对账系统注册表,
+  // 不再用 autostart_status() 覆盖,避免升级后注册表瞬间缺失导致开关误显示。
   useEffect(() => {
-    invoke<boolean>("autostart_status")
-      .then(setLaunchOnStart)
-      .catch(() => {});
     invoke<boolean>("accessibility_status")
       .then(setAccessibility)
       .catch(() => setAccessibility(null));
@@ -219,10 +218,6 @@ function GeneralPage({
     void getCurrentWindow()
       .onFocusChanged(({ payload: focused }) => {
         if (!focused) return;
-        // 开机启动同样随窗口聚焦刷新:覆盖「设置窗在启动时已挂载、引导随后才改系统 LaunchAgent」的场景
-        invoke<boolean>("autostart_status")
-          .then(setLaunchOnStart)
-          .catch(() => {});
         invoke<boolean>("accessibility_status")
           .then(setAccessibility)
           .catch(() => setAccessibility(null));

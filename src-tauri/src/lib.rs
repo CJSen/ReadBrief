@@ -165,6 +165,8 @@ fn setup_app<R: tauri::Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn s
             app.manage(AppState {
                 db: std::sync::Arc::new(std::sync::Mutex::new(conn)),
             });
+            // 启动对账:让系统自启动状态对齐配置意图,修复 Windows 手动升级后自启动丢失
+            reconcile_autostart(app);
             Ok(())
         }
         Err(e) => {
@@ -241,4 +243,38 @@ fn install_panic_hook() {
             .open(log_dir.join("crash.log"))
             .and_then(|mut f| std::io::Write::write_all(&mut f, line.as_bytes()));
     }));
+}
+
+/// 启动对账：让系统自启动注册状态对齐配置意图(`launch_on_start`)。
+///
+/// 背景：Windows 上手动双击新版安装包升级时，NSIS 走 uninstall+reinstall 流程，
+/// 卸载脚本会删除 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\ReadBrief` 注册表项，
+/// 而安装脚本不会重新注册（应用内自动更新 `/UPDATE` 模式则不会删该项）。
+/// 由于 `config.json` 默认不随卸载删除（除非用户勾选「删除应用数据」），
+/// 这里在每次启动用配置意图校正系统状态，使升级后首次启动即自愈。
+fn reconcile_autostart<R: tauri::Runtime>(app: &tauri::App<R>) {
+    use tauri_plugin_autostart::ManagerExt;
+    let intended = crate::config::load_config().launch_on_start;
+    let current = match app.autolaunch().is_enabled() {
+        Ok(v) => v,
+        Err(e) => {
+            log::warn!("读取自启动状态失败，跳过启动对账: {e}");
+            return;
+        }
+    };
+    if intended == current {
+        return;
+    }
+    let res = if intended {
+        app.autolaunch().enable()
+    } else {
+        app.autolaunch().disable()
+    };
+    match res {
+        Ok(()) => log::info!(
+            "自启动已对齐配置意图: {}",
+            if intended { "开启" } else { "关闭" }
+        ),
+        Err(e) => log::warn!("自启动对账失败(意图={intended}): {e}"),
+    }
 }
