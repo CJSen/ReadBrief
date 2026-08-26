@@ -4,12 +4,12 @@
 
 <h1 align="center">ReadBrief</h1>
 
-<p align="center"><b>划词即总结 · macOS 上的 AI 阅读助手</b></p>
+<p align="center"><b>划词即总结 · macOS / Windows 桌面 AI 阅读助手</b></p>
 
 <p align="center">
-  <img alt="Platform" src="https://img.shields.io/badge/platform-macOS%2013.0%2B-blue" />
+  <img alt="Platform" src="https://img.shields.io/badge/platform-macOS%2013.0%2B%20%7C%20Windows%2010%2B-blue" />
   <img alt="Built with" src="https://img.shields.io/badge/Tauri-2-24C8DB" />
-  <img alt="Version" src="https://img.shields.io/badge/version-0.1.0-orange" />
+  <img alt="Version" src="https://img.shields.io/badge/version-0.10.1-orange" />
   <img alt="License" src="https://img.shields.io/badge/license-MIT-green" />
 </p>
 
@@ -66,7 +66,9 @@
 
 ## 快速开始
 
-**系统要求**：macOS 13.0 及以上
+**系统要求**：macOS 13.0 及以上 / Windows 10 及以上
+
+### macOS
 
 1. 下载 `ReadBrief.dmg`，双击挂载，将 `ReadBrief.app` 拖入「应用程序」
 2. 启动后，前往 **系统设置 → 隐私与安全性 → 辅助功能**，为 ReadBrief 开启权限（用于读取选中文本）
@@ -86,6 +88,15 @@
 >
 > 后续配置 Apple 开发者证书并公证后，该提示即会消失。
 
+### Windows
+
+1. 下载 `ReadBrief_x.y.z_x64-setup.exe`，双击运行安装向导完成安装
+2. 首次启动若被 SmartScreen 拦截，点「更多信息」→「仍要运行」（开发 / 免费阶段构建未签名，属正常现象）
+3. 打开 **设置 → AI 服务**，添加你的 AI 服务（协议 / API Key / 模型）
+4. 在任意应用选中文字，按 `Ctrl+Shift+Z` 即可总结
+
+> ⚠️ **SmartScreen 拦截？** 当前为开发 / 免费阶段构建，尚未进行 Authenticode 代码签名，被拦截属正常现象。点「更多信息」→「仍要运行」即可继续；后续完成代码签名后该提示即会消失。
+
 ## 使用说明
 
 - 选中文字后按快捷键，浮窗出现在光标附近并自动开始总结；未捕获到文本时，可手动粘贴后按 `Enter` 总结
@@ -103,13 +114,15 @@
 | 发送 / 总结 | `Enter`（`Shift+Enter` 换行） |
 | 退出 | `Esc` |
 
+> 快捷键中 macOS 使用 `⌘`（Command），Windows 使用 `Ctrl`，如划词总结为 `⌘+Shift+Z` / `Ctrl+Shift+Z`。
+
 ## 技术栈
 
 - 桌面框架：**Tauri 2**（Rust 后端 + WebView 前端）
 - 前端：React + TypeScript + Vite
 - 后端：Rust（AI 流式请求、全局快捷键、划词捕获、SQLite）
 - 数据库：SQLite（本地历史）
-- 平台特性：macOS 原生 NSPanel 系统级浮窗
+- 平台特性：macOS 原生 NSPanel / Windows 原生窗口，均为系统级浮窗
 
 ## 从源码构建
 
@@ -119,7 +132,7 @@ npm run tauri dev      # 开发模式（热更新）
 npm run tauri build    # 生产构建 → src-tauri/target/release/bundle/
 ```
 
-需要 [Rust 工具链](https://rustup.rs/)、Node.js 22+ 与 Xcode Command Line Tools。
+需要 [Rust 工具链](https://rustup.rs/)、Node.js 22+；macOS 需 Xcode Command Line Tools，Windows 需 Visual Studio C++ 生成工具（含 Windows 10/11 SDK）与 WebView2 运行时。
 
 ## 常见问题
 
@@ -130,7 +143,7 @@ npm run tauri build    # 生产构建 → src-tauri/target/release/bundle/
 密钥仅保存在本地配置文件中，AI 请求由后端发起，前端界面拿不到密钥。
 
 **支持 Windows 吗？**
-当前版本聚焦 macOS，Windows 适配在后续规划中。
+已支持。Windows 10 及以上可直接下载 `ReadBrief_x.y.z_x64-setup.exe` 安装使用，划词总结、系统级浮窗、历史记录等核心功能与 macOS 一致。
 
 ## 许可证
 
