@@ -18,6 +18,8 @@ pub struct HistoryRecord {
     pub ai_title: Option<String>,
     pub created_at: String,
     pub model: String,
+    /// 创建时快照的 AI 服务名称(供历史展示"服务名 · 模型";服务改名/删除后旧记录仍保留当时名称)
+    pub service_name: String,
     pub prompt_name: Option<String>,
     pub tags: Vec<String>,
     pub is_favorite: bool,
@@ -41,6 +43,8 @@ pub struct HistoryListItem {
     pub summary: String,
     pub created_at: String,
     pub model: String,
+    /// 创建时快照的 AI 服务名称(列表/详情展示"服务名 · 模型")
+    pub service_name: String,
     pub prompt_name: Option<String>,
     pub tags: Vec<String>,
     pub is_favorite: bool,
@@ -65,6 +69,7 @@ fn row_to_record(row: &rusqlite::Row) -> rusqlite::Result<HistoryRecord> {
         ai_title: row.get("ai_title")?,
         created_at: row.get("created_at")?,
         model: row.get("model")?,
+        service_name: row.get::<_, Option<String>>("service_name")?.unwrap_or_default(),
         prompt_name: row.get("prompt_name")?,
         tags,
         is_favorite: row.get::<_, i64>("is_favorite")? != 0,
@@ -94,15 +99,16 @@ pub fn create(
     summary: &str,
     ai_title: Option<&str>,
     model: &str,
+    service_name: &str,
     prompt_name: Option<&str>,
     tags: &[String],
 ) -> AppResult<i64> {
     let created_at = Utc::now().to_rfc3339();
     let tags_json = serde_json::to_string(tags).unwrap_or_else(|_| "[]".to_string());
     conn.execute(
-        "INSERT INTO history (source_text, summary, ai_title, created_at, model, prompt_name, tags, is_favorite)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0)",
-        params![source_text, summary, ai_title, created_at, model, prompt_name, tags_json],
+        "INSERT INTO history (source_text, summary, ai_title, created_at, model, service_name, prompt_name, tags, is_favorite)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0)",
+        params![source_text, summary, ai_title, created_at, model, service_name, prompt_name, tags_json],
     )
     .map_err(|e| AppError::from(e.to_string()))?;
     // 先取 history 的自增 id:ensure_tags_defined 内部的 INSERT 会改写连接的 last_insert_rowid
@@ -150,6 +156,7 @@ fn row_to_list_item(row: &rusqlite::Row) -> rusqlite::Result<HistoryListItem> {
         summary: row.get("summary")?,
         created_at: row.get("created_at")?,
         model: row.get("model")?,
+        service_name: row.get::<_, Option<String>>("service_name")?.unwrap_or_default(),
         prompt_name: row.get("prompt_name")?,
         tags,
         is_favorite: row.get::<_, i64>("is_favorite")? != 0,
@@ -223,7 +230,7 @@ pub fn list_page(
     vals.push(Box::new(limit));
     vals.push(Box::new(offset));
     let sql = format!(
-        "SELECT id, ai_title, substr(summary, 1, 300) AS summary, created_at, model, prompt_name, \
+        "SELECT id, ai_title, substr(summary, 1, 300) AS summary, created_at, model, service_name, prompt_name, \
          tags, is_favorite, length(source_text) AS source_char_count \
          FROM history {where_sql} ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?"
     );
@@ -292,6 +299,7 @@ pub async fn history_create(
     summary: String,
     ai_title: Option<String>,
     model: String,
+    service_name: Option<String>,
     prompt_name: Option<String>,
     tags: Vec<String>,
 ) -> AppResult<i64> {
@@ -305,6 +313,7 @@ pub async fn history_create(
                 &summary,
                 ai_title.as_deref(),
                 &model,
+                &service_name.unwrap_or_default(),
                 prompt_name.as_deref(),
                 &tags,
             )?;
@@ -583,15 +592,17 @@ pub async fn history_update_summary(
     summary: String,
     ai_title: Option<String>,
     model: String,
+    service_name: Option<String>,
     prompt_name: Option<String>,
 ) -> AppResult<()> {
     let db = state.db.clone();
     tauri::async_runtime::spawn_blocking(move || -> AppResult<()> {
         {
             let conn = db.lock().map_err(|e| AppError::from(e.to_string()))?;
+            let service_name = service_name.unwrap_or_default();
             conn.execute(
-                "UPDATE history SET summary = ?1, ai_title = ?2, model = ?3, prompt_name = ?4 WHERE id = ?5",
-                params![summary, ai_title, model, prompt_name, id],
+                "UPDATE history SET summary = ?1, ai_title = ?2, model = ?3, service_name = ?4, prompt_name = ?5 WHERE id = ?6",
+                params![summary, ai_title, model, service_name, prompt_name, id],
             )
             .map_err(|e| AppError::from(e.to_string()))?;
         }

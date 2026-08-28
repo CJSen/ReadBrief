@@ -888,6 +888,11 @@
   height: 17px;
 }
 
+/* 列表元信息中的"服务名 · 模型"标签:贴左侧(紧跟字数),不抢占右侧 promptName 的自动 margin */
+.rb-list-service {
+  margin-left: 0;
+}
+
 .rb-empty-list {
   padding: var(--rb-space-10) var(--rb-space-6);
   text-align: center;

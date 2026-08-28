@@ -29,6 +29,7 @@ interface HistoryRecord {
   aiTitle?: string | null;
   createdAt: string;
   model: string;
+  serviceName?: string | null;
   promptName?: string | null;
   tags: string[];
   isFavorite: boolean;
@@ -41,6 +42,7 @@ interface HistoryListItem {
   summary: string;
   createdAt: string;
   model: string;
+  serviceName?: string | null;
   promptName?: string | null;
   tags: string[];
   isFavorite: boolean;
@@ -1020,6 +1022,12 @@ export function AppMain() {
                       {r.promptName ? (
                         <span className="tag tag-brand rb-list-tag">{r.promptName}</span>
                       ) : null}
+                      {/* AI 服务名 · 模型:紧凑灰标签(服务名缺省时仅显示模型) */}
+                      {r.serviceName || r.model ? (
+                        <span className="tag tag-gray rb-list-tag rb-list-service">
+                          {[r.serviceName, r.model].filter(Boolean).join(" · ")}
+                        </span>
+                      ) : null}
                     </div>
                     {r.tags.length > 0 ? (
                       <div style={{ display: "flex", gap: 4, marginTop: 6, flexWrap: "wrap" }}>
@@ -1068,7 +1076,7 @@ export function AppMain() {
                 <div className="rb-detail-head">
                   <span className="tag tag-brand">{detail.promptName || t("update.summaryTitle")}</span>
                   <span className="muted rb-detail-model">
-                    {detail.model} · {formatTime(detail.createdAt)}
+                    {[detail.serviceName, detail.model].filter(Boolean).join(" · ")} · {formatTime(detail.createdAt)}
                   </span>
                   <div className="rb-detail-head-actions">
                     <button

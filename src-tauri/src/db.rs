@@ -3,7 +3,7 @@ use rusqlite::{params, Connection};
 use std::path::{Path, PathBuf};
 
 /// 当前数据库 schema 版本（递增，用于迁移检测）
-const DB_VERSION: u32 = 2;
+const DB_VERSION: u32 = 3;
 
 pub fn app_data_dir() -> PathBuf {
     dirs::data_dir()
@@ -120,7 +120,17 @@ fn run_migrations(conn: &Connection, from_version: u32) -> AppResult<()> {
         .map_err(|e| AppError::from(e.to_string()))?;
     }
 
-    // 未来版本在此追加: if from_version < 3 { ... INSERT INTO schema_version (version) VALUES (3); }
+    // v3: 历史记录新增 service_name(创建时快照 AI 服务名称,供历史展示"服务名 · 模型")
+    if from_version < 3 {
+        conn.execute_batch(
+            "ALTER TABLE history ADD COLUMN service_name TEXT NOT NULL DEFAULT '';",
+        )
+        .map_err(|e| AppError::from(e.to_string()))?;
+        conn.execute_batch("INSERT INTO schema_version (version) VALUES (3);")
+            .map_err(|e| AppError::from(e.to_string()))?;
+    }
+
+    // 未来版本在此追加: if from_version < 4 { ... INSERT INTO schema_version (version) VALUES (4); }
 
     Ok(())
 }

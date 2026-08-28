@@ -131,6 +131,8 @@ export function useSummarySession(
   const serviceIdRef = useRef<string | null>(null);
   /** 运行期解析出的服务模型(供 run 设置请求模型 / saveHistory 落库,二者保持一致) */
   const serviceModelRef = useRef<string>("");
+  /** 运行期解析出的 AI 服务名称(快照进历史,供历史展示"服务名 · 模型") */
+  const serviceNameRef = useRef<string>("");
   /** historyId 的可变镜像:供 run/saveHistory 在流式期间读取原记录 id(重新生成替换用),避免闭包过期 */
   const historyIdRef = useRef<number | null>(null);
 
@@ -195,12 +197,16 @@ export function useSummarySession(
           serviceModelRef.current ||
           (cfgRef.current ? getDefaultService(cfgRef.current).model : "");
         const promptName = meta.name;
+        // 落库服务名称 = 运行期解析出的服务名称(快捷键引用的服务决定;未绑定服务则用默认服务),
+        // 与 run() 中 service.name 保持一致,快照进历史记录供展示
+        const serviceName = serviceNameRef.current;
         if (replaceId != null) {
           await invoke("history_update_summary", {
             id: replaceId,
             summary: body,
             aiTitle: title,
             model,
+            serviceName,
             promptName,
           });
           historyIdRef.current = replaceId;
@@ -211,6 +217,7 @@ export function useSummarySession(
             summary: body,
             aiTitle: title,
             model,
+            serviceName,
             promptName,
             tags: [],
           });
@@ -278,6 +285,8 @@ export function useSummarySession(
       };
       // 解析出的服务模型同步给 serviceModelRef,供 saveHistory 落库(二者保持一致)
       serviceModelRef.current = service.model;
+      // 解析出的服务名称同步给 serviceNameRef,供 saveHistory 落库(快照,服务改名/删除后旧记录仍保留当时名称)
+      serviceNameRef.current = service.name ?? "";
 
       try {
         // 本次会话是否已失败:流中 error 事件后即使再收到 done 也绝不落库
@@ -390,6 +399,7 @@ export function useSummarySession(
     setHistoryId(null);
     promptIdRef.current = null;
     serviceIdRef.current = null;
+    serviceNameRef.current = "";
     setPromptName("");
   }, []);
 

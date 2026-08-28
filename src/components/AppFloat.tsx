@@ -324,6 +324,15 @@ export function AppFloat() {
   const ensureHistory = useCallback(async (): Promise<number | null> => {
     if (historyId != null) return historyId;
     if (!outputRef.current) return null;
+    const c = cfgRef.current;
+    // 与 useSummarySession.saveHistory 对齐:落库服务名 = 本次快捷键绑定服务名(未绑定回退默认服务)
+    let serviceName = "";
+    if (c) {
+      const svc = boundServiceId
+        ? (c.services?.find((s) => s.id === boundServiceId) ?? getDefaultService(c))
+        : getDefaultService(c);
+      serviceName = svc?.name ?? "";
+    }
     try {
       return await invoke<number>("history_create", {
         sourceText: inputRef.current,
@@ -331,14 +340,15 @@ export function AppFloat() {
         // 与 useSummarySession.parseOutput 的 summary 分支一致(停止后未走自动落库时的兜底):标题取首行、全量保留不截断
         aiTitle: outputRef.current.split("\n")[0]?.trim() || "总结",
         // 与 useSummarySession.saveHistory 对齐:落库模型 = 本次快捷键绑定模型(未绑定回退默认服务)
-        model: boundModel || (cfgRef.current ? getDefaultService(cfgRef.current).model : ""),
+        model: boundModel || (c ? getDefaultService(c).model : ""),
+        serviceName,
         promptName: "",
         tags: [],
       });
     } catch {
       return null;
     }
-  }, [historyId, outputRef, inputRef, cfgRef, boundModel]);
+  }, [historyId, outputRef, inputRef, cfgRef, boundModel, boundServiceId]);
 
   // 收藏:真实写入历史收藏标记,并用返回值同步本地状态(图标即时切换)
   const handleFavorite = useCallback(async () => {
@@ -543,6 +553,16 @@ export function AppFloat() {
   // cfg 经 config-changed 实时同步,改 AI 服务后立即反映最新默认模型,避免显示陈旧模型。
   const displayModel = boundModel || t("float.notConfiguredModel");
 
+  // 标题栏展示的「AI 服务名称」= 本次会话实际绑定的服务名(快捷键绑定优先,否则默认服务)。
+  // 与 displayModel 同款派生:serviceName + model 合并展示为"服务名 · 模型"。
+  const displayServiceName = (() => {
+    if (!cfg) return "";
+    const svc = boundServiceId
+      ? (cfg.services?.find((s) => s.id === boundServiceId) ?? getDefaultService(cfg))
+      : getDefaultService(cfg);
+    return svc?.name ?? "";
+  })();
+
   // 捕获模式标签:selection=划词 / clipboard=托盘粘贴 / history=历史重新生成 / empty=未捕获
   const captureMode =
     capture?.source === "clipboard"
@@ -576,7 +596,11 @@ export function AppFloat() {
         >
           <span className={`rb-status-dot rb-status-${dotColor}`} />
           <span className="tbar-title">{title}</span>
-          {cfg ? <span className="tag tag-gray">{displayModel}</span> : null}
+          {cfg ? (
+            <span className="tag tag-gray">
+              {[displayServiceName, displayModel].filter(Boolean).join(" · ")}
+            </span>
+          ) : null}
           <div style={{ marginLeft: "auto" }} className="rb-tbar-actions">
             <button className="iconbtn" title="固定" onClick={() => setPinned((v) => !v)}>
               <Icon name="pin" className={pinned ? "rb-pinned" : ""} />
