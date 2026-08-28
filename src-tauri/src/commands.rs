@@ -198,3 +198,52 @@ pub fn get_app_arch() -> AppResult<String> {
 pub fn get_platform() -> AppResult<String> {
     Ok(std::env::consts::OS.to_string())
 }
+
+/// OCR 文本识别：接收图片字节数据，返回识别出的文本
+#[tauri::command]
+pub fn ocr(image: Vec<u8>) -> AppResult<crate::ocr::types::OcrResult> {
+    let request = crate::ocr::types::OcrRequest { image, languages: None };
+    crate::ocr::recognize(request).map_err(|e| e.into())
+}
+
+/// 截图 OCR：调用系统截图工具截取屏幕区域，进行 OCR 识别，返回识别出的文本。
+/// 前端调用后弹出系统截图选择框，用户选区完成后自动识别。
+#[tauri::command]
+pub fn screenshot_ocr() -> AppResult<crate::ocr::types::OcrResult> {
+    let temp_path = std::env::temp_dir().join(format!("readbrief_screenshot_{}.png", std::process::id()));
+
+    #[cfg(target_os = "macos")]
+    {
+        let output = std::process::Command::new("/usr/sbin/screencapture")
+            .arg("-i")
+            .arg("-r")
+            .arg(&temp_path)
+            .output()
+            .map_err(|e| crate::error::AppError::Internal(format!("截图失败: {e}")))?;
+
+        if !output.status.success() {
+            return Err(crate::error::AppError::Internal("截图已取消".into()));
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        return Err(crate::error::AppError::Internal("当前平台暂不支持截图 OCR".into()));
+    }
+
+    // 读取截图文件
+    let image_data = match std::fs::read(&temp_path) {
+        Ok(data) => data,
+        Err(e) => {
+            let _ = std::fs::remove_file(&temp_path);
+            return Err(crate::error::AppError::Internal(format!("读取截图失败: {e}")));
+        }
+    };
+
+    // 清理临时文件
+    let _ = std::fs::remove_file(&temp_path);
+
+    // 执行 OCR
+    let request = crate::ocr::types::OcrRequest { image: image_data, languages: None };
+    crate::ocr::recognize(request).map_err(|e| e.into())
+}

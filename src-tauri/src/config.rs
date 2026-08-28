@@ -153,6 +153,7 @@ fn default_history_retention() -> String {
 
 /// 内置快捷键的默认绑定：开箱即用时即存在，但全部可在设置页修改/删除，
 /// 不再由后端无条件「注入」到系统。划词总结默认 ⌘+Shift+Z（Windows/Linux 为 Ctrl+Shift+Z）。
+/// 截图总结默认 ⌘+Shift+X（Windows/Linux 为 Ctrl+Shift+X）。
 fn default_shortcuts() -> Vec<ShortcutConfig> {
     #[cfg(target_os = "macos")]
     let summarize_accel = "Cmd+Shift+Z".to_string();
@@ -162,6 +163,10 @@ fn default_shortcuts() -> Vec<ShortcutConfig> {
     let open_main_accel = "Cmd+Shift+H".to_string();
     #[cfg(not(target_os = "macos"))]
     let open_main_accel = "Ctrl+Shift+H".to_string();
+    #[cfg(target_os = "macos")]
+    let ocr_accel = "Cmd+Shift+X".to_string();
+    #[cfg(not(target_os = "macos"))]
+    let ocr_accel = "Ctrl+Shift+X".to_string();
     vec![
         ShortcutConfig {
             id: "summarize".to_string(),
@@ -170,6 +175,17 @@ fn default_shortcuts() -> Vec<ShortcutConfig> {
             action: "summarize".to_string(),
             name: Some("划词总结".to_string()),
             description: Some("选中文本后触发内置总结提示词".to_string()),
+            is_default: true,
+            model: None,
+            service_id: None,
+        },
+        ShortcutConfig {
+            id: "screenshot-ocr".to_string(),
+            accelerator: ocr_accel,
+            prompt_id: Some("builtin-summarize".to_string()),
+            action: "screenshot-ocr".to_string(),
+            name: Some("截图 OCR 总结".to_string()),
+            description: Some("截取屏幕区域后 OCR 识别并总结".to_string()),
             is_default: true,
             model: None,
             service_id: None,

@@ -19,15 +19,16 @@ export function resolveShortcutKey(e: React.KeyboardEvent): string {
 /**
  * 将快捷键 token（Cmd/Ctrl/Alt/Shift 或实体键）渲染为显示标签。
  *
- * 两端统一用文字（Cmd/Ctrl/Alt/Shift），不再使用 ⌘⌃⌥⇧ 符号，
- * 避免 Windows 用户不熟悉 ⌃ 代表的困惑，且 Mac/Win 视觉一致。
+ * macOS 上 Alt 显示为 Option，Windows/Linux 显示为 Alt。
  * 加速器字符串本身已按平台携带 Cmd / Ctrl（见 config.rs 默认绑定），
- * 因此本函数无需再做平台分支。
+ * 因此本函数只需处理 Alt → Option 的映射。
  */
+const isMac = typeof navigator !== "undefined" && navigator.platform.startsWith("Mac");
+
 const MOD_LABELS: Record<string, string> = {
   CMD: "Cmd",
   CTRL: "Ctrl",
-  ALT: "Alt",
+  ALT: isMac ? "Option" : "Alt",
   SHIFT: "Shift",
 };
 

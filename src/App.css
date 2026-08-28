@@ -3100,6 +3100,38 @@
   max-width: 200px;
 }
 
+/* 设置对话框中的下拉框（与快捷键列表下拉样式一致） */
+.rb-dialog-select {
+  height: var(--rb-control-md);
+  width: 100%;
+  max-width: 260px;
+  padding: 0 28px 0 11px;
+  font-size: var(--rb-text-sm);
+  font-family: var(--rb-font-sans);
+  border: 1px solid var(--rb-border-default);
+  border-radius: var(--rb-radius-sm);
+  background: var(--rb-bg-surface);
+  color: var(--rb-text-primary);
+  cursor: pointer;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239AA1B1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'%3E%3C/path%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  transition: all var(--rb-duration-fast) var(--rb-ease-out);
+}
+
+.rb-dialog-select:hover {
+  border-color: var(--rb-border-strong);
+  background-color: var(--rb-bg-hover);
+}
+
+.rb-dialog-select:focus {
+  border-color: var(--rb-border-focus);
+  box-shadow: var(--rb-shadow-focus);
+}
+
 /* AI 服务列表:拖动排序中态 */
 .rb-svc-dragging {
   opacity: 0.4;

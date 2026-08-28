@@ -265,25 +265,43 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
     onUpdate(next);
   }
 
-  /* ═══ 步骤3:快捷键录制(summarize) ═══ */
+  /* ═══ 步骤3:快捷键录制(summarize + screenshot-ocr) ═══ */
   const defaultAccel = (cfg.shortcuts ?? []).find((s) => s.id === "summarize")?.accelerator ?? "";
+  const defaultOcrAccel = (cfg.shortcuts ?? []).find((s) => s.id === "screenshot-ocr")?.accelerator ?? (isMac() ? "Cmd+Shift+X" : "Ctrl+Shift+X");
   const [shortcutAccel, setShortcutAccel] = useState(defaultAccel);
+  const [ocrShortcutAccel, setOcrShortcutAccel] = useState(defaultOcrAccel);
   const [recording, setRecording] = useState(false);
+  const [ocrRecording, setOcrRecording] = useState(false);
   const [draft, setDraft] = useState("");
   const [conflict, setConflict] = useState<string | null>(null);
+  const [ocrConflict, setOcrConflict] = useState<string | null>(null);
   const recRef = useRef<HTMLDivElement>(null);
+  const ocrRecRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (recording) recRef.current?.focus();
   }, [recording]);
+
+  useEffect(() => {
+    if (ocrRecording) ocrRecRef.current?.focus();
+  }, [ocrRecording]);
 
   function startRecord() {
     setRecording(true);
     setDraft("");
     setConflict(null);
   }
+  function startOcrRecord() {
+    setOcrRecording(true);
+    setDraft("");
+    setOcrConflict(null);
+  }
   function cancelRecord() {
     setRecording(false);
+    setDraft("");
+  }
+  function cancelOcrRecord() {
+    setOcrRecording(false);
     setDraft("");
   }
   function clearShortcut() {
@@ -292,25 +310,34 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
     setConflict(null);
     setShortcutAccel("");
   }
+  function clearOcrShortcut() {
+    setOcrRecording(false);
+    setDraft("");
+    setOcrConflict(null);
+    setOcrShortcutAccel("");
+  }
 
   function handleKeyDown(e: React.KeyboardEvent) {
-    if (!recording) return;
+    if (!recording && !ocrRecording) return;
     const key = e.key.toUpperCase();
     // 实体键:Option 下 e.key 被合成死键字符(å/ø/∆),改用 e.code 还原字母/数字
     const physKey = resolveShortcutKey(e);
     if (key === "TAB") return;
     if ((e.metaKey || e.ctrlKey) && (key === "W" || key === "Q")) {
-      cancelRecord();
+      if (recording) cancelRecord();
+      if (ocrRecording) cancelOcrRecord();
       return;
     }
     e.preventDefault();
     e.stopPropagation();
     if (key === "ESCAPE") {
-      cancelRecord();
+      if (recording) cancelRecord();
+      if (ocrRecording) cancelOcrRecord();
       return;
     }
     if ((key === "DELETE" || key === "BACKSPACE") && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
-      clearShortcut();
+      if (recording) clearShortcut();
+      if (ocrRecording) clearOcrShortcut();
       return;
     }
     if (IGNORE_KEYS.has(key)) return;
@@ -323,23 +350,41 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
     const live = parts.join("+");
     setDraft(live);
     if (MODIFIER_KEYS.has(physKey)) return;
-    setRecording(false);
-    setDraft("");
-    if (SYSTEM_SHORTCUTS.includes(live)) {
-      const sysName = t(SYSTEM_SHORTCUT_NAMES[live] ?? "shortcuts.sysOther");
-      setConflict(t("shortcuts.conflictSystem", { name: sysName }));
-      return;
+    if (recording) {
+      setRecording(false);
+      setDraft("");
+      if (SYSTEM_SHORTCUTS.includes(live)) {
+        const sysName = t(SYSTEM_SHORTCUT_NAMES[live] ?? "shortcuts.sysOther");
+        setConflict(t("shortcuts.conflictSystem", { name: sysName }));
+        return;
+      }
+      const other = (cfg.shortcuts ?? []).find((s) => s.id !== "summarize" && s.accelerator === live);
+      if (other) {
+        setConflict(`与「${other.name ?? other.id}」快捷键冲突，请改用其他组合`);
+        return;
+      }
+      setConflict(null);
+      setShortcutAccel(live);
     }
-    const other = (cfg.shortcuts ?? []).find((s) => s.id !== "summarize" && s.accelerator === live);
-    if (other) {
-      setConflict(`与「${other.name ?? other.id}」快捷键冲突，请改用其他组合`);
-      return;
+    if (ocrRecording) {
+      setOcrRecording(false);
+      setDraft("");
+      if (SYSTEM_SHORTCUTS.includes(live)) {
+        const sysName = t(SYSTEM_SHORTCUT_NAMES[live] ?? "shortcuts.sysOther");
+        setOcrConflict(t("shortcuts.conflictSystem", { name: sysName }));
+        return;
+      }
+      const other = (cfg.shortcuts ?? []).find((s) => s.id !== "screenshot-ocr" && s.accelerator === live);
+      if (other) {
+        setOcrConflict(`与「${other.name ?? other.id}」快捷键冲突，请改用其他组合`);
+        return;
+      }
+      setOcrConflict(null);
+      setOcrShortcutAccel(live);
     }
-    setConflict(null);
-    setShortcutAccel(live);
   }
   function handleKeyUp(e: React.KeyboardEvent) {
-    if (!recording) return;
+    if (!recording && !ocrRecording) return;
     if (e.key.toUpperCase() === "TAB") return;
     e.preventDefault();
     e.stopPropagation();
@@ -375,10 +420,18 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
       await invoke("autostart_set", { enabled: launchOnStart }).catch(() => {});
     }
     // 步骤3 快捷键若已改则落库
+    let shortcuts = base.shortcuts ?? [];
     if (shortcutAccel !== defaultAccel) {
-      const shortcuts = (base.shortcuts ?? []).map((s) =>
+      shortcuts = shortcuts.map((s) =>
         s.id === "summarize" ? { ...s, accelerator: shortcutAccel } : s,
       );
+    }
+    if (ocrShortcutAccel !== defaultOcrAccel) {
+      shortcuts = shortcuts.map((s) =>
+        s.id === "screenshot-ocr" ? { ...s, accelerator: ocrShortcutAccel } : s,
+      );
+    }
+    if (shortcutAccel !== defaultAccel || ocrShortcutAccel !== defaultOcrAccel) {
       next.shortcuts = shortcuts;
     }
     await invoke("config_save", { cfg: next });
@@ -465,6 +518,7 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
                   <div className="rb-ob-ov-list">
                     {[
                       { label: t("onboarding.shortcutLabel"), accel: shortcutAccel },
+                      { label: t("onboarding.shortcutOcrLabel"), accel: ocrShortcutAccel },
                       { label: t("onboarding.shortcutCopy"), accel: isMac() ? "Cmd+C" : "Ctrl+C" },
                       { label: t("onboarding.shortcutRegenerate"), accel: isMac() ? "Cmd+R" : "Ctrl+R" },
                       { label: t("onboarding.shortcutPin"), accel: isMac() ? "Cmd+P" : "Ctrl+P" },
@@ -722,6 +776,79 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
                   </div>
                   {conflict ? (
                     <div className="rb-ob-conflict">{conflict}</div>
+                  ) : null}
+
+                  <div className="rb-ob-field-label" style={{ marginTop: 16 }}>{t("onboarding.shortcutOcrLabel")}</div>
+                  <div
+                    ref={ocrRecRef}
+                    className={`rb-recorder${
+                      ocrRecording
+                        ? " rb-recorder--recording"
+                        : ocrShortcutAccel
+                          ? " rb-recorder--bound"
+                          : " rb-recorder--empty"
+                    }${ocrConflict ? " rb-recorder--conflict" : ""}`}
+                    tabIndex={0}
+                    role="button"
+                    title={ocrShortcutAccel ? t("shortcuts.reopenRecord") : t("shortcuts.clickRecord")}
+                    onClick={() => {
+                      if (!ocrRecording) startOcrRecord();
+                    }}
+                    onKeyDown={handleKeyDown}
+                    onKeyUp={handleKeyUp}
+                    onBlur={cancelOcrRecord}
+                  >
+                    <span className="rb-recorder-main">
+                      {ocrRecording ? (
+                        <>
+                          <span className="rb-recorder-dot" />
+                          {draft ? (
+                            <span className="rb-recorder-combo">
+                              {draft.split("+").map(keySymbol).join("")}
+                            </span>
+                          ) : (
+                            <span className="rb-recorder-wait">{t("onboarding.recording")}</span>
+                          )}
+                        </>
+                      ) : ocrShortcutAccel ? (
+                        ocrShortcutAccel.split("+").map((k) => (
+                          <span className="kbd" key={k}>
+                            {keySymbol(k)}
+                          </span>
+                        ))
+                      ) : (
+                        <>
+                          <Icon name="plus" size={13} />
+                          {t("shortcuts.clickRecord")}
+                        </>
+                      )}
+                    </span>
+                    {ocrRecording ? (
+                      <span
+                        className="rb-recorder-hint"
+                        title={t("shortcuts.escCancel")}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          cancelOcrRecord();
+                        }}
+                      >
+                        Esc
+                      </span>
+                    ) : ocrShortcutAccel ? (
+                      <span
+                        className="rb-recorder-hint"
+                        title={t("shortcuts.clear")}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          clearOcrShortcut();
+                        }}
+                      >
+                        <Icon name="close" size={12} />
+                      </span>
+                    ) : null}
+                  </div>
+                  {ocrConflict ? (
+                    <div className="rb-ob-conflict">{ocrConflict}</div>
                   ) : null}
                 </div>
               ) : null}

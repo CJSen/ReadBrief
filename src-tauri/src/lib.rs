@@ -5,6 +5,7 @@ pub mod db;
 pub mod error;
 pub mod history;
 pub mod native;
+pub mod ocr;
 pub mod shortcuts;
 pub mod tray;
 pub mod windows;
@@ -69,6 +70,8 @@ pub fn run() {
             commands::autostart_set,
             commands::get_app_arch,
             commands::get_platform,
+            commands::ocr,
+            commands::screenshot_ocr,
             history::history_create,
             history::history_list,
             history::history_count,

@@ -563,7 +563,7 @@ export function AppFloat() {
     return svc?.name ?? "";
   })();
 
-  // 捕获模式标签:selection=划词 / clipboard=托盘粘贴 / history=历史重新生成 / empty=未捕获
+  // 捕获模式标签:selection=划词 / clipboard=托盘粘贴 / history=历史重新生成 / screenshot-ocr=截图OCR / empty=未捕获
   const captureMode =
     capture?.source === "clipboard"
       ? t("float.clipboardMode")
@@ -571,7 +571,11 @@ export function AppFloat() {
         ? t("float.historyMode")
         : capture?.source === "selection"
           ? t("float.selectionMode")
-          : null;
+          : capture?.source === "screenshot-ocr"
+            ? t("float.screenshotOcrMode")
+            : capture?.source === "screenshot-ocr-unauthorized"
+              ? t("float.screenshotOcrUnauthorized")
+              : null;
 
   const canCopy = Boolean(output && state === "done");
   const canRegenerate = Boolean(input && state === "done");

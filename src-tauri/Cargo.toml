@@ -37,6 +37,7 @@ reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls"], defau
 futures-util = "0.3"
 tokio = { version = "1", features = ["time"] }
 png = "0.17"
+objc2-vision = "0.3.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = "0.10"

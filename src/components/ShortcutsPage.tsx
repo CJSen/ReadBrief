@@ -42,6 +42,7 @@ interface BuiltinItem {
 const BUILTINS: BuiltinItem[] = [
   { id: "open-main", name: "打开主窗口", desc: "显示并聚焦 ReadBrief 主窗口", action: "open-main", noPrompt: true, nameKey: "shortcuts.biOpenMain", descKey: "shortcuts.biOpenMainDesc" },
   { id: "summarize", name: "划词总结", desc: "选中文本后触发内置总结提示词", action: "summarize", nameKey: "shortcuts.biSummarize", descKey: "shortcuts.biSummarizeDesc" },
+  { id: "screenshot-ocr", name: "截图 OCR 总结", desc: "截取屏幕区域后 OCR 识别并总结", action: "screenshot-ocr", nameKey: "shortcuts.biScreenshotOcr", descKey: "shortcuts.biScreenshotOcrDesc" },
   { id: "paste", name: "呼出输入框", desc: "粘贴任意文本进行问答", action: "paste", nameKey: "shortcuts.biPaste", descKey: "shortcuts.biPasteDesc" },
   { id: "translate", name: "翻译", desc: "翻译选中内容", action: "prompt", proOnly: true, nameKey: "shortcuts.biTranslate", descKey: "shortcuts.biTranslateDesc" },
 ];
@@ -82,6 +83,7 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
   const [showDialog, setShowDialog] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
+  const [newAction, setNewAction] = useState<"summarize" | "screenshot-ocr">("summarize");
   const [confirmDel, setConfirmDel] = useState<{ id: string; name: string } | null>(null);
   const recordRef = useRef<HTMLDivElement | null>(null);
 
@@ -220,10 +222,11 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
     const item = items.find((it) => it.id === id);
     const existing = shortcuts.find((s) => s.id === id);
     const promptId = existing?.promptId ?? item?.promptId ?? null;
+    const action = resolveAction(item, existing, promptId);
     const entry: ShortcutConfig = {
       id,
       accelerator: live,
-      action: promptId ? "prompt" : (item?.action ?? "summarize"),
+      action,
       promptId,
       serviceId: existing?.serviceId,
       name: item?.name,
@@ -251,6 +254,22 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
     setDraft(parts.join("+"));
   }
 
+  /**
+   * 保留原始 action：
+   * - 内置项（如 summarize/screenshot-ocr/paste/open-main）保留原始 action
+   * - 用户自定义的截图 OCR 类型也保留 screenshot-ocr action
+   * - 其他自定义项：有提示词时用 "prompt"，否则用默认
+   */
+  function resolveAction(item: { action: string; isDefault: boolean } | undefined, existing: ShortcutConfig | undefined, promptId: string | null): string {
+    if (item?.isDefault && item.action !== "prompt") {
+      return item.action;
+    }
+    if (existing?.action === "screenshot-ocr") {
+      return "screenshot-ocr";
+    }
+    return promptId ? "prompt" : (item?.action ?? "summarize");
+  }
+
   /* 清除快捷键绑定:accelerator 置空,条目保留为空态待录制(内置/自定义均适用) */
   function clearShortcut(id: string) {
     setRecordingId(null);
@@ -276,10 +295,11 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
   function handlePromptChange(id: string, promptId: string | null) {
     const existing = shortcuts.find((s) => s.id === id);
     const item = items.find((it) => it.id === id);
+    const action = resolveAction(item, existing, promptId);
     const entry: ShortcutConfig = {
       id,
       accelerator: existing?.accelerator ?? "",
-      action: promptId ? "prompt" : (item?.action ?? "summarize"),
+      action,
       promptId,
       serviceId: existing?.serviceId,
       name: item?.name,
@@ -297,10 +317,11 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
     const existing = shortcuts.find((s) => s.id === id);
     const item = items.find((it) => it.id === id);
     const promptId = existing?.promptId ?? item?.promptId ?? null;
+    const action = resolveAction(item, existing, promptId);
     const entry: ShortcutConfig = {
       id,
       accelerator: existing?.accelerator ?? "",
-      action: promptId ? "prompt" : (existing?.action ?? item?.action ?? "summarize"),
+      action,
       promptId,
       serviceId: serviceId || undefined,
       name: item?.name,
@@ -326,7 +347,7 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
       {
         id,
         accelerator: "",
-        action: "summarize",
+        action: newAction,
         promptId: null,
         name: newName.trim(),
         description: newDesc.trim(),
@@ -336,6 +357,7 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
     setShowDialog(false);
     setNewName("");
     setNewDesc("");
+    setNewAction("summarize");
   }
 
   /* ═══ 冲突态的录制品项 id(录制冲突时记为该条目) ═══ */
@@ -561,6 +583,17 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
               </div>
 
               <div className="rb-dialog-body">
+                <div className="set-row">
+                  <div className="rb-setting-label">{t("shortcuts.typeLabel")}</div>
+                  <select
+                    className="rb-dialog-select"
+                    value={newAction}
+                    onChange={(e) => setNewAction(e.currentTarget.value as "summarize" | "screenshot-ocr")}
+                  >
+                    <option value="summarize">{t("shortcuts.typeSelection")}</option>
+                    <option value="screenshot-ocr">{t("shortcuts.typeOcr")}</option>
+                  </select>
+                </div>
                 <div className="set-row">
                   <div className="rb-setting-label">{t("shortcuts.nameLabel")}</div>
                   <input
