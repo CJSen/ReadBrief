@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "ReadBrief 窗口权限",
-  "windows": ["main", "settings", "float"],
+  "windows": ["main", "settings", "float", "overlay"],
   "permissions": [
     "core:default",
     "opener:default",

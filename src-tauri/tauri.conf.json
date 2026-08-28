@@ -52,6 +52,18 @@
         "skipTaskbar": true,
         "resizable": false,
         "visible": false
+      },
+      {
+        "label": "overlay",
+        "title": "",
+        "width": 1920,
+        "height": 1080,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "transparent": true,
+        "visible": false,
+        "skipTaskbar": true,
+        "resizable": false
       }
     ],
     "security": {

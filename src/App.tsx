@@ -3,6 +3,7 @@ import "./App.css";
 import { AppMain } from "./components/AppMain";
 import { AppSettings } from "./components/AppSettings";
 import { AppFloat } from "./components/AppFloat";
+import { OcrOverlay } from "./components/OcrOverlay";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
@@ -10,12 +11,12 @@ import { applyFontScale, applyPreference, type ThemePreference } from "./lib/the
 import { setLanguage, useLanguage } from "./lib/i18n";
 import type { AppConfig } from "./lib/config/types";
 
-type WinLabel = "main" | "settings" | "float";
+type WinLabel = "main" | "settings" | "float" | "overlay";
 
 function getWindowLabel(): WinLabel {
   try {
     const label = getCurrentWindow().label;
-    if (label === "settings" || label === "float") {
+    if (label === "settings" || label === "float" || label === "overlay") {
       return label;
     }
   } catch {
@@ -31,6 +32,9 @@ function App() {
 
   useEffect(() => {
     if (winLabel === "float") {
+      document.body.style.background = "transparent";
+      document.body.style.backgroundColor = "transparent";
+    } else if (winLabel === "overlay") {
       document.body.style.background = "transparent";
       document.body.style.backgroundColor = "transparent";
     } else {
@@ -90,6 +94,10 @@ function App() {
 
   if (winLabel === "float") {
     return <AppFloat />;
+  }
+
+  if (winLabel === "overlay") {
+    return <OcrOverlay />;
   }
 
   if (winLabel === "settings") {

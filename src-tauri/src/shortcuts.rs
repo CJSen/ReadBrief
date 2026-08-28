@@ -39,6 +39,48 @@ static CAPTURE_PAUSED: AtomicBool = AtomicBool::new(false);
 static FLOAT_READY: AtomicBool = AtomicBool::new(false);
 static PENDING_CAPTURE: Mutex<Option<CapturedText>> = Mutex::new(None);
 
+/// 截图 OCR 流程中暂存的 prompt_id 和 service_id（供 overlay 选区完成后使用）
+pub(crate) static PENDING_OCR_PROMPT: Mutex<Option<(Option<String>, Option<String>)>> = Mutex::new(None);
+
+/// overlay(截图框选层)显示期间是否已临时注册 Esc 全局快捷键
+static OVERLAY_ESC_REGISTERED: AtomicBool = AtomicBool::new(false);
+
+/// overlay 显示期间临时注册 Esc = 全局取消截图。
+/// 不依赖 WebView 键盘焦点 —— 应用未激活 / firstResponder 丢失时前端 keydown 不可靠,
+/// 参考 pot-desktop:框选期间用全局热键处理 Esc,且热键会吞掉该按键不传给前台应用。
+/// 由 show_overlay_fullscreen 注册,cancel/finish 时注销。
+///
+/// ⚠️ 回调内严禁同步调用 cancel_screenshot_capture:该函数经 unregister_overlay_esc →
+/// 插件 unregister() 内部 `shortcuts.lock()`,而插件的事件分发闭包此刻正持有同一把
+/// 不可重入 Mutex 调用本回调 → 重入死锁,主线程在 Carbon 热键回调里永久卡死
+/// (表现:按 Esc 后应用整体冻结,只能杀进程)。必须丢到独立线程异步执行。
+pub fn register_overlay_esc(app: &tauri::AppHandle) {
+    if OVERLAY_ESC_REGISTERED.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    if let Err(e) = app.global_shortcut().on_shortcut("Escape", |app, _shortcut, event| {
+        if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+            let app2 = app.clone();
+            std::thread::spawn(move || {
+                let _ = crate::screenshot::cancel_screenshot_capture(app2);
+            });
+        }
+    }) {
+        OVERLAY_ESC_REGISTERED.store(false, Ordering::SeqCst);
+        log::warn!("注册 Esc 取消截图快捷键失败: {e}");
+    }
+}
+
+/// overlay 隐藏/选区完成时注销临时 Esc 快捷键(幂等)
+pub fn unregister_overlay_esc(app: &tauri::AppHandle) {
+    if !OVERLAY_ESC_REGISTERED.swap(false, Ordering::SeqCst) {
+        return;
+    }
+    if let Err(e) = app.global_shortcut().unregister("Escape") {
+        log::warn!("注销 Esc 取消截图快捷键失败: {e}");
+    }
+}
+
 pub fn is_capture_paused() -> bool {
     CAPTURE_PAUSED.load(Ordering::SeqCst)
 }
@@ -195,11 +237,11 @@ fn handle_trigger(app: tauri::AppHandle, action: String, prompt_id: Option<Strin
         "open-main" => {
             let _ = crate::windows::show_main(app.clone());
         }
-        // 截图 OCR:系统截图 → OCR 识别 → LLM 总结
+        // 截图 OCR:冻结截图 → 用户选区 → OCR 识别 → LLM 总结
         "screenshot-ocr" => {
             // 检查屏幕录制权限
             #[cfg(target_os = "macos")]
-            if !screen_capture_trusted() {
+            if !crate::screenshot::screen_capture_trusted() {
                 log::warn!("截图 OCR 失败: 未授权屏幕录制权限");
                 // 显示浮窗并提示用户授权
                 crate::windows::show_float(&app);
@@ -212,78 +254,25 @@ fn handle_trigger(app: tauri::AppHandle, action: String, prompt_id: Option<Strin
                 });
                 return;
             }
-            // 截图 + OCR 在后台线程执行(screencapture 会阻塞等待用户选区)
+            // 新流程：截取屏幕 → 显示 overlay → 用户选区后由 overlay 前端调用 finish_screenshot_selection
             let app2 = app.clone();
             let prompt_id2 = prompt_id.clone();
             let service_id2 = service_id.clone();
             std::thread::spawn(move || {
-                let temp_path = std::env::temp_dir().join(format!("readbrief_screenshot_{}.png", std::process::id()));
-                #[cfg(target_os = "macos")]
-                {
-                    log::info!("开始截图 OCR");
-                    let result = std::process::Command::new("/usr/sbin/screencapture")
-                        .arg("-i")
-                        .arg("-r")
-                        .arg(&temp_path)
-                        .output();
-                    match result {
-                        Ok(output) => {
-                            log::info!("screencapture 退出: status={}", output.status);
-                            if output.status.success() {
-                                if let Ok(image_data) = std::fs::read(&temp_path) {
-                                    let _ = std::fs::remove_file(&temp_path);
-                                    log::info!("截图成功: {} bytes", image_data.len());
-                                    let request = crate::ocr::types::OcrRequest { image: image_data, languages: None };
-                                    match crate::ocr::recognize(request) {
-                                        Ok(ocr_result) => {
-                                            log::info!("OCR 完成: len={}", ocr_result.text.chars().count());
-                                            // 截图完成后再显示浮窗
-                                            let was_visible = crate::windows::is_float_visible();
-                                            crate::native::stash_cursor_position();
-                                            crate::windows::show_float(&app2);
-                                            if !was_visible {
-                                                let _ = app2.emit("float-shown", ());
-                                            }
-                                            if !ocr_result.text.trim().is_empty() {
-                                                dispatch_capture(&app2, CapturedText {
-                                                    text: ocr_result.text,
-                                                    source: "screenshot-ocr".to_string(),
-                                                    prompt_id: prompt_id2,
-                                                    service_id: service_id2,
-                                                });
-                                            } else {
-                                                dispatch_capture(&app2, CapturedText {
-                                                    text: String::new(),
-                                                    source: "screenshot-ocr-empty".to_string(),
-                                                    prompt_id: prompt_id2,
-                                                    service_id: service_id2,
-                                                });
-                                            }
-                                        }
-                                        Err(e) => {
-                                            log::warn!("截图 OCR 失败: {e}");
-                                            let _ = std::fs::remove_file(&temp_path);
-                                        }
-                                    }
-                                } else {
-                                    log::warn!("读取截图文件失败");
-                                    let _ = std::fs::remove_file(&temp_path);
-                                }
-                            } else {
-                                log::info!("截图已取消(exit code: {})", output.status.code().unwrap_or(-1));
-                                let _ = std::fs::remove_file(&temp_path);
-                            }
-                        }
-                        Err(e) => {
-                            log::warn!("screencapture 执行失败: {e}");
-                            let _ = std::fs::remove_file(&temp_path);
+                log::info!("开始冻结截图 OCR");
+                // 在新线程中创建 tokio runtime 来调用 async 函数
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                match rt.block_on(crate::screenshot::start_screenshot_capture(app2.clone())) {
+                    Ok(()) => {
+                        // 截图成功，overlay 已显示，等待用户选区
+                        // prompt_id 和 service_id 保存到全局状态，供 finish_screenshot_selection 使用
+                        if let Ok(mut guard) = PENDING_OCR_PROMPT.lock() {
+                            *guard = Some((prompt_id2, service_id2));
                         }
                     }
-                }
-                #[cfg(not(target_os = "macos"))]
-                {
-                    let _ = (app2, temp_path, prompt_id2, service_id2);
-                    log::warn!("截图 OCR 暂不支持当前平台");
+                    Err(e) => {
+                        log::warn!("截图 OCR 失败: {e}");
+                    }
                 }
             });
         }

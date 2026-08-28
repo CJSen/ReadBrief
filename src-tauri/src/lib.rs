@@ -6,6 +6,7 @@ pub mod error;
 pub mod history;
 pub mod native;
 pub mod ocr;
+pub mod screenshot;
 pub mod shortcuts;
 pub mod tray;
 pub mod windows;
@@ -72,6 +73,17 @@ pub fn run() {
             commands::get_platform,
             commands::ocr,
             commands::screenshot_ocr,
+            commands::show_ocr_overlay,
+            commands::hide_ocr_overlay,
+            commands::is_ocr_overlay_visible,
+            commands::screenshot_and_freeze,
+            screenshot::start_screenshot_capture,
+            screenshot::finish_screenshot_selection,
+            screenshot::cancel_screenshot_capture,
+            screenshot::get_screenshot_image,
+            screenshot::dispatch_ocr_result,
+            screenshot::notify_overlay_ready,
+            screenshot::notify_overlay_painted,
             history::history_create,
             history::history_list,
             history::history_count,

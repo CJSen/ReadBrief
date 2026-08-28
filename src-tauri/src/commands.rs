@@ -247,3 +247,79 @@ pub fn screenshot_ocr() -> AppResult<crate::ocr::types::OcrResult> {
     let request = crate::ocr::types::OcrRequest { image: image_data, languages: None };
     crate::ocr::recognize(request).map_err(|e| e.into())
 }
+
+/// 显示 OCR 冻结图浮层
+///
+/// 在指定位置显示 PNG 格式的图片作为 OCR 冻结图。
+/// 浮层会覆盖在全屏 App 上方，且不激活 ReadBrief。
+///
+/// # Arguments
+/// * `image_data` - PNG 格式的图片数据
+/// * `x` - 显示位置 x 坐标（逻辑点）
+/// * `y` - 显示位置 y 坐标（逻辑点）
+/// * `width` - 显示宽度（逻辑点）
+/// * `height` - 显示高度（逻辑点）
+#[tauri::command]
+pub fn show_ocr_overlay(
+    image_data: Vec<u8>,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+) -> AppResult<()> {
+    crate::ocr::overlay::show_ocr_overlay(&image_data, x, y, width, height)
+        .map_err(|e| crate::error::AppError::Internal(e))
+}
+
+/// 隐藏 OCR 冻结图浮层
+#[tauri::command]
+pub fn hide_ocr_overlay() {
+    crate::ocr::overlay::hide_ocr_overlay();
+}
+
+/// 检查 OCR 浮层是否可见
+#[tauri::command]
+pub fn is_ocr_overlay_visible() -> bool {
+    crate::ocr::overlay::is_ocr_overlay_visible()
+}
+
+/// 截图并显示 OCR 冻结图
+///
+/// 完整流程：截图 → 显示冻结图 → OCR 识别 → 返回文本
+/// 冻结图会覆盖在全屏 App 上方，且不激活 ReadBrief。
+#[tauri::command]
+pub fn screenshot_and_freeze() -> AppResult<crate::ocr::types::OcrResult> {
+    #[cfg(target_os = "macos")]
+    {
+        use crate::screenshot::macos::{capture_current_screen, crop_session};
+
+        // 1. 截取当前屏幕
+        let session = capture_current_screen()
+            .ok_or_else(|| crate::error::AppError::Internal("截图失败".into()))?;
+
+        // 2. 将截图编码为 PNG
+        let png_data = crop_session(&session, 0, 0, session.width, session.height)
+            .ok_or_else(|| crate::error::AppError::Internal("截图编码失败".into()))?;
+
+        // 3. 显示冻结图（覆盖全屏）
+        crate::ocr::overlay::show_ocr_overlay(
+            &png_data,
+            session.screen_x,
+            session.screen_y,
+            session.screen_width,
+            session.screen_height,
+        )?;
+
+        // 4. 执行 OCR
+        let request = crate::ocr::types::OcrRequest {
+            image: png_data,
+            languages: None,
+        };
+        crate::ocr::recognize(request).map_err(|e| e.into())
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        Err(crate::error::AppError::Internal("当前平台暂不支持截图 OCR".into()))
+    }
+}

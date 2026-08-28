@@ -1,4 +1,5 @@
 pub mod types;
+pub mod overlay;
 
 #[cfg(target_os = "macos")]
 mod macos;

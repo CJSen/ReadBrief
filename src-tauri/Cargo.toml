@@ -35,9 +35,10 @@ tauri-plugin-log = "2"
 ts-rs = { version = "10", features = ["serde-compat"] }
 reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls"], default-features = false }
 futures-util = "0.3"
-tokio = { version = "1", features = ["time"] }
+tokio = { version = "1", features = ["time", "macros", "sync"] }
 png = "0.17"
 objc2-vision = "0.3.2"
+base64 = "0.22"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = "0.10"

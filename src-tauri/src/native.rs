@@ -234,6 +234,31 @@ fn find_wkwebview(
     None
 }
 
+/// 把窗口内的 WKWebView 设为 first responder(键盘事件/IME 的实际接收者)。
+///
+/// overlay 截图浮层场景:窗口经 object_setClass → NSPanel + setStyleMask 后
+/// first responder 被重置,若不恢复,前端 keydown(如 Esc 取消)收不到任何键盘事件。
+/// 与 make_floating_panel 第 2 步的同款处理,抽出复用。
+#[cfg(target_os = "macos")]
+pub fn make_webview_first_responder(win: &tauri::WebviewWindow) {
+    use objc2::rc::Retained;
+    use objc2_app_kit::NSResponder;
+
+    if let Some(ns_window) = float_ns_window(win) {
+        unsafe {
+            if let Some(content_view) = ns_window.contentView() {
+                let responder: Retained<NSResponder> = find_wkwebview(&content_view)
+                    .map(|v| v.into_super())
+                    .unwrap_or_else(|| content_view.into_super());
+                ns_window.makeFirstResponder(Some(&responder));
+            }
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn make_webview_first_responder(_win: &tauri::WebviewWindow) {}
+
 /// 缓存动态注册的 `ReadBriefPanel` 类引用(进程内一次注册)。
 #[cfg(target_os = "macos")]
 static PANEL_CLASS: OnceLock<&'static objc2::runtime::AnyClass> = OnceLock::new();
@@ -274,8 +299,9 @@ unsafe extern "C-unwind" fn panel_can_become_main(
 
 /// 动态注册 `ReadBriefPanel`(NSPanel 子类,重写 canBecomeKeyWindow=YES /
 /// canBecomeMainWindow=NO),返回其类引用。注册仅执行一次,后续直接返回缓存。
+/// 供浮窗 make_floating_panel 与截图 overlay show_overlay_fullscreen 共用。
 #[cfg(target_os = "macos")]
-fn ensure_panel_class() -> &'static objc2::runtime::AnyClass {
+pub(crate) fn ensure_panel_class() -> &'static objc2::runtime::AnyClass {
     use objc2::ffi::{class_addMethod, objc_allocateClassPair, objc_registerClassPair};
     use objc2::runtime::{AnyClass, Imp, Sel};
 
