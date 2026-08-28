@@ -874,6 +874,7 @@
   margin-top: 7px;
   font-size: 11px;
   color: var(--rb-text-secondary);
+  flex-wrap: wrap;
 }
 
 .rb-meta-dot {
@@ -911,12 +912,15 @@
 .rb-detail-head {
   padding: 13px 20px 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
 
 .rb-detail-model {
   font-size: var(--rb-text-xs);
+  flex: 1 1 100%;
+  min-width: 0;
 }
 
 /* 顶栏第二行标签：小号字 + 底部色块，可多个 */

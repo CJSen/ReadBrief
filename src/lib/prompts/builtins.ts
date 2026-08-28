@@ -50,13 +50,30 @@ export const BUILTIN_ICONS: Record<string, { icon: string; bg: string; fg: strin
 
 /**
  * 角色基线:按提示词类别分化(划词ai xx 助手)。
- * - summary → 总结助手;translate → 翻译助手;qa → 问答助手;general → 划词ai助手。
+ * - summary → 总结助手; translate → 翻译助手; qa → 问答助手; general → 划词ai助手。
+ *
+ * reasoning 策略:
+ * - summary / translate → 强调快速直接处理，尽量减少不必要的推理。
+ * - qa → 不限制推理能力，由模型自行决定。
+ * - general → 允许必要的简短思考，但避免无意义的冗长推理。
  */
 export const DEFAULT_SYSTEM: Record<PromptTag, { zh: string; en: string }> = {
-  summary: { zh: "你是 ReadBrief 的划词ai总结助手。", en: "You are the ReadBrief AI summary assistant." },
-  translate: { zh: "你是 ReadBrief 的划词ai翻译助手。", en: "You are the ReadBrief AI translation assistant." },
-  qa: { zh: "你是 ReadBrief 的划词ai问答助手。", en: "You are the ReadBrief AI Q&A assistant." },
-  general: { zh: "你是 ReadBrief 的划词ai助手。", en: "You are the ReadBrief AI assistant." },
+  summary: {
+    zh: "你是 ReadBrief 的划词ai总结助手。你的核心价值是快速响应和直接给出结果，仅进行完成总结所必需的最少处理。",
+    en: "You are the ReadBrief AI summary assistant. Your priority is fast response and direct results. Use only the minimum processing necessary to complete the summary.",
+  },
+  translate: {
+    zh: "你是 ReadBrief 的划词ai翻译助手。你的核心价值是快速响应和直接给出结果，仅进行完成翻译所必需的最少处理。",
+    en: "You are the ReadBrief AI translation assistant. Your priority is fast response and direct results. Use only the minimum processing necessary to complete the translation.",
+  },
+  qa: {
+    zh: "你是 ReadBrief 的划词ai问答助手。",
+    en: "You are the ReadBrief AI Q&A assistant.",
+  },
+  general: {
+    zh: "你是 ReadBrief 的划词ai助手。快速响应优先，只进行完成任务所必需的处理；复杂任务可以进行必要的简短思考。",
+    en: "You are the ReadBrief AI assistant. Fast response is preferred. Use only the processing necessary to complete the task; brief reasoning is acceptable when necessary for complex tasks.",
+  },
 };
 
 /** 按 tag + 语言取角色基线;非法 tag 回退 summary */
@@ -80,62 +97,73 @@ export const SUMMARY_FORMAT_RULE_ZH = `输出格式要求(必须严格遵守,格
 1. 第一行 = 标题,只写这一行标题:
    - 长度必须为 6-15 个字符(约 2-4 个词语组成的短语,不是完整句子)。
    - 后果:标题超过 15 个字符会被系统截断,少于 6 个字符会被判定不合格 —— 请严格落在 6-15 字符区间。
-   - 写法:先提炼全文核心主题,再压缩成最简短语;不要加「标题:」「总结:」等前缀,不要用 # 号。
+   - 写法:提炼全文核心主题,再压缩成最简短语;不要加「标题:」「总结:」等前缀,不要用 # 号。
    - 合格示例:「新能源汽车电池技术趋势」(11字);不合格示例:「汽车电池技术的发展现状与未来趋势分析」(18字,超过15字)。
 2. 第二行起 = 正文:直接以编号列表(1. 2. 3. ...)逐条列出核心要点,每条精炼准确;要点数量不限。
 3. 正文不要先写"一句话结论"段落,也不要输出「核心要点」「帖子总结」等分区标题,直接给要点列表。
-4. 不要输出任何思考/推理过程,直接给出总结。`;
+4. 这是一个直接的总结任务。只进行完成总结所必需的最少推理;不要进行深度推理、冗长分析、反复验证、重复检查、自我审查或多方案探索。
+5. 禁止输出思考过程、推理步骤或解释。标题和要点列表就是最终结果,请完整输出。`;
 
 export const SUMMARY_FORMAT_RULE_EN = `Output format (must be followed exactly; any violation causes the output to be discarded):
 1. Line 1 = the title only:
    - Length must be 6-15 characters (a short phrase of about 2-4 words, NOT a full sentence).
    - Consequence: titles over 15 characters will be truncated by the system; under 6 characters are judged invalid — strictly stay within 6-15.
-   - How: first extract the core topic, then compress it into the shortest phrase; no prefixes like 'Title:', no '#' symbols.
+   - How: extract the core topic, then compress it into the shortest phrase; no prefixes like 'Title:' or 'Summary:', no '#' symbols.
    - OK example: 「新能源汽车电池技术趋势」(11 chars); BAD example: 「汽车电池技术的发展现状与未来趋势分析」(18 chars, over 15).
 2. From line 2 = the body: list key points directly as a numbered list (1. 2. 3. ...), each concise; any number of points is fine.
 3. Do not add a one-sentence conclusion paragraph, and do not output section headings like 'Summary' or 'Key Points'.
-4. Do not output any reasoning; give the summary directly.`;
+4. This is a direct summarization task. Use only the minimum reasoning necessary to complete the summary. Do not perform deep reasoning, lengthy analysis, repeated verification, redundant checking, self-review, or explore multiple approaches.
+5. Do not output reasoning steps or explanations. The title and bullet points ARE the final result — output them in full.`;
 
 /**
  * 翻译类格式规则:首行以「翻译：」开头作为标题,其后直接输出译文正文。
  * 与总结类不同,正文不强制编号列表,而是原样译文,以贴合翻译场景。
  */
 export const TRANSLATE_FORMAT_RULE_ZH = `输出格式要求(必须严格遵守):
-1. 第一行以「翻译：」开头作为标题(其后可跟一句极简说明,如原文主题),标题长度必须为 6-15 个字符;超过 15 个字符会被系统截断,少于 6 个字符判定不合格。
+1. 第一行固定输出「翻译：」作为标题,不要添加任何其他内容。
 2. 从第二行起直接输出译文正文,保留原意与语气,不要编号列表、不要额外总结。
-3. 不要输出任何思考/推理过程,直接给出译文。`;
+3. 这是一个直接的翻译任务。不要进行任何思考、推理、分析、验证或自我审查;直接翻译,不要解释你的翻译选择。
+4. 禁止输出思考过程或推理步骤。译文就是最终结果,直接输出。`;
 
 export const TRANSLATE_FORMAT_RULE_EN = `Output format (must be followed exactly):
-1. Line 1 starts with "Translate: " as the title (optionally followed by a very short note, e.g. the topic); the title must be 6-15 characters; over 15 is truncated, under 6 is invalid.
+1. Line 1: output exactly "Translate: " as the title. Nothing else.
 2. From line 2 output the translated text directly, preserving meaning and tone; no numbered list, no extra summary.
-3. Do not output any reasoning; give the translation directly.`;
+3. This is a direct translation task. Do NOT think, reason, analyze, verify, or self-review. Translate directly without explaining your choices.
+4. Do not output reasoning steps. The translation IS the final result — output it directly.`;
 
 /**
  * 问答类格式规则:首行以「问答：」开头作为标题,其后直接输出答案正文。
+ *
+ * QA 不主动限制 reasoning:
+ * 由模型自行决定需要多少推理,以保证复杂问题的回答质量。
  */
 export const QA_FORMAT_RULE_ZH = `输出格式要求(必须严格遵守):
-1. 第一行以「问答：」开头作为标题(可跟一句极简说明),标题长度必须为 6-15 个字符;超过 15 个字符会被系统截断,少于 6 个字符判定不合格。
+1. 第一行以「问答：」开头作为标题(可跟一句极简说明),标题长度必须为 6-15 个字符;超过 15 个字符会被截断,少于 6 个字符判定不合格。
 2. 从第二行起直接输出答案正文,像普通 AI 问答一样自由作答,不做额外格式限制。`;
 
 export const QA_FORMAT_RULE_EN = `Output format (must be followed exactly):
-1. Line 1 starts with "QA: " as the title (optionally followed by a very short note); the title must be 6-15 characters; over 15 is truncated, under 6 is invalid.
+1. Line 1 starts with "QA: " as the title (optionally followed by a very short note); the title must be 6-15 characters; over 15 is invalid.
 2. From line 2 output the answer freely, just like a normal AI Q&A, with no extra format restrictions.`;
 
 /** 提示词类别 */
 export type PromptTag = "summary" | "translate" | "qa" | "general";
 
 /**
- * 通用类格式规则:仅强制「首行标题 6-15 字」,正文完全听提示词(润色/提取等)自由发挥。
+ * 通用类格式规则:
+ * 仅强制「首行标题 6-15 字」,正文完全听提示词(润色/提取等)自由发挥。
+ * 允许模型进行必要的少量思考,但避免无意义的冗长推理。
  */
 export const GENERAL_FORMAT_RULE_ZH = `输出格式要求(必须严格遵守):
 1. 第一行 = 标题,只写这一行标题,长度必须为 6-15 个字符;超过 15 个字符会被系统截断,少于 6 个字符判定不合格。不要加「标题:」等前缀,不要用 # 号。
 2. 从第二行起直接输出正文,按提示词要求自由发挥(如润色、提取关键词),不要强行编号列表、不要额外总结(除非提示词本身要求)。
-3. 不要输出任何思考/推理过程,直接给出结果。`;
+3. 快速完成任务即可。仅在任务确实需要时进行简短思考,避免不必要的深度推理、冗长分析、反复验证或多方案探索。
+4. 禁止输出思考过程或推理步骤。正文内容就是最终结果,请完整输出。`;
 
 export const GENERAL_FORMAT_RULE_EN = `Output format (must be followed exactly):
 1. Line 1 = the title only, 6-15 characters; over 15 is truncated, under 6 is invalid. No prefixes like 'Title:', no '#'.
 2. From line 2 output the body freely per the prompt (e.g. polish, extract keywords); no forced numbered list, no extra summary unless the prompt asks.
-3. Do not output any reasoning; give the result directly.`;
+3. Complete the task efficiently. Use brief reasoning only when genuinely necessary; avoid unnecessary deep reasoning, lengthy analysis, repeated verification, or exploring multiple approaches.
+4. Do not output reasoning steps. The content IS the final result — output it in full.`;
 
 /**
  * 按类别取系统提示词里的「格式规则」(追加到角色基线之后)。
