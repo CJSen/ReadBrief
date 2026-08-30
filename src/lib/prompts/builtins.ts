@@ -11,7 +11,7 @@ export const BUILTIN_PROMPTS: PromptConfig[] = [
   {
     id: "builtin-summarize",
     name: "总结提示词",
-    content: "用要点概括以下内容，提炼核心信息：{{text}}",
+    content: "提炼以下内容的核心要点，按主题保留各关键信息、避免重复：{{text}}",
     model: "",
     shortcut: null,
     outputFormat: "md",
@@ -92,6 +92,15 @@ export function getRole(tag: string, lang: "zh" | "en"): string {
  * - 明确违规后果：「超过 15 字会被截断、少于 6 字不合格」，模型知道长度是硬约束而非建议
  * - 两步法：「先提炼核心主题 → 再压缩成短语」，化解"概括完整 vs 长度受限"的指令冲突
  * - 合格/不合格示例各一：给模型可模仿的标题模板，降低随机性
+ *
+ * 覆盖度与密度平衡（2026-08-30 三次修订，在「漏覆盖」与「碎片化/注水」间找中点）：
+ * 1) 针对「长文只出 5-7 条」：覆盖优先 + 每个新论点单独成条 → 矫枉过正出 15+ 条碎片化。
+ * 2) 针对「15+ 条太多」：主题归并 + 围绕主线合并 → 又矫枉成 3-5 条、漏覆盖。
+ * 3) 本轮中点：每个独立主题/方面各成一条，同主题内仅合并真正同义碎片，既不逐段罗列、
+ *    也不强行压条；保留遍历（先通读再提炼）以对治 lost-in-the-middle。
+ * 4) 在中点基础上补「保留关键数据」：合并时不得丢弃具体数字/统计/日期/专有名词，防止
+ *    泛化表述导致数据遗漏；验收标准同步加入「关键数据」。
+ * 始终用语义判据 + 可自检验收标准，不回退到条数 KPI（模型不擅长数自己的条数）。
  */
 export const SUMMARY_FORMAT_RULE_ZH = `输出格式要求(必须严格遵守,格式违规的输出会被系统直接丢弃):
 1. 第一行 = 标题,只写这一行标题:
@@ -99,9 +108,12 @@ export const SUMMARY_FORMAT_RULE_ZH = `输出格式要求(必须严格遵守,格
    - 后果:标题超过 15 个字符会被系统截断,少于 6 个字符会被判定不合格 —— 请严格落在 6-15 字符区间。
    - 写法:提炼全文核心主题,再压缩成最简短语;不要加「标题:」「总结:」等前缀,不要用 # 号。
    - 合格示例:「新能源汽车电池技术趋势」(11字);不合格示例:「汽车电池技术的发展现状与未来趋势分析」(18字,超过15字)。
-2. 第二行起 = 正文:直接以编号列表(1. 2. 3. ...)逐条列出核心要点,每条精炼准确;要点数量不限。
+2. 第二行起 = 正文:按原文的主题/结构组织要点,编号列表(1. 2. 3. ...)。
+   - 覆盖与密度平衡:每个独立主题或方面单独成一条;同一主题内仅把真正同义的零散表述合并,不要把不同侧面硬并成一条。既不要逐段罗列每个细节(避免碎片化),也不要把多个主题压成一条(避免漏覆盖)。
+   - 保留关键数据:凡原文出现的具体数字、统计、日期、比例、金额、专有名词、量化结论,必须原样保留在对应要点中,不要泛化成「有所提升」「部分增长」「多项数据」等模糊表述;数据缺失会让要点失去信息量。
+   - 验收标准:读者只看这份要点列表,就能把握原文的主要脉络、关键结论与关键数据,不需要回看原文。
 3. 正文不要先写"一句话结论"段落,也不要输出「核心要点」「帖子总结」等分区标题,直接给要点列表。
-4. 这是一个直接的总结任务。只进行完成总结所必需的最少推理;不要进行深度推理、冗长分析、反复验证、重复检查、自我审查或多方案探索。
+4. 这是一个归纳型任务:先通读全文、把握整体结构与各主题,再按主题提炼要点;相关但不同的内容分项列出,而不是逐段罗列。
 5. 禁止输出思考过程、推理步骤或解释。标题和要点列表就是最终结果,请完整输出。`;
 
 export const SUMMARY_FORMAT_RULE_EN = `Output format (must be followed exactly; any violation causes the output to be discarded):
@@ -110,9 +122,12 @@ export const SUMMARY_FORMAT_RULE_EN = `Output format (must be followed exactly; 
    - Consequence: titles over 15 characters will be truncated by the system; under 6 characters are judged invalid — strictly stay within 6-15.
    - How: extract the core topic, then compress it into the shortest phrase; no prefixes like 'Title:' or 'Summary:', no '#' symbols.
    - OK example: 「新能源汽车电池技术趋势」(11 chars); BAD example: 「汽车电池技术的发展现状与未来趋势分析」(18 chars, over 15).
-2. From line 2 = the body: list key points directly as a numbered list (1. 2. 3. ...), each concise; any number of points is fine.
+2. From line 2 = the body: organize points following the source's themes/structure, as a numbered list (1. 2. 3. ...).
+   - Balance coverage with density: give each distinct topic or aspect its own entry; within a topic, merge only genuinely synonymous fragments, but do not force different facets into one bullet. Do not list every paragraph's detail (avoid fragmentation), and do not compress several topics into one (avoid missing coverage).
+   - Preserve key data: any concrete numbers, statistics, dates, ratios, amounts, proper nouns, or quantified conclusions in the source must be kept verbatim in the relevant bullet. Never vague them into "increased", "some growth", "multiple data points", etc.; dropping data strips the point of its information value.
+   - Acceptance test: a reader who sees only this list can grasp the main thread, key conclusions, and key data of the original without going back to it.
 3. Do not add a one-sentence conclusion paragraph, and do not output section headings like 'Summary' or 'Key Points'.
-4. This is a direct summarization task. Use only the minimum reasoning necessary to complete the summary. Do not perform deep reasoning, lengthy analysis, repeated verification, redundant checking, self-review, or explore multiple approaches.
+4. This is a synthesis task: read the whole text first to grasp its overall structure and topics, then extract points by theme; list related but distinct content as separate items rather than paragraph by paragraph.
 5. Do not output reasoning steps or explanations. The title and bullet points ARE the final result — output them in full.`;
 
 /**
