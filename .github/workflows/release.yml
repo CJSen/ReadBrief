@@ -1,30 +1,5 @@
 name: Release
 
-# 自动发布工作流
-# 触发：推送 tag（推荐 v0.9.5，也兼容 0.9.5 与 v0.9.6-beta.1 等预发布 tag）
-# 版本校验：除 `-test` 后缀的测试 tag（如 v0.9.6-test1）外，其余 tag 必须与 .version 一致；
-#           test 版为自由测试标签，不要求与 .version 对齐。
-# 行为：自动编译 macOS Intel(x86_64) 与 Apple Silicon(aarch64) 两个 dmg，
-#       以及 Windows(x86_64) 的 nsis 安装包（ReadBrief_x.y.z_x64-setup.exe），
-#       生成 changelog，创建 GitHub Release 并上传全部产物。
-#
-# 可选 Secrets：
-#   — macOS 签名+公证（配置后自动签名，不配置则出未签名构建）：
-#   APPLE_CERTIFICATE            base64 编码的 .p12 开发者证书
-#   APPLE_CERTIFICATE_PASSWORD   证书导出密码
-#   APPLE_SIGNING_IDENTITY       "Developer ID Application: ..."
-#   APPLE_ID                     开发者 Apple ID（邮箱）
-#   APPLE_PASSWORD                App 专用密码
-#   APPLE_TEAM_ID                团队 ID
-#   — Windows 代码签名（配置 WINDOWS_CERTIFICATE 后自动 Authenticode 签名；
-#     不配置则出未签名 nsis 安装包，用户首次安装会遇 SmartScreen 拦截，需手动允许）：
-#   WINDOWS_CERTIFICATE         base64 编码的 .pfx 代码签名证书
-#   WINDOWS_CERTIFICATE_PWD     .pfx 导出密码
-#
-# 官网联动 Secret（未配置则跳过并告警，不影响发版）：
-#   CLOUDFLARE_DEPLOY_HOOK       Cloudflare Pages 的 Deploy Hook URL，
-#                                正式版发布完成后 POST 触发官网重建
-
 on:
   push:
     tags:
@@ -36,144 +11,356 @@ on:
 permissions:
   contents: write
 
-# 发版串行：latest.json 与 GitHub 的 latest 语义都是全局单例，
-# 两个 tag 并行发布会让官网读到错乱的版本。排队而非取消，避免丢发版。
+# ============================================================
+# Required GitHub Secrets
+# ============================================================
+#
+# macOS:
+#   MACOS_CERTIFICATE
+#   MACOS_CERTIFICATE_PWD
+#   MACOS_CI_KEYCHAIN_PWD
+#
+# Windows:
+#   WINDOWS_CERTIFICATE
+#   WINDOWS_CERTIFICATE_PWD
+#
+# Cloudflare:
+#   CLOUDFLARE_DEPLOY_HOOK
+#
+# Cloudflare Pages：
+#   CLOUDFLARE_DEPLOY_HOOK
+#
+# macOS 自签名证书切换为 Apple Developer ID 时：
+#
+#   需要替换：
+#     MACOS_CERTIFICATE
+#     MACOS_CERTIFICATE_PWD
+#
+#   同时检查：
+#     APPLE_SIGNING_IDENTITY
+#
+#   当前 CI 使用：
+#     ReadBriefSelfSign
+#
+#   切换 Developer ID 后应改为对应的：
+#     Developer ID Application: ...
+#
+# ============================================================
+# 同一时间只允许一个 Release workflow。
+#
+# latest.json / GitHub Release 都是全局版本资源。
+# 如果两个 tag 同时发布，可能发生版本覆盖。
 concurrency:
   group: release
   cancel-in-progress: false
 
 jobs:
+  # ============================================================
+  # Create Release
+  # ============================================================
+
   create-release:
     runs-on: ubuntu-22.04
+
     outputs:
       release_id: ${{ steps.create-release.outputs.result }}
       version: ${{ steps.version.outputs.version }}
       prerelease: ${{ steps.prerelease.outputs.prerelease }}
+
     steps:
-      - uses: actions/checkout@v5
+      # ========================================================
+      # Checkout
+      # ========================================================
+
+      - name: Checkout
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
+      # ========================================================
+      # Version
+      # ========================================================
+
       - name: Compute version
         id: version
+        shell: bash
         run: |
           ref="${GITHUB_REF_NAME}"
           version="${ref#v}"
+
           echo "version=$version" >> "$GITHUB_OUTPUT"
+
           echo "Version: $version"
 
       - name: Verify version matches .version
+        shell: bash
         run: |
           ref="${GITHUB_REF_NAME}"
           version="${ref#v}"
+
           file_version="$(tr -d '[:space:]' < .version)"
-          # test 版（如 v0.9.6-test1）为自由测试标签，不要求与 .version 对齐，跳过校验。
+
           case "$version" in
             *-test*)
-              echo "test 版，跳过 .version 一致性校验：$version"
+              echo "Test release detected."
+              echo "Skip .version consistency check."
+              echo "Tag version: $version"
               ;;
+
             *)
               if [ "$version" != "$file_version" ]; then
-                echo "::error::tag 版本 ($version) 与 .version ($file_version) 不一致，请先更新 .version 后重新打 tag。"
+                echo "::error::Tag version ($version) does not match .version ($file_version)."
+                echo "::error::Please update .version before creating the tag."
                 exit 1
               fi
-              echo "版本一致：$version"
+
+              echo "Version matches: $version"
               ;;
           esac
 
       - name: Determine prerelease
         id: prerelease
+        shell: bash
         run: |
-          # 明确按预发布后缀判定：test / beta / rc / alpha 一律视为 pre-release。
           case "${{ steps.version.outputs.version }}" in
-            *-test*|*-beta*|*-rc*|*-alpha*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;;
-            *)   echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
+            *-test*|*-beta*|*-rc*|*-alpha*)
+              echo "prerelease=true" >> "$GITHUB_OUTPUT"
+              ;;
+
+            *)
+              echo "prerelease=false" >> "$GITHUB_OUTPUT"
+              ;;
           esac
+
+      # ========================================================
+      # Release Notes
+      # ========================================================
 
       - name: Generate release notes
         run: python3 .github/gen-release-notes.py
 
-      - name: create release
+      # ========================================================
+      # Create Draft Release
+      # ========================================================
+
+      - name: Create release
         id: create-release
         uses: actions/github-script@v8
+
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+
         with:
           script: |
             const fs = require('fs');
-            const body = fs.readFileSync('release-notes.md', 'utf8');
-            // 注意：github-script 的 context 没有 ref_name 属性（context.ref 是 refs/tags/0.9.5 带前缀）。
-            // 纯 tag 名必须用环境变量 GITHUB_REF_NAME 取，否则 tag 为 undefined 会被 Octokit 省略 → 422。
-            const tag = process.env.GITHUB_REF_NAME || (context.ref ? context.ref.replace(/^refs\/tags\//, '') : '');
-            // prerelease 标记由上一步骤按 tag 预发布后缀（test/beta/rc/alpha）判定，这里插值为布尔值。
-            const isPrerelease = '${{ steps.prerelease.outputs.prerelease }}' === 'true';
-            // 幂等：若同 tag 已存在 release（含 draft，修复后移动 tag 重跑时会命中），
-            // 先删除再重建，避免 createRelease 报 "already_exists"。
-            // 用 getReleaseByTag 按 tag 精确定位（不存在时 404），避免 listReleases 全量分页遍历。
+
+            const body = fs.readFileSync(
+              'release-notes.md',
+              'utf8'
+            );
+
+            // IMPORTANT:
+            // github-script 的 context 对象没有直接提供 ref_name。
+            //
+            // 必须从 GitHub Actions 注入的环境变量读取：
+            //
+            //   process.env.GITHUB_REF_NAME
+            //
+            // 不要使用：
+            //
+            //   context.ref_name
+            //
+            // 否则 tag 可能变成 undefined，进而导致 GitHub API
+            // 请求参数缺失并返回 422。
+
+            const tag = process.env.GITHUB_REF_NAME;
+
+            const isPrerelease =
+              '${{ steps.prerelease.outputs.prerelease }}' === 'true';
+
             let existing = null;
+
             try {
-              const { data } = await github.rest.repos.getReleaseByTag({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                tag,
-              });
+              const { data } =
+                await github.rest.repos.getReleaseByTag({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  tag,
+                });
+
               existing = data;
             } catch (e) {
-              if (e.status !== 404) throw e; // 404 = 该 tag 尚无 release，属正常情况
+              if (e.status !== 404) {
+                throw e;
+              }
             }
+
             if (existing) {
               await github.rest.repos.deleteRelease({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 release_id: existing.id,
               });
-              console.log(`已删除旧 release (id=${existing.id}) 以便重建`);
+
+              console.log(
+                `Deleted existing release: ${existing.id}`
+              );
             }
-            const { data } = await github.rest.repos.createRelease({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              name: `ReadBrief v${{ steps.version.outputs.version }}`,
-              body,
-              tag_name: tag,
-              draft: true,
-              prerelease: isPrerelease
-            });
-            return data.id
+
+            const { data } =
+              await github.rest.repos.createRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+
+                name:
+                  `ReadBrief v${{ steps.version.outputs.version }}`,
+
+                body,
+
+                tag_name: tag,
+
+                draft: true,
+
+                prerelease: isPrerelease,
+              });
+
+            return data.id;
+
+  # ============================================================
+  # Build
+  # ============================================================
 
   build:
     needs: create-release
+
     env:
       WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
       WINDOWS_CERTIFICATE_PWD: ${{ secrets.WINDOWS_CERTIFICATE_PWD }}
+
     strategy:
       fail-fast: false
+
       matrix:
-        # macOS：在单台 Apple Silicon runner 上 aarch64 原生 + x86_64 交叉编译，
-        # 不依赖已被废弃的 macos-13(Intel) runner，长期可用。
-        # Windows：x86_64 原生编译，产出 nsis 安装包（ReadBrief_x.y.z_x64-setup.exe）。
         include:
+          # ----------------------------------------------------
+          # macOS Intel
+          # ----------------------------------------------------
+
           - os: macos-14
             target: x86_64-apple-darwin
             arch: x64
+
+          # ----------------------------------------------------
+          # macOS Apple Silicon
+          # ----------------------------------------------------
+
           - os: macos-14
             target: aarch64-apple-darwin
             arch: aarch64
+
+          # ----------------------------------------------------
+          # Windows x64
+          # ----------------------------------------------------
+
           - os: windows-2022
             target: x86_64-pc-windows-msvc
             arch: x64
+
     runs-on: ${{ matrix.os }}
+
     steps:
-      - uses: actions/checkout@v5
+      # ========================================================
+      # Checkout
+      # ========================================================
+
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      # ========================================================
+      # Rust
+      # ========================================================
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+
         with:
           targets: ${{ matrix.target }}
 
-      # macOS 单 runner 需同时装两个 darwin target（aarch64 原生 + x86_64 交叉）。
+      # macOS 使用同一个 runner 构建 ARM64 和 Intel。
+      #
+      # 两个 target 必须都存在。
+
       - name: Add Rust targets (macOS cross-compile)
         if: runner.os == 'macOS'
-        run: rustup target add x86_64-apple-darwin aarch64-apple-darwin
 
-      - uses: actions/setup-node@v5
+        run: |
+          rustup target add \
+            x86_64-apple-darwin \
+            aarch64-apple-darwin
+
+      # ========================================================
+      # Rust Cache
+      # ========================================================
+      #
+      # 不再使用 Swatinem/rust-cache。
+      #
+      # 使用 GitHub 官方 actions/cache，并显式控制 cache key。
+      #
+      # 缓存：
+      #
+      #   ~/.cargo/registry
+      #   ~/.cargo/git
+      #   src-tauri/target
+      #
+      # key：
+      #
+      #   OS + Rust target + Cargo.lock hash
+      #
+      # 因此：
+      #
+      #   macOS ARM64
+      #   macOS Intel
+      #   Windows x64
+      #
+      # 三个平台不会共享 target。
+      #
+      # Cargo.lock 不变：
+      #
+      #   精确命中 cache
+      #
+      # Cargo.lock 变化：
+      #
+      #   使用 restore-keys 恢复旧 cache
+      #   Cargo 自己判断哪些 crate 需要重新编译。
+      #
+      # 这样可以避免因为依赖发生变化而直接丢弃整个
+      # target 缓存。
+
+      - name: Rust cache
+        uses: actions/cache@v4
+
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+
+          key: ${{ runner.os }}-${{ matrix.target }}-rust-${{ hashFiles('src-tauri/Cargo.lock') }}
+
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.target }}-rust-
+
+      # ========================================================
+      # Node / npm
+      # ========================================================
+      #
+      # setup-node 自带 npm cache。
+      #
+      # npm ci 使用 package-lock.json，保证 CI 安装结果稳定。
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+
         with:
           node-version: 22
           cache: npm
@@ -181,181 +368,436 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      # ===== macOS：导入自签名证书（MACOS_* Secrets）并指定签名身份 =====
-      # 自签名方案：用 openssl 生成的 p12 经 MACOS_CERTIFICATE 传入，
-      # 解码后导入临时钥匙串供 codesign 使用。
-      # 若将来改用 Apple Developer ID 证书，将 Secrets 换回
-      # APPLE_CERTIFICATE/APPLE_CERTIFICATE_PASSWORD/APPLE_SIGNING_IDENTITY/APPLE_ID/APPLE_PASSWORD/APPLE_TEAM_ID
-      # 并恢复「读取 APPLE_* 的 Configure Apple signing 步骤」即可。
-      - name: Import Self-Signed Certificate (macOS)
+      # ========================================================
+      # macOS Signing
+      # ========================================================
+
+      - name: Import Self-Signed Certificate
         if: runner.os == 'macOS'
+
         env:
           MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
           MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
           MACOS_CI_KEYCHAIN_PWD: ${{ secrets.MACOS_CI_KEYCHAIN_PWD }}
-        run: |
-          # 双引号保留 base64 中的换行，避免 p12 被破坏
-          echo "$MACOS_CERTIFICATE" | base64 --decode > certificate.p12
-          security create-keychain -p "$MACOS_CI_KEYCHAIN_PWD" build.keychain
-          security default-keychain -s build.keychain
-          security unlock-keychain -p "$MACOS_CI_KEYCHAIN_PWD" build.keychain
-          security import certificate.p12 -k build.keychain -P "$MACOS_CERTIFICATE_PWD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple:,codesign -s -k "$MACOS_CI_KEYCHAIN_PWD" build.keychain
 
-      # ===== 指定签名身份（须与 tauri.conf.json 的 signingIdentity 一致）=====
-      - name: Configure Signing (macOS)
+        run: |
+          echo "$MACOS_CERTIFICATE" |
+            base64 --decode > certificate.p12
+
+          security create-keychain \
+            -p "$MACOS_CI_KEYCHAIN_PWD" \
+            build.keychain
+
+          security default-keychain \
+            -s build.keychain
+
+          security unlock-keychain \
+            -p "$MACOS_CI_KEYCHAIN_PWD" \
+            build.keychain
+
+          security import certificate.p12 \
+            -k build.keychain \
+            -P "$MACOS_CERTIFICATE_PWD" \
+            -T /usr/bin/codesign
+
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign \
+            -s \
+            -k "$MACOS_CI_KEYCHAIN_PWD" \
+            build.keychain
+
+      # ========================================================
+      # Signing Identity
+      # ========================================================
+
+      # 当前使用自签名证书：
+      #
+      #   ReadBriefSelfSign
+      #
+      # 如果以后切换 Apple Developer ID：
+      #
+      #   1. 替换 MACOS_CERTIFICATE
+      #   2. 替换 MACOS_CERTIFICATE_PWD
+      #   3. 将下面 identity 改成：
+      #
+      #      Developer ID Application: ...
+      #
+      # 同时检查 GitHub Secrets 与 Tauri bundle 配置。
+
+      - name: Configure Signing
         if: runner.os == 'macOS'
-        run: |
-          echo "APPLE_SIGNING_IDENTITY=ReadBriefSelfSign" >> "$GITHUB_ENV"
 
-      # ===== Windows：可选 Authenticode 代码签名 =====
-      # 配置 WINDOWS_CERTIFICATE（base64 .pfx）+ WINDOWS_CERTIFICATE_PWD 后自动签名：
-      # 1) 将 pfx 导入 CurrentUser\My 证书库；
-      # 2) 把指纹注入 tauri.conf.json 的 bundle.windows.certificateThumbprint，
-      #    Tauri 在 tauri build 阶段据此对 nsis 安装包做 Authenticode 签名（带时间戳）。
-      # 未配置 Secrets 时整步跳过，产出未签名安装包（首次安装触发 SmartScreen 拦截）。
-      - name: Import Code Signing Certificate (Windows)
+        run: |
+          echo "APPLE_SIGNING_IDENTITY=ReadBriefSelfSign" \
+            >> "$GITHUB_ENV"
+
+      # ========================================================
+      # Windows Signing
+      # ========================================================
+
+      - name: Import Code Signing Certificate
         if: runner.os == 'Windows' && env.WINDOWS_CERTIFICATE != ''
+
         shell: pwsh
+
         run: |
-          $bytes = [System.Convert]::FromBase64String($env:WINDOWS_CERTIFICATE)
-          $pfx = Join-Path $env:RUNNER_TEMP "windows-cert.pfx"
-          Set-Content -Path $pfx -Value $bytes -AsByteStream
-          $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2(
-            $pfx, $env:WINDOWS_CERTIFICATE_PWD,
-            [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::Exportable)
-          $store = New-Object System.Security.Cryptography.X509Certificates.X509Store("My", "CurrentUser")
-          $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+          $bytes = [System.Convert]::FromBase64String(
+            $env:WINDOWS_CERTIFICATE
+          )
+
+          $pfx = Join-Path `
+            $env:RUNNER_TEMP `
+            "windows-cert.pfx"
+
+          Set-Content `
+            -Path $pfx `
+            -Value $bytes `
+            -AsByteStream
+
+          $cert = New-Object `
+            System.Security.Cryptography.X509Certificates.X509Certificate2(
+              $pfx,
+              $env:WINDOWS_CERTIFICATE_PWD,
+              [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::Exportable
+            )
+
+          $store = New-Object `
+            System.Security.Cryptography.X509Certificates.X509Store(
+              "My",
+              "CurrentUser"
+            )
+
+          $store.Open(
+            [System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite
+          )
+
           $store.Add($cert)
+
           $store.Close()
+
           $thumb = $cert.Thumbprint
-          python3 -c "import json; p='src-tauri/tauri.conf.json'; c=json.load(open(p,encoding='utf-8')); c.setdefault('bundle',{}).setdefault('windows',{})['certificateThumbprint']='$thumb'; c['bundle']['windows']['timestampUrl']='https://timestamp.digicert.com'; json.dump(c,open(p,'w',encoding='utf-8'),ensure_ascii=False,indent=2)"
-          echo "已注入 Windows 签名证书指纹：$thumb"
 
-      # Windows 原生构建依赖：NSIS（nsis 打包器）与 MSVC 工具链。
-      # windows-2022 runner 未预装 NSIS，需 chocolatey 安装；MSVC 工具链由 msvc-dev-cmd 注入 PATH。
-      - name: Install NSIS (Windows)
-        if: runner.os == 'Windows'
-        run: choco install nsis -y
+          python -c "
+          import json
 
-      - name: Add MSVC build tools to PATH (Windows)
+          p='src-tauri/tauri.conf.json'
+
+          c=json.load(
+              open(p,encoding='utf-8')
+          )
+
+          c.setdefault(
+              'bundle',{}
+          ).setdefault(
+              'windows',{}
+          )['certificateThumbprint']='$thumb'
+
+          c['bundle']['windows']['timestampUrl'] = \
+              'https://timestamp.digicert.com'
+
+          json.dump(
+              c,
+              open(p,'w',encoding='utf-8'),
+              ensure_ascii=False,
+              indent=2
+          )
+          "
+
+          echo "Windows signing certificate: $thumb"
+
+      # ========================================================
+      # Windows Build Dependencies
+      # ========================================================
+
+      - name: Install NSIS
         if: runner.os == 'Windows'
+
+        run: |
+          choco install nsis -y
+
+      - name: Add MSVC build tools to PATH
+        if: runner.os == 'Windows'
+
         uses: ilammy/msvc-dev-cmd@v1
+
+      # ========================================================
+      # Tauri Build
+      # ========================================================
 
       - name: Build and upload (${{ matrix.arch }})
         uses: tauri-apps/tauri-action@v1
+
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
         with:
           releaseId: ${{ needs.create-release.outputs.release_id }}
           args: --target ${{ matrix.target }}
 
+  # ============================================================
+  # Publish Release
+  # ============================================================
+
   publish-release:
-    needs: [create-release, build]
+    needs:
+      - create-release
+      - build
+
     runs-on: ubuntu-22.04
+
     steps:
-      # gen-latest-json.c 要跑 git log 取变更分组，需完整历史与 tag。
-      - uses: actions/checkout@v5
+      # ========================================================
+      # Checkout
+      # ========================================================
+
+      - name: Checkout
+        uses: actions/checkout@v5
+
         with:
           fetch-depth: 0
 
-      # 先发布（draft → false），再生成 latest.json。
-      # 之所以在发布之后才抓资产：release 发布后其资产直链才是正式的 tagged slug
-      # （releases/download/v0.9.7/...），可彻底规避「draft/孤儿 release 阶段抓到
-      # untagged-xxxxxxxx 直链、之后 dmg 迁回正式 release 但 latest.json 未重算」的 404 陷阱。
+      # ========================================================
+      # Publish Release
+      # ========================================================
+      #
+      # IMPORTANT:
+      # 必须先 Publish，再 Collect Release Assets。
+      #
+      # Draft Release 在发布之前使用 GitHub 临时的
+      # untagged-xxx URL。
+      #
+      # 发布后才会生成正式 tagged URL。
+      #
+      # 因此顺序必须保持：
+      #
+      #   publish release
+      #       ↓
+      #   collect release assets
+      #       ↓
+      #   generate latest.json
+      #       ↓
+      #   upload latest.json
+
       - name: Publish release
         uses: actions/github-script@v8
+
         with:
           script: |
             await github.rest.repos.updateRelease({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              release_id: ${{ needs.create-release.outputs.release_id }},
+
+              release_id:
+                ${{ needs.create-release.outputs.release_id }},
+
               draft: false
             });
 
-      # 回查 build 阶段实际上传的产物，拿到真实文件名 / 体积 / 下载直链。
-      # 按 tag 取 release（而非依赖 draft 阶段的 release_id），确保拿到的是已发布的正式直链。
-      # 不用「按版本号拼接 URL」的办法：本仓库 tag 命名并不统一
-      # （历史上既有 0.9.5 也有 v0.9.6），拼出来的链接会 404。
+      # ========================================================
+      # Collect Release Assets
+      # ========================================================
+      #
+      # IMPORTANT:
+      # 不要根据版本号自行拼接下载 URL。
+      #
+      # ReadBrief 历史 tag 命名存在：
+      #
+      #   0.9.5
+      #   v0.9.6
+      #
+      # 等不同形式。
+      #
+      # 因此必须从 GitHub Release API 获取真实的
+      # browser_download_url。
+      #
+      # 否则自行拼接 URL 很容易因为 tag 格式不同产生 404。
+
       - name: Collect release assets
         id: assets
+
         uses: actions/github-script@v8
+
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+
         with:
           script: |
-            const tag = process.env.GITHUB_REF_NAME || (context.ref ? context.ref.replace(/^refs\/tags\//, '') : '');
-            const { data: rel } = await github.rest.repos.getReleaseByTag({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              tag,
-            });
-            const { data } = await github.rest.repos.listReleaseAssets({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              release_id: rel.id,
-              per_page: 100,
-            });
+            // IMPORTANT:
+            // 必须从环境变量获取 tag。
+            //
+            // github-script 的 context 没有 context.ref_name。
+
+            const tag = process.env.GITHUB_REF_NAME;
+
+            const { data: rel } =
+              await github.rest.repos.getReleaseByTag({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag,
+              });
+
+            const { data } =
+              await github.rest.repos.listReleaseAssets({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+
+                release_id: rel.id,
+
+                per_page: 100,
+              });
+
             const slim = data.map((a) => ({
               name: a.name,
               size: a.size,
-              browser_download_url: a.browser_download_url,
+              browser_download_url:
+                a.browser_download_url,
             }));
-            core.setOutput('json', JSON.stringify(slim));
-            core.info(`已上传资产 ${slim.length} 个：`);
-            slim.forEach((a) => core.info(`  ${a.name} (${a.size} bytes)`));
+
+            core.setOutput(
+              'json',
+              JSON.stringify(slim)
+            );
+
+            core.info(
+              `Uploaded assets: ${slim.length}`
+            );
+
+            slim.forEach((a) => {
+              core.info(
+                `  ${a.name} (${a.size} bytes)`
+              );
+            });
+
+      # ========================================================
+      # Generate latest.json
+      # ========================================================
 
       - name: Generate latest.json
+
         env:
           RB_ASSETS_JSON: ${{ steps.assets.outputs.json }}
-        run: python3 .github/gen-latest-json.py
 
-      # 固定文件名是关键：让 releases/latest/download/latest.json 永久有效。
-      # release 已发布，资产直链为正式 tagged URL，latest.json 与正文一并对外可见。
+        run: |
+          python3 .github/gen-latest-json.py
+
+      # ========================================================
+      # Upload latest.json
+      # ========================================================
+      #
+      # latest.json 必须以 Buffer 形式上传。
+      #
+      # 文件正文可能包含中文。
+      #
+      # JS string.length 计算的是 UTF-16 code unit 数量，
+      # 而 HTTP Content-Length 需要的是 UTF-8 字节数。
+      #
+      # 因此必须使用：
+      #
+      #   fs.readFileSync('latest.json')
+      #
+      # 获取 Buffer 后再上传。
+
       - name: Upload latest.json
         uses: actions/github-script@v8
+
         with:
           script: |
             const fs = require('fs');
-            const release_id = ${{ needs.create-release.outputs.release_id }};
+
+            const release_id =
+              ${{ needs.create-release.outputs.release_id }};
+
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            // 幂等：重跑时同名资产已存在，uploadReleaseAsset 会报 422，先删。
-            const { data: existing } = await github.rest.repos.listReleaseAssets({
-              owner, repo, release_id, per_page: 100,
-            });
-            for (const a of existing.filter((a) => a.name === 'latest.json')) {
-              await github.rest.repos.deleteReleaseAsset({ owner, repo, asset_id: a.id });
-              core.info(`已删除旧 latest.json (id=${a.id})`);
+
+            const { data: existing } =
+              await github.rest.repos.listReleaseAssets({
+                owner,
+                repo,
+                release_id,
+                per_page: 100,
+              });
+
+            for (
+              const a of existing.filter(
+                (a) => a.name === 'latest.json'
+              )
+            ) {
+              await github.rest.repos.deleteReleaseAsset({
+                owner,
+                repo,
+                asset_id: a.id,
+              });
+
+              core.info(
+                `Deleted old latest.json: ${a.id}`
+              );
             }
-            // 传 Buffer 而非字符串：正文含中文，按字符数算 content-length 会与实际字节数不符。
-            const data = fs.readFileSync('latest.json');
+
+            // IMPORTANT:
+            // 必须是 Buffer。
+
+            const data =
+              fs.readFileSync('latest.json');
+
             await github.rest.repos.uploadReleaseAsset({
-              owner, repo, release_id,
+              owner,
+              repo,
+
+              release_id,
+
               name: 'latest.json',
+
               data,
+
               headers: {
-                'content-type': 'application/json',
-                'content-length': data.length,
+                'content-type':
+                  'application/json',
+
+                // Buffer.length 是 UTF-8 字节长度。
+                'content-length':
+                  data.length,
               },
             });
-            core.info(`latest.json 上传完成（${data.length} bytes）`);
 
-      # 官网时序闭环：Cloudflare Pages 按 push 触发构建，而 .version 的提交
-      # 早于打 tag，若不在此处主动触发，官网会在 dmg 尚未产出时抢跑构建，
-      # 出现「显示新版本号但下载链接 404」的窗口期。
-      # 预发布版不触发：官网只跟随正式版。
+            core.info(
+              `latest.json uploaded (${data.length} bytes)`
+            );
+
+      # ========================================================
+      # Cloudflare Pages
+      # ========================================================
+
       - name: Trigger docs site rebuild
         if: needs.create-release.outputs.prerelease == 'false'
+
         env:
           HOOK: ${{ secrets.CLOUDFLARE_DEPLOY_HOOK }}
+
         run: |
           if [ -z "$HOOK" ]; then
-            echo "::warning::未配置 CLOUDFLARE_DEPLOY_HOOK，官网不会自动更新，需手动重新部署。"
+            echo "::warning::CLOUDFLARE_DEPLOY_HOOK is not configured."
+            echo "Website will not be rebuilt automatically."
             exit 0
           fi
-          code="$(curl -sS -X POST -o /dev/null -w '%{http_code}' "$HOOK")"
-          echo "Deploy hook 响应：HTTP $code"
+
+          code="$(
+            curl -sS \
+              -X POST \
+              -o /dev/null \
+              -w '%{http_code}' \
+              "$HOOK"
+          )"
+
+          echo "Deploy hook response: HTTP $code"
+
           case "$code" in
-            2*) echo "已触发官网重建。" ;;
-            *)  echo "::error::触发官网重建失败（HTTP $code）"; exit 1 ;;
+            2*)
+              echo "Website rebuild triggered."
+              ;;
+
+            *)
+              echo "::error::Cloudflare deploy hook failed: HTTP $code"
+              exit 1
+              ;;
           esac

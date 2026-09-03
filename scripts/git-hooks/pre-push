@@ -2,9 +2,9 @@
 # pre-push 钩子：推送 tag 前校验 .version 与 tag 基础版本一致
 #
 # 规则（与 .github/workflows/release.yml 的 Verify 步骤一致）：
-#   - 正式 / 预发布（-beta / -rc）tag：.version 必须与 tag 版本完全一致
-#   - test tag（vX.Y.Z-testN）：校验基础版本 X.Y.Z（tauri-action 按 tag 基础版本
-#     查找 dmg 上传产物，不一致会跳过 dmg 上传，这是硬约束）
+#   - 正式 / 预发布（-beta / -rc）tag：.version 必须与 tag 版本完全一致，不一致阻断
+#   - test tag（vX.Y.Z-testN）：自由测试标签，不阻断；但若基础版本与 .version 不一致
+#     仅打印警告（tauri-action 按 tag 基础版本查找 dmg，不一致时 Release 会缺少 dmg）
 #
 # 不一致时打印更新指引（node scripts/sync-version.mjs 同步派生文件）并阻断推送。
 # 安装：sh scripts/install-git-hooks.sh
@@ -21,6 +21,19 @@ check_tag() {
       base="${base%%-*}"
       cur=""
       [ -f "$VERSION_FILE" ] && cur="$(tr -d '[:space:]' < "$VERSION_FILE")"
+
+      # test tag：自由测试标签，不阻断；基础版本与 .version 不一致时仅警告
+      case "$tag" in
+        *-test*)
+          if [ -n "$cur" ] && [ "$cur" != "$base" ]; then
+            printf '⚠ test tag %s 与 .version (%s) 基础版本不一致，仅警告不阻断\n' "$tag" "$cur"
+            echo "  注意：tauri build 按 tauri.conf.json version($cur) 命名 dmg，"
+            echo "  tauri-action 按 tag 基础版本($base)查找产物，本次构建的 Release 可能缺少 dmg。"
+          fi
+          return 0
+          ;;
+      esac
+
       if [ "$cur" != "$base" ]; then
         # 注意：此处必须用 printf 而非 echo —— macOS /bin/sh(bash 3.2) 的 echo 在
         # 「变量展开后紧跟全角字符」时会把多字节首字节(EF)吃掉，导致提示乱码
