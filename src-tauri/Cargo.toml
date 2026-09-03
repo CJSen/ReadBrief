@@ -1,6 +1,6 @@
 [package]
 name = "readbrief"
-version = "0.10.3"
+version = "0.10.4"
 description = "划词 AI 总结桌面软件"
 authors = ["ReadBrief"]
 edition = "2021"
