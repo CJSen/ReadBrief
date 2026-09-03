@@ -10,17 +10,7 @@ import { isMac } from "../lib/platform";
 import { Icon } from "./Icon";
 import { LogoMark } from "./LogoMark";
 import { Onboarding } from "./Onboarding";
-import { checkUpdate, type UpdateInfo } from "../lib/update/checkUpdate";
-
-/**
- * 本地预览开关：测试「发现新版本」右下角弹窗。
- * 设为 true 后启动会强制弹出更新提示（无需真实 GitHub Release 高于本地版本）。
- * 预览完请改回 false 再提交。
- */
-const DEV_TEST_UPDATE_POPUP = false;
-
-/** 被动更新检查的轮询间隔：每 24 小时一次(macOS 用户常挂后台,启动检查已覆盖刚打开的窗口期;远低于 GitHub 匿名 60 次/小时限流) */
-const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+import { useUpdatePopup } from "../lib/update/useUpdatePopup";
 
 interface HistoryRecord {
   id: number;
@@ -146,9 +136,8 @@ export function AppMain() {
   const [editTagName, setEditTagName] = useState<string | null>(null);
   const [editorPos, setEditorPos] = useState<{ top: number; left: number } | null>(null);
 
-  // 启动检查更新(轻量版:仅检测 GitHub Release,有更新则在主窗右下角提示)
-  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
-  const [showUpdatePopup, setShowUpdatePopup] = useState(false);
+  // 更新提示弹窗(共用逻辑见 useUpdatePopup:启动即查 + 24h 轮询 + 同版本只提示一次)
+  const { updateInfo, showUpdatePopup, hideUpdatePopup } = useUpdatePopup();
   const [newTagName, setNewTagName] = useState("");
   const [newTagColor, setNewTagColor] = useState(`var(--rb-brand-400)`);
   const [newTagHex, setNewTagHex] = useState(DEFAULT_TAG_COLOR);
@@ -174,8 +163,6 @@ export function AppMain() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerInput, setPickerInput] = useState("");
   const pickerInputRef = useRef<HTMLInputElement>(null);
-  // 已弹出过提示的版本号:同版本只提示一次,避免 3 小时轮询反复打扰
-  const notifiedVersionRef = useRef<string | null>(null);
 
   const hasApiKey = cfg ? getServices(cfg).some((s) => s.apiKey) : false;
 
@@ -195,61 +182,6 @@ export function AppMain() {
       .finally(() => setCfgLoaded(true));
   }, []);
 
-  // 每 24 小时静默检查一次更新(轻量版:仅查 GitHub Release,不下载/不自动安装);启动即查一次已覆盖刚打开的窗口期。
-  // 同版本只提示一次(notifiedVersionRef),失败/已是最新均无感(仅 DevTools 日志);卸载时清理定时器。
-  useEffect(() => {
-    let alive = true;
-
-    const runCheck = () => {
-      checkUpdate()
-        .then((info) => {
-          if (!alive) return;
-          setUpdateInfo(info);
-          if (info.hasUpdate && info.latestVersion && info.latestVersion !== notifiedVersionRef.current) {
-            notifiedVersionRef.current = info.latestVersion;
-            setShowUpdatePopup(true);
-          } else if (info.error) {
-            console.warn("[update] 检查失败：", info.error, info.hint ?? "");
-          }
-        })
-        .catch((e) => console.warn("[update] 检查异常：", e));
-    };
-
-    // 本地预览：强制弹出更新提示，无需真实 Release
-    if (DEV_TEST_UPDATE_POPUP) {
-      const fake: UpdateInfo = {
-        hasUpdate: true,
-        currentVersion: "0.9.5",
-        latestVersion: "1.2.0",
-        releaseUrl: "https://github.com/CJSen/ReadBrief/releases/download/v1.2.0/ReadBrief_aarch64.dmg",
-        releaseName: "v1.2.0",
-        releaseNotes:
-          "## 更新内容\n\n- 新增轻量版更新检查（自动匹配本机架构）\n- 关于页可「查看更新」查看更新说明\n- 修复若干已知问题\n\n详情见 [Release 页面](https://github.com/CJSen/ReadBrief/releases/tag/v1.2.0)",
-        platformAssets: [
-          { name: "ReadBrief_aarch64.dmg", url: "https://github.com/CJSen/ReadBrief/releases/download/v1.2.0/ReadBrief_aarch64.dmg" },
-          { name: "ReadBrief_x86_64.dmg", url: "https://github.com/CJSen/ReadBrief/releases/download/v1.2.0/ReadBrief_x86_64.dmg" },
-        ],
-        error: null,
-        hint: null,
-      };
-      if (alive) {
-        setUpdateInfo(fake);
-        notifiedVersionRef.current = fake.latestVersion ?? null;
-        setShowUpdatePopup(true);
-      }
-      return () => {
-        alive = false;
-      };
-    }
-
-    runCheck();
-    const timer = setInterval(runCheck, UPDATE_CHECK_INTERVAL_MS);
-    return () => {
-      alive = false;
-      clearInterval(timer);
-    };
-  }, []);
-
   async function handleGoUpdate() {
     try {
       await invoke("open_settings");
@@ -257,7 +189,7 @@ export function AppMain() {
     } catch {
       /* 忽略:设置窗口打开失败时不阻塞 */
     }
-    setShowUpdatePopup(false);
+    hideUpdatePopup();
   }
 
   // 配置变更(设置窗口改 AI 服务/语言/主题等)时同步到主窗口 cfg,
@@ -1365,7 +1297,7 @@ export function AppMain() {
                   </button>
                   <button
                     className="rb-update-popup-close"
-                    onClick={() => setShowUpdatePopup(false)}
+                    onClick={hideUpdatePopup}
                     aria-label={t("history.close")}
                   >
                     <Icon name="close" size={12} />

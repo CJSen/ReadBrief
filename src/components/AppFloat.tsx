@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { listen, emit } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getDefaultService } from "../lib/config/types";
 import { useConfig } from "../lib/config/useConfig";
@@ -10,6 +11,7 @@ import { keySymbol } from "../lib/shortcutKey";
 import { isMac } from "../lib/platform";
 import { Button } from "./Button";
 import { Icon } from "./Icon";
+import { useUpdatePopup } from "../lib/update/useUpdatePopup";
 
 interface CaptureResult {
   text: string;
@@ -83,6 +85,20 @@ export function AppFloat() {
   const thinkingStreamRef = useRef<HTMLDivElement>(null);
 
   const { cfg, ref: cfgRef } = useConfig();
+
+  // 更新提示弹窗(与主窗口同款:共用 useUpdatePopup,启动即查 + 24h 轮询 + 同版本只提示一次)
+  const { updateInfo, showUpdatePopup, hideUpdatePopup } = useUpdatePopup();
+
+  // 「去更新」:打开设置窗口并跳到「关于」页(与主窗口 AppMain.handleGoUpdate 一致)
+  const handleGoUpdate = useCallback(async () => {
+    try {
+      await invoke("open_settings");
+      await emit("navigate-settings", "about");
+    } catch {
+      /* 忽略:设置窗口打开失败时不阻塞 */
+    }
+    hideUpdatePopup();
+  }, [hideUpdatePopup]);
   const summonAccel =
     cfg?.shortcuts?.find((s) => s.id === "summarize")?.accelerator ??
     (isMac() ? "Cmd+Shift+Z" : "Ctrl+Shift+Z");
@@ -925,6 +941,36 @@ export function AppFloat() {
           </div>
           {favHint ? <div className="rb-toast">{t("float.favorite")} ✓</div> : null}
         </div>
+
+        {/* 更新提示:右下角小弹窗,与主窗口同款(rb-update-popup 样式在全局 App.css) */}
+        {showUpdatePopup && updateInfo?.hasUpdate
+          ? createPortal(
+              <div className="rb-update-popup" role="alert">
+                <div className="rb-update-popup-icon">
+                  <Icon name="refresh" size={16} />
+                </div>
+                <div className="rb-update-popup-body">
+                  <div className="rb-update-popup-title">
+                    {t("update.found", { version: updateInfo.latestVersion ?? "" })}
+                  </div>
+                  <div className="rb-update-popup-desc">
+                    {t("update.desc", { current: updateInfo.currentVersion })}
+                  </div>
+                </div>
+                <button className="rb-update-popup-btn" onClick={() => void handleGoUpdate()}>
+                  {t("update.go")}
+                </button>
+                <button
+                  className="rb-update-popup-close"
+                  onClick={hideUpdatePopup}
+                  aria-label={t("history.close")}
+                >
+                  <Icon name="close" size={12} />
+                </button>
+              </div>,
+              document.body,
+            )
+          : null}
       </div>
     </div>
   );

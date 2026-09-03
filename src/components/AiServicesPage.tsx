@@ -57,7 +57,6 @@ export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
   const [testingIds, setTestingIds] = useState<Set<string>>(new Set());
   const [dragId, setDragId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ text: string; ok: boolean } | null>(null);
-  const idCounter = useRef(1);
 
   useEffect(() => {
     if (!toast) return;
@@ -79,8 +78,14 @@ export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
 
   /** 点「+」直接弹出新增服务弹窗(格式在弹窗内下拉选择,不再两步菜单) */
   function openNewForm() {
+    // 基于现有 id 计算下一个 id(而非挂载期计数器):计数器每次打开 Settings 都从 1 重置,
+    // 会生成与磁盘已有服务相同的 id(如 svc1),导致新增时误走"编辑"分支覆盖第二个服务
+    const maxId = services.reduce((m, s) => {
+      const n = parseInt((s.id ?? "").replace(/^svc/, ""), 10);
+      return Number.isFinite(n) && n > m ? n : m;
+    }, 0);
     setEditing({
-      id: `svc${idCounter.current++}`,
+      id: `svc${maxId + 1}`,
       name: "",
       protocol: "openai",
       apiKey: "",
