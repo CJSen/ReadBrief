@@ -161,6 +161,16 @@
   font-size: var(--rb-text-xs);
   font-weight: 500;
 }
+/* 参数覆盖:引导页内为标签上/控件下布局,hint 与 label 同列 */
+.rb-ob-field-hint {
+  font-weight: 400;
+  font-size: 11px;
+  line-height: 1.45;
+  margin-top: 2px;
+}
+.rb-ob-form .rb-svc-params-wrap {
+  max-width: none;
+}
 /* API Key 输入框:为右侧显示/隐藏按钮预留空间,避免长密钥与之重叠 */
 .rb-ob-form .rb-key-input {
   position: relative;

@@ -6,6 +6,8 @@ import type { AppConfig, ApiConfig, ProviderType } from "../lib/config/types";
 import { testConnection, listModels } from "../lib/ai/provider";
 import { t } from "../lib/i18n";
 import { Icon, type IconName } from "./Icon";
+import { ParamsOverrideField } from "./ParamsOverrideField";
+import { defaultExtraParams, PRESET_PARAMS } from "../lib/ai/paramsOverride";
 import { resolveShortcutKey, keySymbol } from "../lib/shortcutKey";
 import { isMac } from "../lib/platform";
 import "./Onboarding.css";
@@ -141,6 +143,8 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
         ? Boolean(cfg.services?.find((s) => s.id === editingId)?.isDefault)
         : (cfg.services?.length ?? 0) === 0,
       stream: form.stream,
+      // 附加参数:空串不落库(与 AiServicesPage 保存逻辑一致)
+      extraParams: (form.extraParams ?? "").trim() ? form.extraParams : undefined,
     };
     const base = cfg.services ?? [];
     const exists = editingId ? base.some((s) => s.id === editingId) : false;
@@ -895,7 +899,15 @@ function ServiceFields({
                     className={`svc-mi${p === form.protocol ? " on" : ""}`}
                     onClick={() => {
                       // deepseek 官方格式锁定 Base URL(与 AiServicesPage 一致)
-                      set({ protocol: p, model: "", ...(p === "deepseek" ? { baseUrl: FORMAT_META[p].official } : {}) });
+                      // 附加参数仅当「空或仍是预设值」时跟随协议切换,避免冲掉用户手填内容
+                      const cur = (form.extraParams ?? "").trim();
+                      const keepUserParams = cur !== "" && !PRESET_PARAMS.has(cur);
+                      set({
+                        protocol: p,
+                        model: "",
+                        extraParams: keepUserParams ? form.extraParams : (defaultExtraParams(p) ?? ""),
+                        ...(p === "deepseek" ? { baseUrl: FORMAT_META[p].official } : {}),
+                      });
                       setFmtOpen(false);
                     }}
                   >
@@ -1010,6 +1022,14 @@ function ServiceFields({
           <div className={`sw${form.stream ? " on" : ""}`} onClick={() => set({ stream: !form.stream })} />
         </div>
       </div>
+
+      {/* 参数覆盖:与设置页共用同一控件(引导页为标签上/控件下布局) */}
+      <ParamsOverrideField
+        value={form.extraParams ?? ""}
+        onChange={(v) => set({ extraParams: v })}
+        layout="stack"
+        textareaRows={2}
+      />
 
       <div className="rb-ob-test">
         <button

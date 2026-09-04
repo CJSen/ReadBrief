@@ -1871,7 +1871,7 @@
 .rb-svc-params {
   width: 100%;
   resize: vertical;
-  min-height: 60px;
+  min-height: 90px;
   font-size: 12px;
   line-height: 1.5;
   padding-right: 30px;

@@ -314,21 +314,24 @@ const zh = {
     model: "模型",
     modelHint: "点右侧图标从接口拉取，也可手输",
     params: "参数覆盖",
-    paramsHint: "JSON 对象，深合并进 API 请求",
+    paramsHint: "主要用来关闭模型思考；JSON 深合并进请求",
     paramsTip: `使用 JSON 格式定义要覆盖的 API 请求参数，发送请求时深合并到原始参数中。
-· 留空则使用模型默认行为
+主要用于关闭模型思考——思考型模型会显著拖慢划词总结。
+· 不确定该填什么：保持留空即可，不要照抄下面的示例
 · 需为 JSON 对象，如 {"reasoning_effort": "none"}
 · model / messages / stream / max_tokens 由系统控制，填了也会被忽略
 · 常用关闭思考参数：
   openai 官方：{"reasoning_effort":"none"}
   硅基流动/百炼等中转：{"enable_thinking":false}
-  deepseek（已预填）：{"thinking":{"type":"disabled"}}
+  deepseek（已按官方文档预填，不清楚请勿修改）：{"thinking":{"type":"disabled"}}
   gemini 3.x：{"generationConfig":{"thinkingLevel":"minimal"}}
   gemini 2.5：{"generationConfig":{"thinkingConfig":{"thinkingBudget":0}}}
   claude：{"thinking":{"type":"disabled"}}
 · 遇「参数不支持」报错时，清空本项即可恢复`,
-    paramsPlaceholder: '{\n  "reasoning_effort": "none"\n}',
-    paramsNote: "参数与上游不匹配会导致请求失败，如遇「不支持」请清空本项（详见左侧 ? 说明）",
+    paramsPlaceholder: '// 不清楚请不要修改，保持留空\n{\n  "reasoning_effort": "none"\n}',
+    paramsPresetDsNote: "默认关闭 DeepSeek 思考",
+    paramsPresetDsValues: "\"enabled\" 为开启；不清楚请勿修改",
+    paramsNote: "不清楚则不要修改；参数与上游不匹配会导致请求失败，如遇「不支持」请清空本项（详见 ? 说明）",
     paramsJsonError: "JSON 格式错误：{err}",
     paramsNotObject: "需为 JSON 对象，如 {\"key\": \"value\"}",
     paramsReserved: "{keys} 由系统控制，将被忽略",
@@ -726,21 +729,24 @@ const en: typeof zh = {
     model: "Model",
     modelHint: "Click the icon to pull from the API, or type manually",
     params: "Param overrides",
-    paramsHint: "JSON object, deep-merged into the API request",
+    paramsHint: "Mainly to disable model thinking; JSON deep-merged into the request",
     paramsTip: `Define extra API request parameters as a JSON object; deep-merged into the request when sending.
-· Leave empty to use the model's default behavior
+Mainly used to disable model thinking — reasoning models slow down selection summaries a lot.
+· Not sure what to fill? Leave it empty; do not copy the examples below
 · Must be a JSON object, e.g. {"reasoning_effort": "none"}
 · model / messages / stream / max_tokens are system-controlled and will be ignored
 · Common "disable thinking" params:
   OpenAI official: {"reasoning_effort":"none"}
   SiliconFlow/Bailian relays: {"enable_thinking":false}
-  DeepSeek (prefilled): {"thinking":{"type":"disabled"}}
+  DeepSeek (prefilled per official docs — leave unchanged if unsure): {"thinking":{"type":"disabled"}}
   Gemini 3.x: {"generationConfig":{"thinkingLevel":"minimal"}}
   Gemini 2.5: {"generationConfig":{"thinkingConfig":{"thinkingBudget":0}}}
   Claude: {"thinking":{"type":"disabled"}}
 · If you get "unsupported parameter" errors, clear this field to recover`,
-    paramsPlaceholder: '{\n  "reasoning_effort": "none"\n}',
-    paramsNote: "Mismatched params may fail the request; if you see \"unsupported\", clear this field (see the ? tooltip)",
+    paramsPlaceholder: '// Leave this empty if you are unsure\n{\n  "reasoning_effort": "none"\n}',
+    paramsPresetDsNote: "Thinking disabled by default",
+    paramsPresetDsValues: "Set \"enabled\" to turn on; leave unchanged if unsure",
+    paramsNote: "Leave unchanged if unsure. Mismatched params may fail the request; if you see \"unsupported\", clear this field (see the ? tooltip)",
     paramsJsonError: "Invalid JSON: {err}",
     paramsNotObject: "Must be a JSON object, e.g. {\"key\": \"value\"}",
     paramsReserved: "{keys} is system-controlled and will be ignored",

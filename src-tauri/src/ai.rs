@@ -112,15 +112,76 @@ fn merge_json(base: &mut serde_json::Value, overlay: serde_json::Value) {
     }
 }
 
+/// 剥离 JSON 中的注释(`//` 行注释与 `/* */` 块注释),字符串内部的 `//` 不受影响。
+/// extra_params 面向人手阅读,允许带注释;但上游 API 不接受,发送前必须剥掉。
+fn strip_json_comments(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut chars = input.chars().peekable();
+    let mut in_string = false;
+    while let Some(c) = chars.next() {
+        if in_string {
+            out.push(c);
+            if c == '\\' {
+                // 跳过被转义的下一字符,避免 \" 误判为字符串结束
+                if let Some(&n) = chars.peek() {
+                    out.push(n);
+                    chars.next();
+                }
+            } else if c == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+        match c {
+            '"' => {
+                in_string = true;
+                out.push(c);
+            }
+            '/' => match chars.peek() {
+                // 行注释:丢弃到换行(保留换行,维持行号以便定位错误)
+                Some('/') => {
+                    while let Some(n) = chars.next() {
+                        if n == '\n' {
+                            out.push('\n');
+                            break;
+                        }
+                    }
+                }
+                Some('*') => {
+                    chars.next();
+                    while let Some(n) = chars.next() {
+                        if n == '*' && chars.peek() == Some(&'/') {
+                            chars.next();
+                            break;
+                        }
+                        if n == '\n' {
+                            out.push('\n');
+                        }
+                    }
+                }
+                _ => out.push('/'),
+            },
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
 /// 把 extra_params 解析为待合并对象。
 /// 任何异常(空 / 非法 JSON / 非对象)都只告警并跳过 —— **可用性优先**:
 /// 绝不因为附加参数有问题而让划词总结失败,退化为「无附加参数」继续请求。
 fn parse_extra_params(raw: Option<&str>) -> Option<serde_json::Value> {
-    let text = raw?.trim();
+    let raw = raw?.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    // 预填值带 // 注释(便于用户理解每个键),发送前剥离;行为须与前端
+    // paramsOverride.ts::stripJsonComments 一致,否则出现「前端通过、后端跳过」的分歧
+    let text = strip_json_comments(raw).trim().to_string();
     if text.is_empty() {
         return None;
     }
-    let value: serde_json::Value = match serde_json::from_str(text) {
+    let value: serde_json::Value = match serde_json::from_str(&text) {
         Ok(v) => v,
         Err(e) => {
             log::warn!("extra_params 非法 JSON,已跳过: {e}");
