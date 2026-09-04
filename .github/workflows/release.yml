@@ -197,10 +197,15 @@ jobs:
           # 双引号保留 base64 中的换行，避免 p12 被破坏
           echo "$MACOS_CERTIFICATE" | base64 --decode > certificate.p12
           security create-keychain -p "$MACOS_CI_KEYCHAIN_PWD" build.keychain
+          # 关键：新建钥匙串默认 5 分钟无操作自动上锁（实测 timeout=300s），
+          # 全量编译 6m+ 后 codesign 取私钥时已锁死 → 阻塞等 Security Agent 弹窗 → job 挂起。
+          # 锁超时设 6h，覆盖整个构建窗口（GitHub 官方配方同款）。
+          security set-keychain-settings -lut 21600 build.keychain
           security default-keychain -s build.keychain
           security unlock-keychain -p "$MACOS_CI_KEYCHAIN_PWD" build.keychain
           security import certificate.p12 -k build.keychain -P "$MACOS_CERTIFICATE_PWD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple:,codesign -s -k "$MACOS_CI_KEYCHAIN_PWD" build.keychain
+          # partition ID 须为 teamid: 格式（apple-tool: / apple:），访问授权靠 import 的 -T + 本命令的 -s
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$MACOS_CI_KEYCHAIN_PWD" build.keychain
 
       # ===== 指定签名身份（须与 tauri.conf.json 的 signingIdentity 一致）=====
       - name: Configure Signing (macOS)
