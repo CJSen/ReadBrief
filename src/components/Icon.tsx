@@ -17,6 +17,12 @@ const PATHS: Record<string, React.ReactNode> = {
     </>
   ),
   chevronDown: <path d="M6 9l6 6 6-6" />,
+  maximize: (
+    <>
+      <path d="M15 3h6v6M9 21H3v-6" />
+      <path d="M21 3l-7 7M3 21l7-7" />
+    </>
+  ),
   chevronRight: <path d="M9 18l6-6-6-6" />,
   arrowUp: <path d="M12 19V5M5 12l7-7 7 7" />,
   close: <path d="M18 6L6 18M6 6l12 12" />,

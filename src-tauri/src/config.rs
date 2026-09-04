@@ -19,6 +19,16 @@ pub struct ApiConfig {
     pub is_default: bool,
     #[serde(default)]
     pub stream: bool,
+    /// 额外请求参数(JSON 对象文本),深合并进请求体,用于关闭思考等厂商私有参数。
+    /// 留空(None) = 不附加任何参数。
+    /// 之所以存 String 而非 Value:保留用户原始缩进与键序,且非法 JSON 也能存住由 UI 提示修正。
+    /// skip_serializing_if:未使用本功能的 config.json 不出现该字段,保持配置可读。
+    /// 注:ts-rs 不认 skip_serializing_if,会刷一条 "failed to parse serde attribute"
+    /// warning —— 存量 onboarding_step 同样如此,属已知噪音,不影响 generated.ts 生成。
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub extra_params: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -223,6 +233,7 @@ impl Default for ApiConfig {
             model: String::new(),
             is_default: true,
             stream: true,
+            extra_params: None,
         }
     }
 }

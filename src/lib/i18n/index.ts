@@ -313,6 +313,27 @@ const zh = {
     apiKeyHint: "存于本机 config.json",
     model: "模型",
     modelHint: "点右侧图标从接口拉取，也可手输",
+    params: "参数覆盖",
+    paramsHint: "JSON 对象，深合并进 API 请求",
+    paramsTip: `使用 JSON 格式定义要覆盖的 API 请求参数，发送请求时深合并到原始参数中。
+· 留空则使用模型默认行为
+· 需为 JSON 对象，如 {"reasoning_effort": "none"}
+· model / messages / stream / max_tokens 由系统控制，填了也会被忽略
+· 常用关闭思考参数：
+  openai 官方：{"reasoning_effort":"none"}
+  硅基流动/百炼等中转：{"enable_thinking":false}
+  deepseek（已预填）：{"thinking":{"type":"disabled"}}
+  gemini 3.x：{"generationConfig":{"thinkingLevel":"minimal"}}
+  gemini 2.5：{"generationConfig":{"thinkingConfig":{"thinkingBudget":0}}}
+  claude：{"thinking":{"type":"disabled"}}
+· 遇「参数不支持」报错时，清空本项即可恢复`,
+    paramsPlaceholder: '{\n  "reasoning_effort": "none"\n}',
+    paramsNote: "参数与上游不匹配会导致请求失败，如遇「不支持」请清空本项（详见左侧 ? 说明）",
+    paramsJsonError: "JSON 格式错误：{err}",
+    paramsNotObject: "需为 JSON 对象，如 {\"key\": \"value\"}",
+    paramsReserved: "{keys} 由系统控制，将被忽略",
+    paramsZoomTitle: "编辑参数覆盖",
+    paramsZoomDone: "完成",
     stream: "流式输出",
     streamHint: "逐字显示总结",
     testConnection: "测试连接",
@@ -704,6 +725,27 @@ const en: typeof zh = {
     apiKeyHint: "Stored in local config.json",
     model: "Model",
     modelHint: "Click the icon to pull from the API, or type manually",
+    params: "Param overrides",
+    paramsHint: "JSON object, deep-merged into the API request",
+    paramsTip: `Define extra API request parameters as a JSON object; deep-merged into the request when sending.
+· Leave empty to use the model's default behavior
+· Must be a JSON object, e.g. {"reasoning_effort": "none"}
+· model / messages / stream / max_tokens are system-controlled and will be ignored
+· Common "disable thinking" params:
+  OpenAI official: {"reasoning_effort":"none"}
+  SiliconFlow/Bailian relays: {"enable_thinking":false}
+  DeepSeek (prefilled): {"thinking":{"type":"disabled"}}
+  Gemini 3.x: {"generationConfig":{"thinkingLevel":"minimal"}}
+  Gemini 2.5: {"generationConfig":{"thinkingConfig":{"thinkingBudget":0}}}
+  Claude: {"thinking":{"type":"disabled"}}
+· If you get "unsupported parameter" errors, clear this field to recover`,
+    paramsPlaceholder: '{\n  "reasoning_effort": "none"\n}',
+    paramsNote: "Mismatched params may fail the request; if you see \"unsupported\", clear this field (see the ? tooltip)",
+    paramsJsonError: "Invalid JSON: {err}",
+    paramsNotObject: "Must be a JSON object, e.g. {\"key\": \"value\"}",
+    paramsReserved: "{keys} is system-controlled and will be ignored",
+    paramsZoomTitle: "Edit param overrides",
+    paramsZoomDone: "Done",
     stream: "Stream output",
     streamHint: "Show summary character by character",
     testConnection: "Test connection",

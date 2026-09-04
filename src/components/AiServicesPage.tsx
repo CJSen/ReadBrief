@@ -5,7 +5,7 @@ import { getServices } from "../lib/config/types";
 import { testConnection, listModels } from "../lib/ai/provider";
 import { invoke } from "@tauri-apps/api/core";
 import { Icon } from "./Icon";
-import { t, useLanguage } from "../lib/i18n";
+import { t, useLanguage, getLanguage } from "../lib/i18n";
 
 const FORMAT_META: Record<ProviderType, { name: string; desc: string; mark: string }> = {
   openai: { name: "OpenAI 格式", desc: "官方 API 及绝大多数兼容网关", mark: "O" },
@@ -24,6 +24,59 @@ const LOCKED_BASE_URL: Partial<Record<ProviderType, string>> = {
 
 /** 模型下拉候选(组合框:可手输,打开态供选择) */
 const MODEL_SUGGESTIONS: string[] = ["deepseek-v4-flash", "deepseek-v4-pro"];
+
+/**
+ * 各协议预填的附加参数。
+ * 仅 DeepSeek 官方在文档中明确给出关闭思考的字段,故只预填它;
+ * 其余协议(尤其 openai)背后可能是任意中转站,参数各不相同,留空由用户自己填。
+ */
+const DEFAULT_EXTRA_PARAMS: Partial<Record<ProviderType, string>> = {
+  deepseek: '{\n  "thinking": { "type": "disabled" }\n}',
+};
+
+/** 预设值集合:用于判定当前内容是否仍是系统给的默认值(决定切协议时要不要跟随替换) */
+const PRESET_PARAMS = new Set(Object.values(DEFAULT_EXTRA_PARAMS).filter(Boolean) as string[]);
+
+/** 系统控制的字段:extraParams 里的同名键会被 Rust 侧忽略(日志点名) */
+const RESERVED_PARAM_KEYS = [
+  "model",
+  "messages",
+  "contents",
+  "stream",
+  "max_tokens",
+  "maxOutputTokens",
+  "system",
+];
+
+interface ParamsIssue {
+  level: "error" | "warn";
+  text: string;
+}
+
+/**
+ * 校验附加参数。仅用于提示 —— 不阻断保存,也不阻断请求:
+ * 非法内容由 Rust 侧降级为「不附加任何参数」,绝不因此让划词总结失败。
+ */
+function checkParams(text: string): ParamsIssue | null {
+  const raw = text.trim();
+  if (!raw) return null;
+  let v: unknown;
+  try {
+    v = JSON.parse(raw);
+  } catch (e) {
+    return { level: "error", text: t("ai.paramsJsonError", { err: (e as Error).message }) };
+  }
+  if (typeof v !== "object" || v === null || Array.isArray(v)) {
+    return { level: "error", text: t("ai.paramsNotObject") };
+  }
+  const hit = Object.keys(v).filter((k) => RESERVED_PARAM_KEYS.includes(k));
+  if (hit.length) {
+    // 分隔符随语言切换:中文用顿号,英文用逗号
+    const sep = getLanguage() === "en" ? ", " : "、";
+    return { level: "warn", text: t("ai.paramsReserved", { keys: hit.join(sep) }) };
+  }
+  return null;
+}
 
 const PROVIDER_MARKS: Record<string, string> = {
   OpenAI: "O",
@@ -93,6 +146,7 @@ export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
       model: "",
       isDefault: services.length === 0,
       stream: true,
+      extraParams: undefined,
     });
   }
 
@@ -142,6 +196,7 @@ export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
         apiKey: svc.apiKey,
         baseUrl: svc.baseUrl,
         model: svc.model,
+        extraParams: svc.extraParams ?? null,
       });
       map[svc.id!] = { ok: r.ok, ms: r.latencyMs ?? 0 };
     }
@@ -158,6 +213,7 @@ export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
         apiKey: svc.apiKey,
         baseUrl: svc.baseUrl,
         model: svc.model,
+        extraParams: svc.extraParams ?? null,
       });
       setLatency((m) => ({ ...m, [svc.id!]: { ok: r.ok, ms: r.latencyMs ?? 0 } }));
     } finally {
@@ -368,6 +424,11 @@ function ServiceForm({ svc, isNew, onSave, onCancel, onTest, latency }: ServiceF
   const [models, setModels] = useState<string[] | null>(null);
   const [loadingModels, setLoadingModels] = useState(false);
   const [modelErr, setModelErr] = useState<string | null>(null);
+  /** 放大编辑器:行号滚动与 textarea 同步 */
+  const [zoomOpen, setZoomOpen] = useState(false);
+  const zoomGutterRef = useRef<HTMLDivElement>(null);
+  /** ? 说明:portal 到 body 居中显示(面板 overflow:auto 会裁剪 absolute tooltip) */
+  const [tipOpen, setTipOpen] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
 
@@ -380,6 +441,9 @@ function ServiceForm({ svc, isNew, onSave, onCancel, onTest, latency }: ServiceF
       setTesting(false);
     }
   }
+  /** 附加参数校验结果:仅提示,不阻断保存与请求 */
+  const paramsIssue = checkParams(form.extraParams ?? "");
+
   const fmt = FORMAT_META[form.protocol as ProviderType];
   /** 锁定格式的固定 Base URL(deepseek 官方);非锁定格式为 undefined */
   const lockedBase = LOCKED_BASE_URL[form.protocol as ProviderType];
@@ -462,7 +526,10 @@ function ServiceForm({ svc, isNew, onSave, onCancel, onTest, latency }: ServiceF
       setSaveErr(t("ai.apiKeyRequired"));
       return;
     }
-    onSave(lockedBase ? { ...form, baseUrl: lockedBase } : form);
+    // 纯空白归一化为 undefined:未使用本功能的 config.json 不落该字段
+    const extraParams = (form.extraParams ?? "").trim() ? form.extraParams : undefined;
+    const next: ApiConfig = { ...form, extraParams };
+    onSave(lockedBase ? { ...next, baseUrl: lockedBase } : next);
   }
 
   return (
@@ -510,7 +577,17 @@ function ServiceForm({ svc, isNew, onSave, onCancel, onTest, latency }: ServiceF
                       onClick={() => {
                         // 切换格式:仅更新协议,模型保持空白(由用户手动输入或从接口拉取);
                         // deepseek 官方格式锁定 Base URL
-                        set({ protocol: p, model: "", ...(LOCKED_BASE_URL[p] ? { baseUrl: LOCKED_BASE_URL[p] } : {}) });
+                        const cur = (form.extraParams ?? "").trim();
+                        // 附加参数仅当「空或仍是某个预设值」时跟随协议切换,避免冲掉用户手填内容
+                        const keepUserParams = cur !== "" && !PRESET_PARAMS.has(cur);
+                        set({
+                          protocol: p,
+                          model: "",
+                          extraParams: keepUserParams
+                            ? form.extraParams
+                            : (DEFAULT_EXTRA_PARAMS[p] ?? ""),
+                          ...(LOCKED_BASE_URL[p] ? { baseUrl: LOCKED_BASE_URL[p] } : {}),
+                        });
                         setFmtOpen(false);
                       }}
                     >
@@ -634,6 +711,115 @@ function ServiceForm({ svc, isNew, onSave, onCancel, onTest, latency }: ServiceF
                       </>
                     )}
                   </div>,
+                  document.body,
+                )
+              : null}
+          </div>
+
+          {/* 参数覆盖:JSON 文本深合并进请求体,用于关闭思考等厂商私有参数 */}
+          <div className="set-row">
+            {/* 限宽 140:hint 折 2-3 行,让 JSON 输入框拿到与其他选项一致的 300px 宽度 */}
+            <div className="set-row-label" style={{ maxWidth: 140 }}>
+              <div className="flex ac g6" style={{ whiteSpace: "nowrap" }}>
+                {t("ai.params")}
+                {/* 注意:不能复用 .rb-seg 类名 —— App.css:715 历史页同名规则(width:100% + span flex:1)会把 ? 拉成椭圆 */}
+                <span
+                  onMouseEnter={() => setTipOpen(true)}
+                  onMouseLeave={() => setTipOpen(false)}
+                >
+                  <span className="rb-q">?</span>
+                </span>
+              </div>
+              <div className="muted rb-setting-hint">{t("ai.paramsHint")}</div>
+            </div>
+            <div className="rb-svc-params-wrap">
+              <textarea
+                className="inp mono rb-svc-params"
+                rows={3}
+                spellCheck={false}
+                value={form.extraParams ?? ""}
+                placeholder={t("ai.paramsPlaceholder")}
+                onChange={(e) => set({ extraParams: e.currentTarget.value })}
+              />
+              <button
+                className="rb-svc-params-expand"
+                title={t("ai.paramsZoomTitle")}
+                onClick={() => setZoomOpen(true)}
+              >
+                <Icon name="maximize" size={13} />
+              </button>
+              {/* 单一提示位:校验问题优先,无问题时显示常显风险说明 */}
+              <div
+                className={
+                  paramsIssue
+                    ? paramsIssue.level === "error"
+                      ? "rb-svc-params-err"
+                      : "rb-svc-params-warn"
+                    : "rb-svc-params-note"
+                }
+              >
+                {paramsIssue ? paramsIssue.text : t("ai.paramsNote")}
+              </div>
+            </div>
+            {/* 放大编辑器:portal 到 body,行号 + 大面积输入,编辑实时同步到表单 */}
+            {zoomOpen
+              ? createPortal(
+                  <div
+                    className="rb-params-zoom-overlay"
+                    onMouseDown={(e) => {
+                      if (e.target === e.currentTarget) setZoomOpen(false);
+                    }}
+                  >
+                    <div className="rb-params-zoom">
+                      <div className="rb-params-zoom-hd">
+                        <span>{t("ai.paramsZoomTitle")}</span>
+                        <button className="iconbtn" onClick={() => setZoomOpen(false)}>
+                          <Icon name="close" size={14} />
+                        </button>
+                      </div>
+                      <div className="rb-params-zoom-body">
+                        <div className="rb-params-zoom-gutter" ref={zoomGutterRef}>
+                          {(form.extraParams ?? "").split("\n").map((_, i) => (
+                            <div key={i}>{i + 1}</div>
+                          ))}
+                        </div>
+                        <textarea
+                          className="rb-params-zoom-input"
+                          spellCheck={false}
+                          value={form.extraParams ?? ""}
+                          onChange={(e) => set({ extraParams: e.currentTarget.value })}
+                          onScroll={(e) => {
+                            if (zoomGutterRef.current) {
+                              zoomGutterRef.current.scrollTop = e.currentTarget.scrollTop;
+                            }
+                          }}
+                        />
+                      </div>
+                      <div className="rb-params-zoom-ft">
+                        <span
+                          className={
+                            paramsIssue
+                              ? paramsIssue.level === "error"
+                                ? "rb-svc-params-err"
+                                : "rb-svc-params-warn"
+                              : "rb-svc-params-note"
+                          }
+                        >
+                          {paramsIssue ? paramsIssue.text : t("ai.paramsNote")}
+                        </span>
+                        <button className="btn btn-primary btn-sm" onClick={() => setZoomOpen(false)}>
+                          {t("ai.paramsZoomDone")}
+                        </button>
+                      </div>
+                    </div>
+                  </div>,
+                  document.body,
+                )
+              : null}
+            {/* ? 说明 tooltip:portal 到 body,画面居中显示 */}
+            {tipOpen
+              ? createPortal(
+                  <div className="rb-params-tip-fixed">{t("ai.paramsTip")}</div>,
                   document.body,
                 )
               : null}

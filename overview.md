@@ -25,3 +25,12 @@
 
 ## 未提交
 改动未提交（用户未要求）。涉及文件：`src/lib/i18n/index.ts` + 上述 6 个组件。
+
+## AI 服务「参数覆盖」功能（2026-09-04）
+- 目的：让用户可通过 JSON 自定义请求参数（如关闭思考模型）解决 thinking 拖慢划词总结的问题。
+- 数据：`ApiConfig.extra_params: Option<String>`（config.json 深合并进请求体；留空不附加）。
+- Rust：`ai.rs` 新增 `merge_json`（深合并）+ `parse_extra_params`（保留字段过滤 / 非法 JSON 降级跳过，绝不阻断总结请求）。
+- UI：服务编辑表单模型行与流式输出行之间新增「参数覆盖」textarea；`?` hover 显示各协议关闭思考参数速查表；下方单一提示位（常显说明 / 校验错误 / 保留字段警告）。
+- 预填：仅 deepseek 协议预填 `{"thinking":{"type":"disabled"}}`，其余留空。
+- i18n 中英各 8 词条；新增 `.rb-tip-wide`、`.rb-svc-params*` 样式。
+- 验证：tsc 0 错误、cargo check --lib 通过。未提交。

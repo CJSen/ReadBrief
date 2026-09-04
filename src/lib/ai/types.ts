@@ -5,6 +5,8 @@ export interface ProviderConfig {
   apiKey: string;
   baseUrl?: string;
   model: string;
+  /** 用户自定义附加参数(JSON 对象文本),由 Rust 侧深合并进请求体,用于关闭思考等厂商私有参数 */
+  extraParams?: string | null;
 }
 
 export interface Message {

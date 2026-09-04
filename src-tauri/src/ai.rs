@@ -22,6 +22,10 @@ pub struct AiServiceConfig {
     pub api_key: String,
     pub base_url: Option<String>,
     pub model: String,
+    /// 用户自定义附加参数(JSON 对象文本),深合并进请求体。
+    /// 用途:关闭思考(`reasoning_effort` / `enable_thinking` / `thinking.type` 等厂商私有参数)。
+    #[serde(default)]
+    pub extra_params: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -72,6 +76,103 @@ fn truncate_input(s: &str) -> String {
     }
 }
 
+/// 由系统控制、不允许 extra_params 覆盖的字段(各协议命名不同,故两类都列)。
+/// 这些字段一旦被改必然导致请求失败或行为异常,且均已由 UI 其它控件控制。
+const RESERVED_KEYS: [&str; 7] = [
+    "model",
+    "messages",
+    "contents",
+    "stream",
+    "max_tokens",
+    "maxOutputTokens",
+    "system",
+];
+
+/// 深合并:overlay 的同名键覆盖 base,双方均为对象时继续下沉。
+/// 必须深合并而非浅覆盖 —— gemini 的 `generationConfig` 已含 `maxOutputTokens`,
+/// 浅覆盖会把整个对象吃掉,导致输出上限丢失、长总结被截断。
+fn merge_json(base: &mut serde_json::Value, overlay: serde_json::Value) {
+    let (Some(base_obj), Some(overlay_obj)) = (base.as_object_mut(), overlay.as_object()) else {
+        return;
+    };
+    for (k, v) in overlay_obj {
+        // 先判定再取可变引用:避免 match guard 持有 borrow 导致 insert 冲突
+        let nested = base_obj
+            .get(k)
+            .map(|b| b.is_object() && v.is_object())
+            .unwrap_or(false);
+        if nested {
+            if let Some(b) = base_obj.get_mut(k) {
+                merge_json(b, v.clone());
+            }
+        } else {
+            // 数组与标量不合并,直接覆盖
+            base_obj.insert(k.clone(), v.clone());
+        }
+    }
+}
+
+/// 把 extra_params 解析为待合并对象。
+/// 任何异常(空 / 非法 JSON / 非对象)都只告警并跳过 —— **可用性优先**:
+/// 绝不因为附加参数有问题而让划词总结失败,退化为「无附加参数」继续请求。
+fn parse_extra_params(raw: Option<&str>) -> Option<serde_json::Value> {
+    let text = raw?.trim();
+    if text.is_empty() {
+        return None;
+    }
+    let value: serde_json::Value = match serde_json::from_str(text) {
+        Ok(v) => v,
+        Err(e) => {
+            log::warn!("extra_params 非法 JSON,已跳过: {e}");
+            return None;
+        }
+    };
+    let Some(obj) = value.as_object() else {
+        log::warn!("extra_params 必须是 JSON 对象,已跳过");
+        return None;
+    };
+    let reserved: Vec<&str> = obj
+        .keys()
+        .filter(|k| RESERVED_KEYS.contains(&k.as_str()))
+        .map(|k| k.as_str())
+        .collect();
+    if !reserved.is_empty() {
+        log::warn!("extra_params 含系统保留字段,已忽略: {reserved:?}");
+    }
+    let filtered: serde_json::Map<String, serde_json::Value> = obj
+        .iter()
+        .filter(|(k, _)| !RESERVED_KEYS.contains(&k.as_str()))
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    if filtered.is_empty() {
+        None
+    } else {
+        Some(serde_json::Value::Object(filtered))
+    }
+}
+
+/// DEBUG 级别记录完整请求(URL/headers/body),供排查参数覆盖与上游报错。
+/// 鉴权头值脱敏:仅保留前 8 字符 + 长度,API Key 不落盘(与「日志不落密钥」约定一致)。
+fn log_request_debug(id: &str, url: &str, headers: &[(String, String)], body: &serde_json::Value) {
+    let masked: Vec<String> = headers
+        .iter()
+        .map(|(k, v)| {
+            let kl = k.to_lowercase();
+            if kl == "authorization" || kl == "x-api-key" || kl == "x-goog-api-key" {
+                let head: String = v.chars().take(8).collect();
+                format!("{k}: {head}…(len={})", v.len())
+            } else {
+                format!("{k}: {v}")
+            }
+        })
+        .collect();
+    log::debug!(
+        "AI 请求详情: id={id}\nURL: {url}\nHeaders: {}\nBody: {}",
+        masked.join("; "),
+        serde_json::to_string_pretty(body).unwrap_or_else(|_| "<序列化失败>".into()),
+    );
+}
+
 /// 构造请求 URL / headers / body(三协议序列化,Rust 侧实现)
 fn build_request(
     req: &AiRequest,
@@ -91,7 +192,7 @@ fn build_request(
 
     let model = req.model.as_deref().unwrap_or(&config.model);
 
-    match config.protocol.as_str() {
+    let (url, headers, mut body) = match config.protocol.as_str() {
         // DeepSeek 官方为 OpenAI 兼容协议:同一套请求/SSE 解析
         "openai" | "deepseek" => {
             let mut messages = Vec::new();
@@ -99,7 +200,7 @@ fn build_request(
                 messages.push(serde_json::json!({ "role": "system", "content": sys }));
             }
             messages.push(serde_json::json!({ "role": "user", "content": req.user }));
-            Ok((
+            (
                 format!("{base}/chat/completions"),
                 vec![
                     ("Authorization".into(), format!("Bearer {}", config.api_key)),
@@ -111,12 +212,12 @@ fn build_request(
                     "stream": req.stream,
                     "max_tokens": req.max_tokens,
                 }),
-            ))
+            )
         }
         "claude" => {
             let mut messages = Vec::new();
             messages.push(serde_json::json!({ "role": "user", "content": req.user }));
-            Ok((
+            (
                 format!("{base}/v1/messages"),
                 vec![
                     ("x-api-key".into(), config.api_key.clone()),
@@ -130,7 +231,7 @@ fn build_request(
                     "messages": messages,
                     "stream": req.stream,
                 }),
-            ))
+            )
         }
         "gemini" => {
             let contents: Vec<serde_json::Value> = {
@@ -141,7 +242,7 @@ fn build_request(
                 list.push(serde_json::json!({ "role": "user", "parts": [{ "text": req.user }] }));
                 list
             };
-            Ok((
+            (
                 format!("{base}/v1beta/models/{model}:streamGenerateContent?alt=sse"),
                 vec![
                     // Gemini Key 用请求头,不再拼 URL query(防 URL 泄露到日志/网络层)
@@ -152,10 +253,16 @@ fn build_request(
                     "contents": contents,
                     "generationConfig": { "maxOutputTokens": req.max_tokens },
                 }),
-            ))
+            )
         }
         _ => unreachable!("protocol 已校验"),
+    };
+
+    // 附加用户自定义参数(深合并;非法/含保留字段已在 parse_extra_params 内剔除并告警)
+    if let Some(extra) = parse_extra_params(config.extra_params.as_deref()) {
+        merge_json(&mut body, extra);
     }
+    Ok((url, headers, body))
 }
 
 /// 发送 ai-error 事件(AppError → 前端可识别的 {type, message} 结构)
@@ -376,6 +483,7 @@ pub async fn ai_stream(
             header_map.insert(kh, vh);
         }
     }
+    log_request_debug(&request_id, &url, &headers, &body);
 
     let response = match client
         .post(&url)
@@ -554,6 +662,7 @@ pub async fn ai_test(config: AiServiceConfig) -> AppResult<serde_json::Value> {
             header_map.insert(kh, vh);
         }
     }
+    log_request_debug("test", &url, &headers, &body);
 
     let response = client.post(&url).headers(header_map).json(&body).send().await?;
     let elapsed = start.elapsed().as_millis() as u64;
@@ -602,6 +711,7 @@ pub async fn ai_list_models(config: AiServiceConfig) -> AppResult<Vec<String>> {
         // DeepSeek 官方为 OpenAI 兼容协议:GET {base}/models
         "openai" | "deepseek" => {
             let url = format!("{base}/models");
+            log::debug!("AI 模型列表请求: protocol={} URL: {url}(鉴权头已脱敏)", config.protocol);
             let resp = client
                 .get(&url)
                 .header("Authorization", format!("Bearer {}", config.api_key))
@@ -623,6 +733,7 @@ pub async fn ai_list_models(config: AiServiceConfig) -> AppResult<Vec<String>> {
         }
         "gemini" => {
             let url = format!("{base}/v1beta/models?pageSize=100");
+            log::debug!("AI 模型列表请求: protocol=gemini URL: {url}(key 走请求头,已脱敏)",);
             let resp = client
                 .get(&url)
                 .header("x-goog-api-key", &config.api_key)
@@ -644,9 +755,9 @@ pub async fn ai_list_models(config: AiServiceConfig) -> AppResult<Vec<String>> {
                 .unwrap_or_default())
         }
         "claude" => Ok(vec![
-            "claude-opus-4-20250514".to_string(),
-            "claude-sonnet-4-20250514".to_string(),
-            "claude-3-5-haiku-20241022".to_string(),
+            "claude-opus-5".to_string(),
+            "claude-sonnet-5".to_string(),
+            "claude-haiku-4-5-20251001".to_string(),
         ]),
         _ => unreachable!("protocol 已校验"),
     }

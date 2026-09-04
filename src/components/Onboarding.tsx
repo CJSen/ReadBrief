@@ -109,6 +109,7 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
         apiKey: form.apiKey.trim(),
         baseUrl: form.baseUrl.trim(),
         model: form.model.trim() || FORMAT_META[form.protocol as ProviderType].defaultModel,
+        extraParams: form.extraParams ?? null,
       });
       setLatency({ ok: r.ok, ms: r.latencyMs ?? 0 });
     } finally {

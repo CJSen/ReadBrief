@@ -282,6 +282,7 @@ export function useSummarySession(
         apiKey: service.apiKey,
         baseUrl: service.baseUrl,
         model: service.model,
+        extraParams: service.extraParams ?? null,
       };
       // 解析出的服务模型同步给 serviceModelRef,供 saveHistory 落库(二者保持一致)
       serviceModelRef.current = service.model;

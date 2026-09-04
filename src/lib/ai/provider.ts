@@ -28,6 +28,7 @@ export async function streamChat(
     apiKey: config.apiKey,
     baseUrl: config.baseUrl,
     model: config.model,
+    extraParams: config.extraParams ?? null,
   };
   const aiRequest = {
     system: req.system,
@@ -97,6 +98,7 @@ export async function testConnection(config: ProviderConfig): Promise<TestConnec
     apiKey: config.apiKey,
     baseUrl: config.baseUrl,
     model: config.model,
+    extraParams: config.extraParams ?? null,
   };
   try {
     const r = await invoke<TestConnectionResult>("ai_test", { config: serviceConfig });

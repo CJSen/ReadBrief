@@ -17,8 +17,9 @@ export const GEMINI_DEFAULT_TEMPERATURE = 0.7;
 
 /**
  * 按协议取默认 max_tokens(请求前决策,不依赖模型名——模型迭代快,关键词枚举追不上):
- * - claude:思考走独立 budget_tokens,不占 max_tokens → 512 只算正文,天然安全;
- * - gemini:2.5 思考默认开启且占 maxOutputTokens 配额 → 必须放大,否则思考耗尽正文为空;
+ * - claude:4.7+/5 系思考与输出共享 max_tokens 预算,且默认开启 adaptive 思考;
+ *   若需精确关闭/调整思考,用服务配置的「参数覆盖」下发 thinking 参数。
+ * - gemini:2.5+ 思考默认开启且占 maxOutputTokens 配额 → 必须放大,否则思考耗尽正文为空;
  * - openai 兼容(deepseek-v4 等):reasoning 计入 max_tokens → 与 gemini 同需放大。
  * 思考型与否的最终判定在运行时(流式中出现 reasoning_content/thinking_delta/thought part),
  * 此处仅为请求前的保守配额。

@@ -1782,7 +1782,7 @@
 .rb-prompt-editor-row .inp { margin-bottom: 0; }
 
 /* 提示词类型 · ? 图标 + hover 功能简介 */
-.rb-seg { position: relative; }
+.rb-seg { position: relative; display: inline-flex; align-items: center; }
 .rb-q {
   display: inline-grid;
   place-items: center;
@@ -1835,6 +1835,144 @@
   border-top-color: #2b2f36;
 }
 
+/* 参数覆盖 · 多行 tooltip:默认 rb-tip 不换行,这里放开宽度并允许换行 */
+.rb-tip-wide {
+  white-space: pre-line;
+  width: max-content;
+  max-width: 340px;
+  text-align: left;
+  line-height: 1.6;
+}
+
+/* 参数覆盖 ? 说明:fixed 居中显示(用户定稿:直接显示在画面中间,避免边缘裁剪) */
+.rb-params-tip-fixed {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10000;
+  pointer-events: none;
+  white-space: pre-line;
+  width: max-content;
+  max-width: 460px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.6;
+  color: #fff;
+  background: #2b2f36;
+  padding: 6px 9px;
+  border-radius: 6px;
+  box-shadow: var(--rb-shadow-float);
+}
+
+/* 参数覆盖 · textarea 与提示行(宽度与 .rb-svc-input 的 300px 对齐,JSON 靠放大编辑器获得大空间) */
+.rb-svc-params-wrap { display: flex; flex-direction: column; gap: 4px; flex: 1; max-width: 300px; position: relative; }
+.rb-svc-params {
+  width: 100%;
+  resize: vertical;
+  min-height: 60px;
+  font-size: 12px;
+  line-height: 1.5;
+  padding-right: 30px;
+}
+/* 放大按钮:textarea 右上角悬浮 */
+.rb-svc-params-expand {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: var(--rb-radius-sm);
+  background: transparent;
+  color: var(--rb-text-tertiary);
+  cursor: pointer;
+}
+.rb-svc-params-expand:hover {
+  background: var(--rb-bg-surface, rgba(0, 0, 0, 0.05));
+  color: var(--rb-text-primary);
+}
+/* 放大编辑器:全屏遮罩 + 居中面板 + 行号槽 */
+.rb-params-zoom-overlay {
+  position: fixed;
+  inset: 0;
+  /* 高于服务表单遮罩(--rb-z-modal:300)与引导层(9999),否则被表单遮挡 */
+  z-index: 10000;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.rb-params-zoom {
+  display: flex;
+  flex-direction: column;
+  width: min(720px, 90vw);
+  height: min(540px, 80vh);
+  background: var(--rb-bg-elevated, #fff);
+  border-radius: var(--rb-radius-lg, 10px);
+  box-shadow: var(--rb-shadow-float);
+  overflow: hidden;
+}
+.rb-params-zoom-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--rb-border-subtle);
+  font-weight: 500;
+  font-size: var(--rb-text-sm);
+}
+.rb-params-zoom-body { flex: 1; display: flex; min-height: 0; }
+.rb-params-zoom-gutter {
+  flex: none;
+  width: 44px;
+  padding: 10px 8px 10px 0;
+  text-align: right;
+  font-family: var(--rb-font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--rb-text-tertiary);
+  background: var(--rb-bg-surface);
+  border-right: 1px solid var(--rb-border-subtle);
+  overflow: hidden;
+  user-select: none;
+}
+.rb-params-zoom-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  resize: none;
+  padding: 10px 12px;
+  font-family: var(--rb-font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  background: transparent;
+  color: var(--rb-text-primary);
+  white-space: pre;
+  overflow: auto;
+}
+.rb-params-zoom-ft {
+  padding: 8px 14px;
+  border-top: 1px solid var(--rb-border-subtle);
+  font-size: 11px;
+  line-height: 1.5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.rb-svc-params-note,
+.rb-svc-params-warn,
+.rb-svc-params-err {
+  font-size: 11px;
+  line-height: 1.5;
+}
+.rb-svc-params-note { color: var(--rb-text-tertiary); }
+.rb-svc-params-warn { color: var(--rb-warning, #b8860b); }
+.rb-svc-params-err { color: var(--rb-error, #d64545); }
 
 .rb-prompt-editor-hd {
   display: flex;
