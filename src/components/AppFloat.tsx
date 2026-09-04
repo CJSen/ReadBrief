@@ -18,6 +18,7 @@ interface CaptureResult {
   source: string;
   promptId?: string | null;
   serviceId?: string | null;
+  extraParams?: string | null;
 }
 
 interface TagDef {
@@ -115,6 +116,7 @@ export function AppFloat() {
     outputRef,
     setPromptId,
     setServiceId,
+    setExtraParamsOverride,
     promptName,
   } = useSummarySession(cfgRef);
 
@@ -470,6 +472,7 @@ export function AppFloat() {
       setCapture(event.payload);
       setPromptId(event.payload.promptId ?? null);
       setServiceId(event.payload.serviceId ?? null);
+      setExtraParamsOverride(event.payload.extraParams ?? null);
       setBoundServiceId(event.payload.serviceId ?? null);
       // 空捕获不清空已有输入:浮窗弹出后自身成为前台应用,AX 可能读到空文本
       // (双保险,配合 Rust 侧 dispatch_capture 的空文本过滤)

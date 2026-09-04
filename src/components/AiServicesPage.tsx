@@ -7,7 +7,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { Icon } from "./Icon";
 import { t, useLanguage } from "../lib/i18n";
 import { ParamsOverrideField } from "./ParamsOverrideField";
-import { defaultExtraParams, PRESET_PARAMS } from "../lib/ai/paramsOverride";
 
 const FORMAT_META: Record<ProviderType, { name: string; desc: string; mark: string }> = {
   openai: { name: "OpenAI 格式", desc: "官方 API 及绝大多数兼容网关", mark: "O" },
@@ -562,16 +561,11 @@ function ServiceForm({ svc, isNew, onSave, onCancel, onTest, latency, notify }: 
                       className={`svc-mi${p === form.protocol ? " on" : ""}`}
                       onClick={() => {
                         // 切换格式:仅更新协议,模型保持空白(由用户手动输入或从接口拉取);
-                        // deepseek 官方格式锁定 Base URL
-                        const cur = (form.extraParams ?? "").trim();
-                        // 附加参数仅当「空或仍是某个预设值」时跟随协议切换,避免冲掉用户手填内容
-                        const keepUserParams = cur !== "" && !PRESET_PARAMS.has(cur);
+                        // deepseek 官方格式锁定 Base URL。
+                        // extraParams 不随协议变化:服务级预填已移除,关闭思考默认改由快捷键级承担
                         set({
                           protocol: p,
                           model: "",
-                          extraParams: keepUserParams
-                            ? form.extraParams
-                            : (defaultExtraParams(p) ?? ""),
                           ...(LOCKED_BASE_URL[p] ? { baseUrl: LOCKED_BASE_URL[p] } : {}),
                         });
                         setFmtOpen(false);
@@ -702,9 +696,8 @@ function ServiceForm({ svc, isNew, onSave, onCancel, onTest, latency, notify }: 
               : null}
           </div>
 
-          {/* 参数覆盖:JSON 文本深合并进请求体,用于关闭思考等厂商私有参数 */}
+          {/* 参数覆盖:JSON 文本深合并进请求体(服务级基础配置;关闭思考默认已移至快捷键级) */}
           <ParamsOverrideField
-            protocol={form.protocol}
             value={form.extraParams ?? ""}
             onChange={(v) => set({ extraParams: v })}
           />

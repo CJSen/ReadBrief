@@ -132,6 +132,10 @@ const zh = {
     waitKey: "等待按键…",
     clickRecord: "点击录制",
     defaultService: "默认服务",
+    paramsBtn: "请求参数覆盖（留空时：deepseek 默认关闭思考，其余沿用服务级配置）",
+    paramsTitle: "请求参数覆盖（JSON，深合并进请求）",
+    paramsHint: "清空或还原为默认值即恢复动态默认：deepseek 协议下划词总结/翻译默认关闭思考",
+    paramsPlaceholder: "// 主要用来关闭模型思考；不清楚请保持留空\n// deepseek 协议下划词总结/翻译会自动默认关闭思考",
     builtin: "内置",
     custom: "自定义",
     reopenRecord: "点击重新录制",
@@ -318,7 +322,8 @@ const zh = {
     modelHint: "点右侧图标从接口拉取，也可手输",
     params: "参数覆盖",
     paramsHint: "主要用来关闭模型思考；JSON 深合并进请求",
-    paramsTip: `使用 JSON 格式定义要覆盖的 API 请求参数，发送请求时深合并到原始参数中。
+    paramsTip: `是对 AI 服务请求参数的补充：发送请求时深合并，同名参数以此处为准。
+使用 JSON 格式定义要覆盖的 API 请求参数。
 主要用于关闭模型思考——思考型模型会显著拖慢划词总结。
 · 不确定该填什么：保持留空即可，不要照抄下面的示例
 · 需为 JSON 对象，如 {"reasoning_effort": "none"}
@@ -410,6 +415,11 @@ const zh = {
     done: "完成",
     overviewTitle: "一切就绪",
     overviewDesc: "下面是已完成的配置，点击「完成」即可开始划词总结。",
+    paramsTipTitle: "别漏了「参数覆盖」——思考型模型会明显拖慢划词总结",
+    paramsTipScTag: "快捷键级",
+    paramsTipSc: "设置 → 快捷键，模型下拉旁的「参数覆盖」按钮：按用途配置，主要用来关闭模型思考；发送时同名参数以这里为准",
+    paramsTipSvcTag: "服务级",
+    paramsTipSvc: "设置 → AI 服务编辑页的「参数覆盖」：作为该服务所有请求的基础补充，快捷键级未设置时生效",
     overviewShortcuts: "快捷键",
     overviewServices: "已配置的服务",
     confirmTitle: "未开启辅助功能",
@@ -549,6 +559,10 @@ const en: typeof zh = {
     waitKey: "Press keys…",
     clickRecord: "Click to record",
     defaultService: "Default service",
+    paramsBtn: "Request param overrides (empty: deepseek disables thinking by default, others fall back to service-level config)",
+    paramsTitle: "Request param overrides (JSON, deep-merged into request)",
+    paramsHint: "Clear or restore the default to use dynamic defaults: summarize/translate disable thinking by default on deepseek",
+    paramsPlaceholder: "// Mainly to disable model thinking; leave empty if unsure\n// Summarize/translate disable thinking by default on deepseek",
     builtin: "Built-in",
     custom: "Custom",
     reopenRecord: "Click to re-record",
@@ -828,6 +842,11 @@ Mainly used to disable model thinking — reasoning models slow down selection s
     done: "Done",
     overviewTitle: "All set",
     overviewDesc: "Here's what's configured. Click Finish to start summarizing selections.",
+    paramsTipTitle: "Don't miss 「Param overrides」 — reasoning models slow down summaries a lot",
+    paramsTipScTag: "Shortcut",
+    paramsTipSc: "Settings → Shortcuts, the 「Param overrides」 button next to the model dropdown: configure per use, mainly to disable model thinking; same-named params here win when sending",
+    paramsTipSvcTag: "Service",
+    paramsTipSvc: "Settings → AI service editor's 「Param overrides」: a base supplement for all requests of that service, applies when the shortcut level is unset",
     overviewShortcuts: "Shortcuts",
     overviewServices: "Configured service",
     confirmTitle: "Accessibility not enabled",

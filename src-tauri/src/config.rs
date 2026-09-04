@@ -79,6 +79,11 @@ pub struct ShortcutConfig {
     #[serde(default)]
     #[ts(optional = nullable)]
     pub service_id: Option<String>,
+    /// 快捷键级附加参数(JSON 对象文本):非空时深合并覆盖服务级 extra_params,
+    /// 为空则沿用服务级。用途:同一服务在不同快捷键下需要不同行为(如总结关思考、深析开思考)。
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub extra_params: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -183,6 +188,7 @@ fn default_shortcuts() -> Vec<ShortcutConfig> {
             is_default: true,
             model: None,
             service_id: None,
+            extra_params: None,
         },
         ShortcutConfig {
             id: "open-main".to_string(),
@@ -194,6 +200,7 @@ fn default_shortcuts() -> Vec<ShortcutConfig> {
             is_default: true,
             model: None,
             service_id: None,
+            extra_params: None,
         },
         ShortcutConfig {
             id: "paste".to_string(),
@@ -205,6 +212,7 @@ fn default_shortcuts() -> Vec<ShortcutConfig> {
             is_default: true,
             model: None,
             service_id: None,
+            extra_params: None,
         },
         ShortcutConfig {
             id: "translate".to_string(),
@@ -216,6 +224,7 @@ fn default_shortcuts() -> Vec<ShortcutConfig> {
             is_default: true,
             model: None,
             service_id: None,
+            extra_params: None,
         },
     ]
 }

@@ -87,6 +87,7 @@ pub fn float_regenerate(app: tauri::AppHandle, text: String) -> AppResult<()> {
                 source: "history".to_string(),
                 prompt_id: None,
                 service_id: None,
+                extra_params: None,
             },
         );
     }

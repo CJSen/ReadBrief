@@ -1,13 +1,17 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { AppConfig, ApiConfig, ProviderType } from "../lib/config/types";
 import { testConnection, listModels } from "../lib/ai/provider";
 import { t } from "../lib/i18n";
+import {
+  checkParams,
+  stripJsonComments,
+  DS_CANONICAL_EXTRA,
+} from "../lib/ai/paramsOverride";
 import { Icon, type IconName } from "./Icon";
 import { ParamsOverrideField } from "./ParamsOverrideField";
-import { defaultExtraParams, PRESET_PARAMS } from "../lib/ai/paramsOverride";
 import { resolveShortcutKey, keySymbol } from "../lib/shortcutKey";
 import { isMac } from "../lib/platform";
 import "./Onboarding.css";
@@ -356,6 +360,34 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
     setDraft(parts.join("+"));
   }
 
+  /* ═══ 步骤3:参数覆盖(快捷键级,与 ShortcutsPage 同规则) ═══ */
+  /* 首次挂载时的存储值(初始快照用 state 保存,避免 ref 触发 render 期读取) */
+  const [initialScExtra] = useState<string | null>(
+    () => (cfg.shortcuts ?? []).find((s) => s.id === "summarize")?.extraParams ?? null,
+  );
+  const [scExtraParams, setScExtraParams] = useState<string | null>(initialScExtra);
+  /** 放大编辑器草稿(null = 关闭) */
+  const [scParamsDraft, setScParamsDraft] = useState<string | null>(null);
+  const [scTipOpen, setScTipOpen] = useState(false);
+  const scGutterRef = useRef<HTMLDivElement>(null);
+  /** deepseek 预填(带注释,随界面语言),与 ShortcutsPage 一致 */
+  const dsPreset = useMemo(() => {
+    const m = t("ai.paramsPresetDsNote");
+    const v = t("ai.paramsPresetDsValues");
+    return `{\n  // ${m}\n  // ${v}\n  "thinking": { "type": "disabled" }\n}`;
+  }, []);
+  const scParamsIssue = scParamsDraft !== null ? checkParams(scParamsDraft) : null;
+  /** 打开编辑器:已存值优先;未存且当前配置 deepseek 协议 → 展示动态默认注释版 */
+  function openScParams() {
+    setScParamsDraft(scExtraParams ?? (form.protocol === "deepseek" ? dsPreset : ""));
+  }
+  /** 编辑器「完成」:仅更新本地态,finish() 统一落库(空/等于默认 → null,回动态默认) */
+  function commitScParams() {
+    const stripped = scParamsDraft !== null ? stripJsonComments(scParamsDraft).trim() : "";
+    setScExtraParams(!stripped || stripped === DS_CANONICAL_EXTRA ? null : scParamsDraft);
+    setScParamsDraft(null);
+  }
+
   /* ═══ 完成 / 跳过(统一持久化) ═══ */
   async function finish() {
     // 收尾前补存 AI 服务:覆盖「第二步填完直接点跳过」「未走 commitServiceIfNeeded」等路径,
@@ -379,10 +411,14 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
     if (sysEnabled !== launchOnStart) {
       await invoke("autostart_set", { enabled: launchOnStart }).catch(() => {});
     }
-    // 步骤3 快捷键若已改则落库
-    if (shortcutAccel !== defaultAccel) {
+    // 步骤3 快捷键/参数覆盖若有变更则落库
+    // 参数保存规则与 ShortcutsPage 一致:剥注释后为空或等于 deepseek 预设 → 不落库(回动态默认)
+    const scStripped = scExtraParams ? stripJsonComments(scExtraParams).trim() : "";
+    const scParamsValue =
+      !scStripped || scStripped === DS_CANONICAL_EXTRA ? undefined : (scExtraParams ?? undefined);
+    if (shortcutAccel !== defaultAccel || scExtraParams !== initialScExtra) {
       const shortcuts = (base.shortcuts ?? []).map((s) =>
-        s.id === "summarize" ? { ...s, accelerator: shortcutAccel } : s,
+        s.id === "summarize" ? { ...s, accelerator: shortcutAccel, extraParams: scParamsValue } : s,
       );
       next.shortcuts = shortcuts;
     }
@@ -502,6 +538,21 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
                         {form.model.trim() || FORMAT_META[form.protocol as ProviderType].defaultModel}
                       </span>
                     </div>
+                  </div>
+                </div>
+              </div>
+              {/* 两层「参数覆盖」的用途提示:概览页显著位置,避免用户漏配关思考参数 */}
+              <div className="rb-ob-params-tip">
+                <Icon name="alert" size={15} style={{ flexShrink: 0, marginTop: 2 }} />
+                <div>
+                  <div className="rb-ob-params-tip-title">{t("onboarding.paramsTipTitle")}</div>
+                  <div className="rb-ob-params-tip-row">
+                    <span className="rb-ob-params-tip-tag">{t("onboarding.paramsTipScTag")}</span>
+                    {t("onboarding.paramsTipSc")}
+                  </div>
+                  <div className="rb-ob-params-tip-row">
+                    <span className="rb-ob-params-tip-tag">{t("onboarding.paramsTipSvcTag")}</span>
+                    {t("onboarding.paramsTipSvc")}
                   </div>
                 </div>
               </div>
@@ -728,6 +779,35 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
                   {conflict ? (
                     <div className="rb-ob-conflict">{conflict}</div>
                   ) : null}
+                  {/* 参数覆盖入口:与 ShortcutsPage 同款(文字按钮 + ? 说明);有显式自定义时加标记点 */}
+                  <div className="flex ac g6" style={{ marginTop: 12, justifyContent: "flex-end" }}>
+                    <button
+                      className="btn btn-sm btn-secondary"
+                      style={{ position: "relative" }}
+                      onClick={openScParams}
+                    >
+                      {t("ai.params")}
+                      {scExtraParams?.trim() ? (
+                        <span
+                          style={{
+                            position: "absolute",
+                            top: 3,
+                            right: 3,
+                            width: 5,
+                            height: 5,
+                            borderRadius: "50%",
+                            background: "var(--rb-accent, #4b4bc8)",
+                          }}
+                        />
+                      ) : null}
+                    </button>
+                    <span
+                      onMouseEnter={() => setScTipOpen(true)}
+                      onMouseLeave={() => setScTipOpen(false)}
+                    >
+                      <span className="rb-q">?</span>
+                    </span>
+                  </div>
                 </div>
               ) : null}
             </div>
@@ -788,6 +868,69 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
             </div>
           </div>
         ) : null}
+
+        {/* 参数覆盖放大编辑器:portal 到 body,行号 + 大输入区(与 ShortcutsPage 同款) */}
+        {scParamsDraft !== null
+          ? createPortal(
+              <div
+                className="rb-params-zoom-overlay"
+                onMouseDown={(e) => {
+                  if (e.target === e.currentTarget) setScParamsDraft(null);
+                }}
+              >
+                <div className="rb-params-zoom">
+                  <div className="rb-params-zoom-hd">
+                    <span>{t("shortcuts.paramsTitle")}</span>
+                    <button className="iconbtn" onClick={() => setScParamsDraft(null)}>
+                      <Icon name="close" size={14} />
+                    </button>
+                  </div>
+                  <div className="rb-params-zoom-body">
+                    <div className="rb-params-zoom-gutter" ref={scGutterRef}>
+                      {scParamsDraft.split("\n").map((_, i) => (
+                        <div key={i}>{i + 1}</div>
+                      ))}
+                    </div>
+                    <textarea
+                      className="rb-params-zoom-input"
+                      spellCheck={false}
+                      value={scParamsDraft}
+                      placeholder={t("shortcuts.paramsPlaceholder")}
+                      onChange={(e) => setScParamsDraft(e.currentTarget.value)}
+                      onScroll={(e) => {
+                        if (scGutterRef.current) {
+                          scGutterRef.current.scrollTop = e.currentTarget.scrollTop;
+                        }
+                      }}
+                    />
+                  </div>
+                  <div className="rb-params-zoom-ft">
+                    {scParamsIssue ? (
+                      <span
+                        className={
+                          scParamsIssue.level === "error" ? "rb-svc-params-err" : "rb-svc-params-warn"
+                        }
+                      >
+                        {scParamsIssue.text}
+                      </span>
+                    ) : (
+                      <span className="muted rb-svc-params-note" style={{ fontSize: 11 }}>
+                        {t("ai.paramsHint")}
+                      </span>
+                    )}
+                    <button className="btn btn-primary btn-sm" onClick={commitScParams}>
+                      {t("ai.paramsZoomDone")}
+                    </button>
+                  </div>
+                </div>
+              </div>,
+              document.body,
+            )
+          : null}
+        {/* ? 说明 tooltip:portal 到 body,画面居中显示 */}
+        {scTipOpen
+          ? createPortal(<div className="rb-params-tip-fixed">{t("ai.paramsTip")}</div>, document.body)
+          : null}
       </div>
     </div>
   );
@@ -898,14 +1041,11 @@ function ServiceFields({
                     key={p}
                     className={`svc-mi${p === form.protocol ? " on" : ""}`}
                     onClick={() => {
-                      // deepseek 官方格式锁定 Base URL(与 AiServicesPage 一致)
-                      // 附加参数仅当「空或仍是预设值」时跟随协议切换,避免冲掉用户手填内容
-                      const cur = (form.extraParams ?? "").trim();
-                      const keepUserParams = cur !== "" && !PRESET_PARAMS.has(cur);
+                      // deepseek 官方格式锁定 Base URL(与 AiServicesPage 一致)。
+                      // extraParams 不随协议变化:服务级预填已移除,关闭思考默认改由快捷键级承担
                       set({
                         protocol: p,
                         model: "",
-                        extraParams: keepUserParams ? form.extraParams : (defaultExtraParams(p) ?? ""),
                         ...(p === "deepseek" ? { baseUrl: FORMAT_META[p].official } : {}),
                       });
                       setFmtOpen(false);

@@ -36,6 +36,9 @@ pub struct AiRequest {
     pub stream: bool,
     pub max_tokens: u32,
     pub model: Option<String>,
+    /// 快捷键级附加参数(非空时深合并覆盖服务级 extra_params;为空则沿用服务级)
+    #[serde(default)]
+    pub extra_params_override: Option<String>,
 }
 
 /// 事件回传载荷(delta/error/done 共用)
@@ -53,6 +56,10 @@ struct AiEvent {
 
 /// 请求超时:60s(此前前端 fetch 无超时兜底,服务端长时间无响应会永久转圈)
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// 划词总结/翻译快捷键在 deepseek 服务下的默认附加参数(关闭思考)。
+/// 无注释的纯净 JSON:此值直接进入请求体,注释版仅用于设置页展示。
+pub const DEEPSEEK_DISABLE_THINKING: &str = r#"{ "thinking": { "type": "disabled" } }"#;
 /// 输入长度上限:20k 字符(此前前端直发全文无截断,可被超大文本撑爆)
 const MAX_INPUT_CHARS: usize = 20_000;
 
@@ -319,8 +326,16 @@ fn build_request(
         _ => unreachable!("protocol 已校验"),
     };
 
-    // 附加用户自定义参数(深合并;非法/含保留字段已在 parse_extra_params 内剔除并告警)
-    if let Some(extra) = parse_extra_params(config.extra_params.as_deref()) {
+    // 附加用户自定义参数(深合并;非法/含保留字段已在 parse_extra_params 内剔除并告警)。
+    // 两层合并:快捷键级(override)非空 → 深合并覆盖服务级;为空 → 沿用服务级。
+    let mut extra = parse_extra_params(config.extra_params.as_deref());
+    if let Some(overlay) = parse_extra_params(req.extra_params_override.as_deref()) {
+        match extra.as_mut() {
+            Some(base) if base.is_object() => merge_json(base, overlay),
+            _ => extra = Some(overlay),
+        }
+    }
+    if let Some(extra) = extra {
         merge_json(&mut body, extra);
     }
     Ok((url, headers, body))
@@ -514,6 +529,7 @@ pub async fn ai_stream(
         stream: true,
         max_tokens: request.max_tokens,
         model: request.model,
+        extra_params_override: request.extra_params_override,
     };
 
     let (url, headers, body) = match build_request(&req, &config) {
@@ -709,6 +725,7 @@ pub async fn ai_test(config: AiServiceConfig) -> AppResult<serde_json::Value> {
         // 思考型模型(reasoner 类)的 max_tokens 含思考,8 太小连一句思考都不够,
         // 会导致 content 恒空、测速结果失真;64 足以完成「验证连通+鉴权」的最小请求
         max_tokens: 64,
+        extra_params_override: None,
         model: None,
     };
     let (url, headers, body) = build_request(&req, &config)?;

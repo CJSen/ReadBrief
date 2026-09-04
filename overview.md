@@ -34,3 +34,7 @@
 - 预填：仅 deepseek 协议预填 `{"thinking":{"type":"disabled"}}`，其余留空。
 - i18n 中英各 8 词条；新增 `.rb-tip-wide`、`.rb-svc-params*` 样式。
 - 验证：tsc 0 错误、cargo check --lib 通过。未提交。
+
+## 参数覆盖两层化（2026-09-04）
+- 服务级预填移除；快捷键级新增：summarize/translate 在 deepseek 协议下默认关思考（Rust 注册时算好有效值，请求时深合并覆盖服务级）。
+- 快捷键行新增参数入口（settings 图标 → 放大编辑器），保存「还原默认」存 null 走动态默认。

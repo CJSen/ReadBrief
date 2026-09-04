@@ -36,6 +36,7 @@ export async function streamChat(
     stream: true,
     maxTokens: req.maxTokens,
     model: req.model,
+    extraParamsOverride: req.extraParamsOverride ?? null,
   };
 
   // 主动中止:中止后忽略一切后续事件(Rust 侧请求自然结束,但其事件不再转发 → 不落库)

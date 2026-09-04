@@ -97,6 +97,8 @@ export interface SummarySession {
   setPromptId: (id: string | null) => void;
   /** 由捕获事件设置本次会话使用的 AI 服务 id(快捷键引用式绑定;为空则用默认服务) */
   setServiceId: (serviceId: string | null) => void;
+  /** 由捕获事件设置本次会话的快捷键级附加参数(非空时深合并覆盖服务级) */
+  setExtraParamsOverride: (v: string | null) => void;
   /** 当前生效提示词名称(供浮窗标题栏/历史展示) */
   promptName: string;
 }
@@ -301,6 +303,7 @@ export function useSummarySession(
             stream: true,
             maxTokens,
             model: config.model,
+            extraParamsOverride: extraParamsOverrideRef.current,
           },
           config,
           (event: StreamEvent) => {
@@ -386,6 +389,12 @@ export function useSummarySession(
     serviceIdRef.current = serviceId;
   }, []);
 
+  /** 快捷键级附加参数(捕获事件携带;请求时深合并覆盖服务级) */
+  const extraParamsOverrideRef = useRef<string | null>(null);
+  const setExtraParamsOverride = useCallback((v: string | null) => {
+    extraParamsOverrideRef.current = v;
+  }, []);
+
   const reset = useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
@@ -400,6 +409,7 @@ export function useSummarySession(
     setHistoryId(null);
     promptIdRef.current = null;
     serviceIdRef.current = null;
+    extraParamsOverrideRef.current = null;
     serviceNameRef.current = "";
     setPromptName("");
   }, []);
@@ -418,6 +428,7 @@ export function useSummarySession(
     switchPrompt,
     setPromptId,
     setServiceId,
+    setExtraParamsOverride,
     promptName,
   };
 }

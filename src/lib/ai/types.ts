@@ -21,6 +21,8 @@ export interface InternalRequest {
   stream: boolean;
   maxTokens: number;
   model?: string;
+  /** 快捷键级附加参数(非空时 Rust 侧深合并覆盖服务级 extraParams) */
+  extraParamsOverride?: string | null;
 }
 
 export type StreamEvent =

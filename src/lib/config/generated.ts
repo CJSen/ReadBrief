@@ -29,4 +29,9 @@ export type ShortcutConfig = { id: string, accelerator: string, promptId?: strin
  * 改 AI 服务配置后快捷键自动跟随,无需任何回写逻辑。
  * 旧 `model` 字段为迁移遗留,已不再使用(迁移后清空)。
  */
-serviceId?: string | null, };
+serviceId?: string | null, 
+/**
+ * 快捷键级附加参数(JSON 对象文本):非空时深合并覆盖服务级 extra_params,
+ * 为空则沿用服务级。用途:同一服务在不同快捷键下需要不同行为(如总结关思考、深析开思考)。
+ */
+extraParams?: string | null, };

@@ -1,8 +1,8 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./Icon";
 import { t, useLanguage } from "../lib/i18n";
-import { checkParams, defaultExtraParams, PRESET_PARAMS } from "../lib/ai/paramsOverride";
+import { checkParams } from "../lib/ai/paramsOverride";
 
 interface ParamsOverrideFieldProps {
   value: string;
@@ -10,33 +10,24 @@ interface ParamsOverrideFieldProps {
   /** row = 设置页 set-row(标签左 / 控件右);stack = 引导页(标签上 / 控件下) */
   layout?: "row" | "stack";
   textareaRows?: number;
-  /** 当前协议:用于取预填值,并在切语言时刷新预填注释文案 */
-  protocol?: string;
 }
 
 /**
  * 「参数覆盖」输入控件(JSON 文本,深合并进 AI 请求体)。
  * 设置页与引导页共用同一实现,避免两处逻辑漂移。
+ * 纯受控输入:预填/动态默认已迁至快捷键级(ShortcutsPage + Rust shortcuts.rs),此处不做注入。
  */
 export function ParamsOverrideField({
   value,
   onChange,
   layout = "row",
   textareaRows = 3,
-  protocol,
 }: ParamsOverrideFieldProps) {
-  // 订阅语言:语言切换时重渲染,由下方 effect 刷新预填注释文案
   useLanguage();
   const [zoomOpen, setZoomOpen] = useState(false);
   /** ? 说明:portal 到 body 居中显示(面板 overflow:auto 会裁剪 absolute tooltip) */
   const [tipOpen, setTipOpen] = useState(false);
   const zoomGutterRef = useRef<HTMLDivElement>(null);
-
-  const preset = protocol ? defaultExtraParams(protocol) : undefined;
-  // 预填注释随语言变化:仅在内容「仍是某个语言的预填值」时替换,不碰用户手填内容
-  useEffect(() => {
-    if (preset && PRESET_PARAMS.has(value) && value !== preset) onChange(preset);
-  }, [preset, value, onChange]);
 
   const issue = checkParams(value);
   const issueText = issue ? issue.text : t("ai.paramsNote");

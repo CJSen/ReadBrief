@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { AppConfig, ShortcutConfig } from "../lib/config/types";
 import { invoke } from "@tauri-apps/api/core";
 import { BUILTIN_PROMPT_OPTIONS } from "../lib/prompts/builtins";
 import { resolveShortcutKey, keySymbol } from "../lib/shortcutKey";
 import { t, useLanguage } from "../lib/i18n";
+import { checkParams, stripJsonComments, DS_CANONICAL_EXTRA } from "../lib/ai/paramsOverride";
 import { Icon } from "./Icon";
 
 const SYSTEM_SHORTCUTS = ["Cmd+Space", "Cmd+Tab", "Ctrl+Space"];
+
+/** 拥有「参数覆盖」入口的内置快捷键:划词总结/翻译(deepseek 协议默认关思考) */
+const PARAM_ELIGIBLE = new Set(["summarize", "translate"]);
 
 /* 系统快捷键友好名(冲突时说明与什么冲突,设计稿 §3.5) */
 const SYSTEM_SHORTCUT_NAMES: Record<string, string> = {
@@ -83,7 +88,52 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
   const [confirmDel, setConfirmDel] = useState<{ id: string; name: string } | null>(null);
+  /** 参数覆盖编辑态:当前编辑的快捷键 id + 草稿文本(null = 关闭) */
+  const [paramsEditing, setParamsEditing] = useState<{ id: string; draft: string } | null>(null);
+  /** ? 说明 tooltip(portal 到 body 居中,行内展示会被面板 overflow 裁剪) */
+  const [paramsTipOpen, setParamsTipOpen] = useState(false);
+  /** 编辑器实时校验:语法错误红 / 保留字段琥珀(与服务页 ParamsOverrideField 同一套) */
+  const paramsIssue = paramsEditing ? checkParams(paramsEditing.draft) : null;
+  const paramsGutterRef = useRef<HTMLDivElement>(null);
   const recordRef = useRef<HTMLDivElement | null>(null);
+
+  /* ═══ 参数覆盖:动态默认(划词总结/翻译 + deepseek 协议 → 默认关思考) ═══ */
+  const serviceProtocol = useCallback(
+    (serviceId?: string | null) => {
+      const list = cfg.services?.length ? cfg.services : [cfg.api];
+      const svc = serviceId
+        ? list.find((s) => s.id === serviceId)
+        : (list.find((s) => s.isDefault) ?? list[0]);
+      return svc?.protocol ?? "";
+    },
+    [cfg],
+  );
+  /** deepseek 预填(带注释,随界面语言),供编辑器展示动态默认值 */
+  const dsPreset = useMemo(() => {
+    const m = t("ai.paramsPresetDsNote");
+    const v = t("ai.paramsPresetDsValues");
+    return `{\n  // ${m}\n  // ${v}\n  "thinking": { "type": "disabled" }\n}`;
+  }, []);
+  const effectiveExtraParams = useCallback(
+    (id: string, serviceId?: string | null, stored?: string | null) => {
+      if (stored && stored.trim()) return stored;
+      if (PARAM_ELIGIBLE.has(id) && serviceProtocol(serviceId) === "deepseek") return dsPreset;
+      return "";
+    },
+    [serviceProtocol, dsPreset],
+  );
+  /** 保存参数:空或等于默认值(剥注释后) → 存 null(动态默认,协议切换自动跟随);否则原样存 */
+  function saveExtraParams(id: string, text: string) {
+    const stripped = stripJsonComments(text).trim();
+    const value = !stripped || stripped === DS_CANONICAL_EXTRA ? null : text;
+    const existing = shortcuts.find((s) => s.id === id);
+    if (!existing) return;
+    const entry: ShortcutConfig = {
+      ...existing,
+      extraParams: value ?? undefined,
+    };
+    void save(shortcuts.map((s) => (s.id === id ? entry : s)));
+  }
 
   /* ═══ 合并列表:内置 + 自定义 ═══ */
   const allItems = useCallback(() => {
@@ -99,6 +149,7 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
         accelerator: sc?.accelerator ?? "",
         promptId: sc?.promptId ?? BUILTIN_DEFAULT_PROMPT[bi.id] ?? null,
         serviceId: sc?.serviceId ?? "",
+        extraParams: sc?.extraParams ?? null,
         isDefault: true,
       };
     });
@@ -114,6 +165,7 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
         accelerator: s.accelerator ?? "",
         promptId: s.promptId ?? "builtin-summarize",
         serviceId: s.serviceId ?? "",
+        extraParams: s.extraParams ?? null,
         isDefault: false,
       }));
     return [...builtin, ...custom];
@@ -226,6 +278,7 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
       action: promptId ? "prompt" : (item?.action ?? "summarize"),
       promptId,
       serviceId: existing?.serviceId,
+      extraParams: existing?.extraParams,
       name: item?.name,
       description: item?.desc,
       isDefault: item?.isDefault ?? false,
@@ -266,6 +319,7 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
       action: existing.action ?? item?.action ?? "summarize",
       promptId: existing.promptId ?? item?.promptId ?? null,
       serviceId: existing.serviceId,
+      extraParams: existing.extraParams,
       name: item?.name,
       description: item?.desc,
       isDefault: item?.isDefault ?? false,
@@ -282,6 +336,7 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
       action: promptId ? "prompt" : (item?.action ?? "summarize"),
       promptId,
       serviceId: existing?.serviceId,
+      extraParams: existing?.extraParams,
       name: item?.name,
       description: item?.desc,
       isDefault: item?.isDefault ?? false,
@@ -303,6 +358,8 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
       action: promptId ? "prompt" : (existing?.action ?? item?.action ?? "summarize"),
       promptId,
       serviceId: serviceId || undefined,
+      // 参数动态默认按「id + 协议」在展示/发送端计算,切换服务无需改写存储值
+      extraParams: existing?.extraParams,
       name: item?.name,
       description: item?.desc,
       isDefault: item?.isDefault ?? false,
@@ -517,6 +574,40 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
                           ))}
                         </select>
                       ) : null}
+
+                      {/* 参数覆盖入口:所有 AI 类快捷键均提供;留空时 deepseek 总结/翻译动态默认关思考;有显式自定义时加标记点 */}
+                      <button
+                        className="btn btn-sm btn-secondary"
+                        style={{ position: "relative" }}
+                        onClick={() =>
+                          setParamsEditing({
+                            id: item.id,
+                            draft: effectiveExtraParams(item.id, item.serviceId, item.extraParams),
+                          })
+                        }
+                      >
+                        {t("ai.params")}
+                        {item.extraParams?.trim() ? (
+                          <span
+                            style={{
+                              position: "absolute",
+                              top: 3,
+                              right: 3,
+                              width: 5,
+                              height: 5,
+                              borderRadius: "50%",
+                              background: "var(--rb-accent, #4b4bc8)",
+                            }}
+                          />
+                        ) : null}
+                      </button>
+                      {/* 注意:不能复用 .rb-seg 类名 —— App.css:715 历史规则会把 ? 拉成椭圆 */}
+                      <span
+                        onMouseEnter={() => setParamsTipOpen(true)}
+                        onMouseLeave={() => setParamsTipOpen(false)}
+                      >
+                        <span className="rb-q">?</span>
+                      </span>
                     </>
                   )}
                 </div>
@@ -650,6 +741,72 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
           </div>
         </div>
       ) : null}
+      {/* 参数覆盖放大编辑器:portal 到 body,行号 + 大面积输入(与 AiServicesPage 同款样式) */}
+      {paramsEditing
+        ? createPortal(
+            <div
+              className="rb-params-zoom-overlay"
+              onMouseDown={(e) => {
+                if (e.target === e.currentTarget) setParamsEditing(null);
+              }}
+            >
+              <div className="rb-params-zoom">
+                <div className="rb-params-zoom-hd">
+                  <span>{t("shortcuts.paramsTitle")}</span>
+                  <button className="iconbtn" onClick={() => setParamsEditing(null)}>
+                    <Icon name="close" size={14} />
+                  </button>
+                </div>
+                <div className="rb-params-zoom-body">
+                  <div className="rb-params-zoom-gutter" ref={paramsGutterRef}>
+                    {paramsEditing.draft.split("\n").map((_, i) => (
+                      <div key={i}>{i + 1}</div>
+                    ))}
+                  </div>
+                  <textarea
+                    className="rb-params-zoom-input"
+                    spellCheck={false}
+                    value={paramsEditing.draft}
+                    placeholder={t("shortcuts.paramsPlaceholder")}
+                    onChange={(e) =>
+                      setParamsEditing({ ...paramsEditing, draft: e.currentTarget.value })
+                    }
+                    onScroll={(e) => {
+                      if (paramsGutterRef.current) {
+                        paramsGutterRef.current.scrollTop = e.currentTarget.scrollTop;
+                      }
+                    }}
+                  />
+                </div>
+                <div className="rb-params-zoom-ft">
+                  {paramsIssue ? (
+                    <span className={paramsIssue.level === "error" ? "rb-svc-params-err" : "rb-svc-params-warn"}>
+                      {paramsIssue.text}
+                    </span>
+                  ) : (
+                    <span className="muted rb-svc-params-note" style={{ fontSize: 11 }}>
+                      {t("shortcuts.paramsHint")}
+                    </span>
+                  )}
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={() => {
+                      saveExtraParams(paramsEditing.id, paramsEditing.draft);
+                      setParamsEditing(null);
+                    }}
+                  >
+                    {t("ai.paramsZoomDone")}
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+      {/* ? 说明 tooltip:portal 到 body,画面居中显示(与 AiServicesPage 同款) */}
+      {paramsTipOpen
+        ? createPortal(<div className="rb-params-tip-fixed">{t("ai.paramsTip")}</div>, document.body)
+        : null}
     </div>
   );
 }

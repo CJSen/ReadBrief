@@ -25,6 +25,9 @@ pub struct CapturedText {
     /// 触发该次总结的快捷键绑定的 AI 服务 id(服务由快捷键决定,模型从服务解析)
     #[serde(default)]
     pub service_id: Option<String>,
+    /// 触发该次总结的快捷键级附加参数(非空时深合并覆盖服务级 extra_params)
+    #[serde(default)]
+    pub extra_params: Option<String>,
 }
 
 /// 已注册的快捷键列表(用于热更新前 unregister)
@@ -116,27 +119,61 @@ pub fn reload_shortcuts(app: &tauri::AppHandle) -> AppResult<()> {
     }
     registered.clear();
 
-    // 2. 读取配置:只取显式绑定的快捷键(accelerator 非空)
+    // 2. 读取配置:只取显式绑定的快捷键(accelerator 非空)。
+    // 最后一元是「快捷键级附加参数的有效值」:用户显式设置优先;未设置时,
+    // 划词总结/翻译两个内置快捷键若解析出的服务是 deepseek 协议,默认注入关闭思考
+    // (产品决策:总结求快,思考型模型会显著拖慢响应)。注册时解析而非请求时,
+    // 因为服务协议变化会触发快捷键热重注册,此处值始终新鲜。
     let cfg = crate::config::load_config();
-    let bindings: Vec<(String, String, Option<String>, Option<String>)> = cfg
+    let resolve_service_protocol = |service_id: &Option<String>| -> Option<String> {
+        match service_id {
+            Some(sid) => cfg
+                .services
+                .iter()
+                .find(|sv| sv.id.as_deref() == Some(sid.as_str()))
+                .map(|sv| sv.protocol.clone()),
+            // 未绑定服务:用默认服务,再回退首个服务,最后回退遗留的顶层 api 配置
+            None => cfg
+                .services
+                .iter()
+                .find(|sv| sv.is_default)
+                .or_else(|| cfg.services.first())
+                .map(|sv| sv.protocol.clone())
+                .or_else(|| Some(cfg.api.protocol.clone())),
+        }
+    };
+    let bindings: Vec<(String, String, Option<String>, Option<String>, Option<String>)> = cfg
         .shortcuts
         .iter()
         .filter(|s| !s.accelerator.is_empty())
         .map(|s| {
+            let effective = s.extra_params.clone().or_else(|| {
+                let eligible = matches!(s.id.as_str(), "summarize" | "translate");
+                let is_deepseek = resolve_service_protocol(&s.service_id)
+                    .map(|p| p == "deepseek")
+                    .unwrap_or(false);
+                if eligible && is_deepseek {
+                    Some(crate::ai::DEEPSEEK_DISABLE_THINKING.to_string())
+                } else {
+                    None
+                }
+            });
             (
                 s.accelerator.clone(),
                 s.action.clone(),
                 s.prompt_id.clone(),
                 s.service_id.clone(),
+                effective,
             )
         })
         .collect();
 
     // 3. 注册(非法快捷键跳过并打印警告，不阻塞应用启动)
-    for (accelerator, action, prompt_id, service_id) in bindings {
+    for (accelerator, action, prompt_id, service_id, extra_params) in bindings {
         let action_c = action.clone();
         let prompt_id_c = prompt_id.clone();
         let service_id_c = service_id.clone();
+        let extra_params_c = extra_params.clone();
         match app.global_shortcut().on_shortcut(accelerator.as_str(), move |app, _shortcut, event| {
             // 插件对「按下 + 抬起」各回调一次(global-hotkey HotKeyState),
             // 只响应按下 —— 否则 capture/show_overlay/emit 全流程执行两遍,
@@ -144,7 +181,7 @@ pub fn reload_shortcuts(app: &tauri::AppHandle) -> AppResult<()> {
             if event.state != tauri_plugin_global_shortcut::ShortcutState::Pressed {
                 return;
             }
-            handle_trigger(app.clone(), action_c.clone(), prompt_id_c.clone(), service_id_c.clone());
+            handle_trigger(app.clone(), action_c.clone(), prompt_id_c.clone(), service_id_c.clone(), extra_params_c.clone());
         }) {
             Ok(()) => registered.push(accelerator),
             Err(e) => {
@@ -155,7 +192,7 @@ pub fn reload_shortcuts(app: &tauri::AppHandle) -> AppResult<()> {
     Ok(())
 }
 
-fn handle_trigger(app: tauri::AppHandle, action: String, prompt_id: Option<String>, service_id: Option<String>) {
+fn handle_trigger(app: tauri::AppHandle, action: String, prompt_id: Option<String>, service_id: Option<String>, extra_params: Option<String>) {
     // 只记 action/绑定标识等元数据,不记任何文本内容
     log::info!(
         "快捷键触发: action={action} prompt={} service={}",
@@ -181,6 +218,8 @@ fn handle_trigger(app: tauri::AppHandle, action: String, prompt_id: Option<Strin
             // 快捷键若绑定了 AI 服务(引用式),经此分支带到前端,
             // 前端按 service_id 解析出该服务的模型/密钥,改服务配置即自动跟随。
             captured.service_id = service_id;
+            // 快捷键级附加参数带到前端,请求时深合并覆盖服务级(见 ai.rs)
+            captured.extra_params = extra_params;
             crate::windows::show_float(&app);
             if !was_visible {
                 let _ = app.emit("float-shown", ());
@@ -207,6 +246,8 @@ fn handle_trigger(app: tauri::AppHandle, action: String, prompt_id: Option<Strin
             let mut with_prompt = captured;
             with_prompt.prompt_id = prompt_id;
             with_prompt.service_id = service_id;
+            // 快捷键级附加参数带到前端,请求时深合并覆盖服务级(见 ai.rs)
+            with_prompt.extra_params = extra_params;
             crate::windows::show_float(&app);
             if !was_visible {
                 let _ = app.emit("float-shown", ());
@@ -235,6 +276,7 @@ fn capture_selection(app: tauri::AppHandle) -> CapturedText {
                 source: "unauthorized".to_string(),
                 prompt_id: None,
                 service_id: None,
+                extra_params: None,
             };
         }
         let text = read_selection_text().unwrap_or_default();
@@ -246,6 +288,7 @@ fn capture_selection(app: tauri::AppHandle) -> CapturedText {
                 source: "selection".to_string(),
                 prompt_id: None,
                 service_id: None,
+                extra_params: None,
             };
         }
         // 无选中文本:输入区留空,由用户手动粘贴或输入
@@ -255,6 +298,7 @@ fn capture_selection(app: tauri::AppHandle) -> CapturedText {
             source: "empty".to_string(),
             prompt_id: None,
             service_id: None,
+            extra_params: None,
         }
     }
     #[cfg(windows)]
@@ -271,6 +315,7 @@ fn capture_selection(app: tauri::AppHandle) -> CapturedText {
                 source: "selection".to_string(),
                 prompt_id: None,
                 service_id: None,
+                extra_params: None,
             };
         }
         log::info!("划词捕获为空(windows): source=empty");
@@ -279,6 +324,7 @@ fn capture_selection(app: tauri::AppHandle) -> CapturedText {
             source: "empty".to_string(),
             prompt_id: None,
             service_id: None,
+            extra_params: None,
         }
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
@@ -289,6 +335,7 @@ fn capture_selection(app: tauri::AppHandle) -> CapturedText {
             source: "empty".to_string(),
             prompt_id: None,
             service_id: None,
+            extra_params: None,
         }
     }
 }

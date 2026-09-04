@@ -1,40 +1,13 @@
-import { t, getLanguage, messages, type Language } from "../i18n";
+import { t, getLanguage } from "../i18n";
 
 /**
- * 各协议预填的附加参数(带注释,便于用户理解每个键的作用)。
- * 仅 DeepSeek 官方在文档中明确给出关闭思考的字段,故只预填它;
- * 其余协议(尤其 openai)背后可能是任意中转站,参数各不相同,留空由用户自己填。
- *
- * 注意:注释只能出现在预填值里,且必须在发送前剥离 —— 见 `stripJsonComments`。
- * 上游 API 不接受带注释的 JSON,直接发送会 400。
+ * deepseek 预填值已迁移到快捷键级动态默认(Rust 侧 shortcuts.rs 注册时解析,
+ * UI 侧 ShortcutsPage 的 dsPreset 按语言生成带注释展示版)。
+ * 服务级预填已按产品决策移除:服务=连接方式,行为差异(如关思考)归快捷键(用途)层。
  */
-const PRESET_BUILDERS: Record<string, (lang: Language) => string> = {
-  deepseek: (lang) => {
-    const m = messages[lang].ai;
-    return [
-      "{",
-      `  // ${m.paramsPresetDsNote}`,
-      `  // ${m.paramsPresetDsValues}`,
-      '  "thinking": { "type": "disabled" }',
-      "}",
-    ].join("\n");
-  },
-};
 
-/** 取某协议的预填值(按当前语言生成注释文案);未预填的协议返回 undefined */
-export function defaultExtraParams(protocol: string): string | undefined {
-  return PRESET_BUILDERS[protocol]?.(getLanguage());
-}
-
-/**
- * 预设值集合(含所有语言版本):用于判定当前内容是否仍是系统给的默认值
- * (决定切协议时要不要跟随替换,避免冲掉用户手填内容)。
- */
-export const PRESET_PARAMS = new Set(
-  (Object.keys(messages) as Language[]).flatMap((lang) =>
-    Object.values(PRESET_BUILDERS).map((build) => build(lang)),
-  ),
-);
+/** deepseek 预填的规范形态(strip 注释并 trim 后),供 UI 判定「内容是否等于默认值」 */
+export const DS_CANONICAL_EXTRA = '{\n  "thinking": { "type": "disabled" }\n}';
 
 /** 系统控制的字段:extraParams 里的同名键会被 Rust 侧忽略(日志点名) */
 const RESERVED_PARAM_KEYS = [

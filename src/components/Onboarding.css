@@ -122,8 +122,16 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: center;
   min-width: 0;
+  /* 垂直居中不用 justify-content:center —— 内容高于滚动区时它会同时裁掉
+     顶部和底部,且滚动条无法回看(首启第2步表单超高时顶部被遮挡)。
+     改用首/尾子元素的 auto margin:空间够时居中,溢出时自动塌缩为 0,永不裁切。 */
+}
+.rb-ob-main > :first-child {
+  margin-top: auto;
+}
+.rb-ob-main > :last-child {
+  margin-bottom: auto;
 }
 
 /* 步骤1 服务表单 */
@@ -461,4 +469,41 @@
   font-weight: 500;
   text-align: right;
   word-break: break-all;
+}
+/* 概览页「参数覆盖」两层用途提示卡:品牌色淡底 + 左侧竖条,显著但不刺眼 */
+.rb-ob-params-tip {
+  margin-top: 14px;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 11px 13px;
+  border-radius: var(--rb-radius-md);
+  background: color-mix(in srgb, var(--rb-accent, #4b4bc8) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--rb-accent, #4b4bc8) 25%, transparent);
+  border-left: 3px solid var(--rb-accent, #4b4bc8);
+  font-size: var(--rb-text-xs);
+  line-height: 1.65;
+  color: var(--rb-text-secondary);
+}
+.rb-ob-params-tip-title {
+  font-weight: 600;
+  color: var(--rb-text-primary);
+  margin-bottom: 4px;
+}
+.rb-ob-params-tip-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 3px;
+}
+.rb-ob-params-tip-tag {
+  flex-shrink: 0;
+  margin-top: 1px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--rb-accent, #4b4bc8);
+  border: 1px solid color-mix(in srgb, var(--rb-accent, #4b4bc8) 40%, transparent);
+  white-space: nowrap;
 }
