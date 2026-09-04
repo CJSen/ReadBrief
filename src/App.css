@@ -2670,6 +2670,28 @@
   color: var(--rb-error);
 }
 
+/* 列表测速状态 tag(兼做测速触发按钮) */
+.rb-svc-test-tag {
+  cursor: pointer;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.rb-svc-test-tag-testing {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+/* 明细弹窗测试连接失败时的报错内容(单行截断,悬停看全量,点击复制) */
+.rb-svc-test-err {
+  font-size: 11px;
+  max-width: 340px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: copy;
+}
+
 .rb-svc-last {
   font-size: 11px;
 }

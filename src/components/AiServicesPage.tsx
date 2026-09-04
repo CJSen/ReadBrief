@@ -45,7 +45,7 @@ interface AiServicesPageProps {
 }
 
 interface LatencyMap {
-  [id: string]: { ok: boolean; ms: number };
+  [id: string]: { ok: boolean; ms: number; errMsg?: string };
 }
 
 export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
@@ -147,7 +147,7 @@ export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
         model: svc.model,
         extraParams: svc.extraParams ?? null,
       });
-      map[svc.id!] = { ok: r.ok, ms: r.latencyMs ?? 0 };
+      map[svc.id!] = { ok: r.ok, ms: r.latencyMs ?? 0, errMsg: r.error?.message };
     }
     setLatency(map);
     setTesting(false);
@@ -164,7 +164,7 @@ export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
         model: svc.model,
         extraParams: svc.extraParams ?? null,
       });
-      setLatency((m) => ({ ...m, [svc.id!]: { ok: r.ok, ms: r.latencyMs ?? 0 } }));
+      setLatency((m) => ({ ...m, [svc.id!]: { ok: r.ok, ms: r.latencyMs ?? 0, errMsg: r.error?.message } }));
     } finally {
       setTestingIds((s) => {
         const n = new Set(s);
@@ -172,6 +172,21 @@ export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
         return n;
       });
     }
+  }
+
+  /** 复制服务:弹新增浮窗并带入原配置,名称追加「-四位随机字母」,默认状态不继承 */
+  function handleDuplicate(svc: ApiConfig) {
+    const maxId = services.reduce((m, s) => {
+      const n = parseInt((s.id ?? "").replace(/^svc/, ""), 10);
+      return Number.isFinite(n) && n > m ? n : m;
+    }, 0);
+    const suffix = Array.from({ length: 4 }, () => "abcdefghijklmnopqrstuvwxyz"[Math.floor(Math.random() * 26)]).join("");
+    setEditing({
+      ...svc,
+      id: `svc${maxId + 1}`,
+      name: `${svc.name || FORMAT_META[svc.protocol as ProviderType]?.name || svc.protocol}-${suffix}`,
+      isDefault: false,
+    });
   }
 
   return (
@@ -229,31 +244,51 @@ export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
                   ) : null}
                 </div>
               </div>
-              {/* 测速状态:有结果显示响应/停用,未测显示未测速 */}
-              {lat ? (
-                lat.ok ? (
-                  <span className="tag tag-ok">
-                    <Icon name="check" size={11} />
-                    {lat.ms}ms
-                  </span>
+              {/* 测速状态(可点击触发测速,替代独立按钮):未测/测过均可点击;失败时 title 显示报错 */}
+              <span
+                className={`tag ${lat ? (lat.ok ? "tag-ok" : "rb-svc-failed-tag") : "tag-gray"} rb-svc-test-tag${
+                  testingIds.has(svc.id!) ? " rb-svc-test-tag-testing" : ""
+                }`}
+                title={
+                  testingIds.has(svc.id!)
+                    ? t("ai.testing")
+                    : lat && !lat.ok && lat.errMsg
+                      ? lat.errMsg
+                      : lat
+                        ? t("ai.retest")
+                        : t("ai.clickToTest")
+                }
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!testingIds.has(svc.id!)) void handleTestOne(svc);
+                }}
+              >
+                {testingIds.has(svc.id!) ? (
+                  <Icon name="refresh" size={11} className="rb-spin" />
+                ) : lat ? (
+                  lat.ok ? (
+                    <>
+                      <Icon name="check" size={11} />
+                      {lat.ms}ms
+                    </>
+                  ) : (
+                    t("ai.connectFailed")
+                  )
                 ) : (
-                  <span className="tag rb-svc-failed-tag">{t("ai.disabled")}</span>
-                )
-              ) : (
-                <span className="tag tag-gray">{t("ai.untested")}</span>
-              )}
-              {/* 行操作三图标:重新测速 → 修改 → 删除 */}
+                  t("ai.untested")
+                )}
+              </span>
+                {/* 行操作图标:复制 → 修改 → 删除 */}
               <div className="flex ac g2">
                 <button
                   className="iconbtn"
-                  title={t("ai.retest")}
-                  disabled={!svc.apiKey || testingIds.has(svc.id!)}
+                  title={t("ai.duplicate")}
                   onClick={(e) => {
                     e.stopPropagation();
-                    void handleTestOne(svc);
+                    handleDuplicate(svc);
                   }}
                 >
-                  <Icon name="refresh" size={14} className={testingIds.has(svc.id!) ? "rb-spin" : ""} />
+                  <Icon name="copy" size={14} />
                 </button>
                 <button
                   className="iconbtn"
@@ -348,6 +383,7 @@ export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
           onCancel={() => setEditing(null)}
           onTest={(s) => handleTestOne(s)}
           latency={latency[editing.id!]}
+          notify={(text) => setToast({ text, ok: true })}
         />
       ) : null}
     </div>
@@ -361,10 +397,12 @@ interface ServiceFormProps {
   onCancel: () => void;
   /** 测试连接:传表单实时值(而非打开弹窗时的快照),确保改完 key/model 再测的是新值 */
   onTest: (svc: ApiConfig) => Promise<void>;
-  latency?: { ok: boolean; ms: number };
+  latency?: { ok: boolean; ms: number; errMsg?: string };
+  /** 轻提示回调(复用父级 toast) */
+  notify: (text: string) => void;
 }
 
-function ServiceForm({ svc, isNew, onSave, onCancel, onTest, latency }: ServiceFormProps) {
+function ServiceForm({ svc, isNew, onSave, onCancel, onTest, latency, notify }: ServiceFormProps) {
   const [form, setForm] = useState<ApiConfig>(svc);
   const [showKey, setShowKey] = useState(false);
   const [fmtOpen, setFmtOpen] = useState(false);
@@ -384,6 +422,12 @@ function ServiceForm({ svc, isNew, onSave, onCancel, onTest, latency }: ServiceF
     } finally {
       setTesting(false);
     }
+  }
+
+  /** 复制测试连接的报错内容到剪贴板 */
+  async function handleCopyError(msg: string) {
+    await invoke("clipboard_write_text", { text: msg });
+    notify(t("ai.errorCopied"));
   }
 
   const fmt = FORMAT_META[form.protocol as ProviderType];
@@ -683,7 +727,19 @@ function ServiceForm({ svc, isNew, onSave, onCancel, onTest, latency }: ServiceF
             latency.ok ? (
               <span className="tag tag-ok">{t("ai.responseMs", { ms: latency.ms })}</span>
             ) : (
-              <span className="tag rb-tag-err">{t("ai.connectFailed")}</span>
+              <>
+                <span className="tag rb-tag-err">{t("ai.connectFailed")}</span>
+                {/* 失败时展示后端返回的报错内容,方便用户自查;点击复制全量报错 */}
+                {latency.errMsg ? (
+                  <span
+                    className="muted rb-svc-test-err"
+                    title={latency.errMsg}
+                    onClick={() => void handleCopyError(latency.errMsg!)}
+                  >
+                    {latency.errMsg}
+                  </span>
+                ) : null}
+              </>
             )
           ) : null}
           {saveErr ? <span className="rb-svc-save-err">{saveErr}</span> : null}
