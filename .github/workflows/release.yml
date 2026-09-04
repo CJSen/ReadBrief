@@ -179,7 +179,7 @@ jobs:
           cache: npm
 
       - name: Install frontend dependencies
-        run: npm ci
+        run: npm ci --timing
 
       # ===== macOS：导入自签名证书（MACOS_* Secrets）并指定签名身份 =====
       # 自签名方案：用 openssl 生成的 p12 经 MACOS_CERTIFICATE 传入，
