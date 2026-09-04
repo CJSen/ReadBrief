@@ -79,7 +79,8 @@
     "macOS": {
       "minimumSystemVersion": "13.0",
       "entitlements": "entitlements.plist",
-      "signingIdentity": "ReadBriefSelfSign"
+      "signingIdentity": "ReadBriefSelfSign",
+      "infoPlist": "Info.plist"
     },
     "windows": {}
   }
