@@ -1120,7 +1120,13 @@ export function AppMain() {
                 {/* 上方 2/3：总结（标题 + 要点，可滚动） */}
                 <div className="rb-detail-body">
                   <h3 className="rb-detail-h3">
-                    {detail.aiTitle || detail.summary.split("\n")[0] || t("update.summaryTitle")}
+                    <span className="rb-detail-h3-text">
+                      {detail.aiTitle || detail.summary.split("\n")[0] || t("update.summaryTitle")}
+                    </span>
+                    {/* 总结字数:与下方「原文 · N 字」同规格,置于标题右侧 */}
+                    <span className="rb-detail-h3-count">
+                      {t("history.summaryChars", { n: detail.summary.length })}
+                    </span>
                   </h3>
                   <div className="rb-points">
                     {detail.summary

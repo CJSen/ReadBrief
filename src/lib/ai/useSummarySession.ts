@@ -101,6 +101,8 @@ export interface SummarySession {
   setExtraParamsOverride: (v: string | null) => void;
   /** 当前生效提示词名称(供浮窗标题栏/历史展示) */
   promptName: string;
+  /** 按本次会话提示词类别解析正文(与落库 body 同口径),供 UI 显示字数等派生展示 */
+  summaryBodyOf: (text: string) => string;
 }
 
 /**
@@ -125,6 +127,8 @@ export function useSummarySession(
   const reasoningRef = useRef("");
   /** 当前生效提示词名称(供浮窗标题栏/历史展示,取代写死的「要点总结」) */
   const [promptName, setPromptName] = useState("");
+  /** 本次会话提示词类别(供 UI 侧按同口径解析正文;reset 后回退 summary) */
+  const tagRef = useRef<PromptTag | string>("summary");
 
   const abortRef = useRef<AbortController | null>(null);
   const outputRef = useRef("");
@@ -279,6 +283,8 @@ export function useSummarySession(
 
       const prompt = resolvePrompt(text);
       setPromptName(prompt.name);
+      // 记录本次类别:UI 侧(字数等)按同一 parseOutput 口径解析,避免与落库 body 数字打架
+      tagRef.current = prompt.tag;
       const config = {
         type: service.protocol as ProviderType,
         apiKey: service.apiKey,
@@ -411,8 +417,15 @@ export function useSummarySession(
     serviceIdRef.current = null;
     extraParamsOverrideRef.current = null;
     serviceNameRef.current = "";
+    tagRef.current = "summary";
     setPromptName("");
   }, []);
+
+  /** 供 UI 派生展示:与 saveHistory 落库 body 完全同口径(去掉标题行后 trim) */
+  const summaryBodyOf = useCallback(
+    (text: string) => parseOutput(text, tagRef.current, promptName).body,
+    [promptName],
+  );
 
   return {
     output,
@@ -430,5 +443,6 @@ export function useSummarySession(
     setServiceId,
     setExtraParamsOverride,
     promptName,
+    summaryBodyOf,
   };
 }

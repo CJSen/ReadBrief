@@ -118,6 +118,7 @@ export function AppFloat() {
     setServiceId,
     setExtraParamsOverride,
     promptName,
+    summaryBodyOf,
   } = useSummarySession(cfgRef);
 
   /** 派生:按绑定服务 id 解析出的实际模型(改 AI 服务配置后自动跟随);未绑定回退默认服务模型 */
@@ -601,6 +602,9 @@ export function AppFloat() {
   const summaryTitle = summaryLines[0]?.trim() ?? "";
   const summaryBody =
     summaryLines.length <= 1 ? output.trim() : summaryLines.slice(1).join("\n");
+  // 总结字数:与落库 body 同口径(去掉标题行后 trim),与主窗口详情页右侧计数一致。
+  // 仅输出结束(done)后显示 —— 流式中数字滚动会干扰阅读,流式进度看底部「已生成 N 字」。
+  const summaryCharCount = state === "done" && output ? summaryBodyOf(output).length : 0;
 
   return (
     <div className="float-root">
@@ -736,7 +740,14 @@ export function AppFloat() {
 
             {state === "done" ? (
               <div className="rb-done">
-                <div className="rb-stream-title rb-summary-title">{summaryTitle}</div>
+                <div className="rb-stream-title rb-summary-title">
+                  <span className="rb-summary-title-text">{summaryTitle}</span>
+                  {summaryCharCount > 0 ? (
+                    <span className="rb-summary-count">
+                      {t("history.summaryChars", { n: summaryCharCount })}
+                    </span>
+                  ) : null}
+                </div>
                 <div className="rb-output-text rb-summary-body">{summaryBody}</div>
                 {/* 思考过程:本次会话的思考内容(不落库),点击展开/收起 */}
                 {reasoning ? (
