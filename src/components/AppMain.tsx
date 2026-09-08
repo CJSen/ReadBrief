@@ -226,6 +226,18 @@ export function AppMain() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
+  // ⌘, / Ctrl+:仅在主窗口聚焦时打开设置(窗口级监听,非全局热键)
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "," && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        void invoke("open_settings");
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
   /** 侧边栏计数(历史/收藏总数,独立于当前过滤条件) */
   const loadCounts = useCallback(async () => {
     try {
