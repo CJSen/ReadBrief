@@ -1799,7 +1799,9 @@
 .rb-prompt-editor-row .inp { margin-bottom: 0; }
 
 /* 提示词类型 · ? 图标 + hover 功能简介 */
-.rb-seg { position: relative; display: inline-flex; align-items: center; }
+.rb-seg { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 3px; }
+/* 对抗 App.css:720 的 .rb-seg span { flex:1 }，否则 "?" 被拉成椭圆 */
+.rb-seg .rb-q { flex: none; }
 .rb-q {
   display: inline-grid;
   place-items: center;
@@ -1809,7 +1811,6 @@
   font-size: 10px;
   font-weight: 700;
   line-height: 1;
-  margin-left: 3px;
   flex: none;
   color: inherit;
   opacity: .6;
