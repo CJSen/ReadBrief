@@ -283,12 +283,54 @@ pub fn load_config() -> AppConfig {
     if !path.exists() {
         return AppConfig::default();
     }
-    let content = std::fs::read_to_string(&path).unwrap_or_default();
-    parse_config(&content)
+    // 区分「文件不存在」(首次启动,正常)与「读取失败」(权限 / IO):
+    // 后者不能静默回退默认,否则用户下一次任意保存就会用默认值覆盖掉原文件
+    let content = match std::fs::read_to_string(&path) {
+        Ok(c) => c,
+        Err(e) => {
+            log::error!("[config] 读取 {} 失败: {e}", path.display());
+            return AppConfig::default();
+        }
+    };
+    let (cfg, dropped) = parse_config_checked(&content);
+    if !dropped.is_empty() {
+        for d in &dropped {
+            log::warn!("[config] 丢弃无法解析的条目: {d}");
+        }
+        // 备份原始文件:条目一旦被丢弃,下一次任意保存就会把丢失永久固化
+        backup_config(&path, &content);
+    }
+    cfg
+}
+
+/// 把原始配置另存为 config.json.bak-<时间戳>
+fn backup_config(path: &std::path::Path, content: &str) {
+    let ts = chrono::Local::now().format("%Y%m%d-%H%M%S");
+    let file_name = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("config.json");
+    let bak = path.with_file_name(format!("{file_name}.bak-{ts}"));
+    match std::fs::write(&bak, content) {
+        Ok(_) => log::warn!("[config] 原始配置已备份至 {}", bak.display()),
+        Err(e) => log::error!("[config] 备份配置失败 {}: {e}", bak.display()),
+    }
 }
 
 pub fn parse_config(content: &str) -> AppConfig {
-    let value: serde_json::Value = serde_json::from_str(content).unwrap_or_default();
+    parse_config_checked(content).0
+}
+
+/// 解析配置,并返回被丢弃条目的描述(供上层落日志 / 备份)
+fn parse_config_checked(content: &str) -> (AppConfig, Vec<String>) {
+    let value: serde_json::Value = match serde_json::from_str(content) {
+        Ok(v) => v,
+        Err(e) => {
+            log::error!("[config] 配置解析失败: {e}");
+            serde_json::Value::Null
+        }
+    };
+    let mut dropped: Vec<String> = Vec::new();
     let mut cfg = AppConfig::default();
 
     if let Some(api) = value.get("api") {
@@ -297,22 +339,43 @@ pub fn parse_config(content: &str) -> AppConfig {
         }
     }
     if let Some(services) = value.get("services").and_then(|v| v.as_array()) {
-        cfg.services = services
-            .iter()
-            .filter_map(|s| serde_json::from_value::<ApiConfig>(s.clone()).ok())
-            .collect();
+        let mut parsed = Vec::with_capacity(services.len());
+        for (i, s) in services.iter().enumerate() {
+            match serde_json::from_value::<ApiConfig>(s.clone()) {
+                Ok(v) => parsed.push(v),
+                Err(e) => {
+                    let name = s.get("name").and_then(|n| n.as_str()).unwrap_or("?");
+                    dropped.push(format!("services[{i}] \"{name}\": {e}"));
+                }
+            }
+        }
+        cfg.services = parsed;
     }
     if let Some(prompts) = value.get("prompts").and_then(|v| v.as_array()) {
-        cfg.prompts = prompts
-            .iter()
-            .filter_map(|p| serde_json::from_value::<PromptConfig>(p.clone()).ok())
-            .collect();
+        let mut parsed = Vec::with_capacity(prompts.len());
+        for (i, p) in prompts.iter().enumerate() {
+            match serde_json::from_value::<PromptConfig>(p.clone()) {
+                Ok(v) => parsed.push(v),
+                Err(e) => {
+                    let name = p.get("name").and_then(|n| n.as_str()).unwrap_or("?");
+                    dropped.push(format!("prompts[{i}] \"{name}\": {e}"));
+                }
+            }
+        }
+        cfg.prompts = parsed;
     }
     if let Some(shortcuts) = value.get("shortcuts").and_then(|v| v.as_array()) {
-        cfg.shortcuts = shortcuts
-            .iter()
-            .filter_map(|s| serde_json::from_value::<ShortcutConfig>(s.clone()).ok())
-            .collect();
+        let mut parsed = Vec::with_capacity(shortcuts.len());
+        for (i, s) in shortcuts.iter().enumerate() {
+            match serde_json::from_value::<ShortcutConfig>(s.clone()) {
+                Ok(v) => parsed.push(v),
+                Err(e) => {
+                    let id = s.get("id").and_then(|n| n.as_str()).unwrap_or("?");
+                    dropped.push(format!("shortcuts[{i}] \"{id}\": {e}"));
+                }
+            }
+        }
+        cfg.shortcuts = parsed;
     }
     if let Some(lang) = value.get("language").and_then(|v| v.as_str()) {
         cfg.language = lang.to_string();
@@ -409,7 +472,7 @@ pub fn parse_config(content: &str) -> AppConfig {
         }
     }
 
-    cfg
+    (cfg, dropped)
 }
 
 pub fn save_config(cfg: &AppConfig) -> AppResult<()> {
@@ -418,5 +481,27 @@ pub fn save_config(cfg: &AppConfig) -> AppResult<()> {
         std::fs::create_dir_all(parent).map_err(|e| AppError::from(e.to_string()))?;
     }
     let json = serde_json::to_string_pretty(cfg).map_err(|e| AppError::from(e.to_string()))?;
-    std::fs::write(&path, json).map_err(|e| AppError::from(e.to_string()))
+    write_atomic(&path, &json)
+}
+
+/// 原子写:先写同目录临时文件,fsync 后 rename 覆盖(同分区 rename 为原子操作)。
+/// 直接 fs::write 会先 truncate:进程若在写完前被中断(强杀 / 崩溃 / 断电),
+/// config.json 会变成空文件或半截 JSON,而读侧回退默认 → 整份配置归零。
+fn write_atomic(path: &std::path::Path, content: &str) -> AppResult<()> {
+    use std::io::Write;
+
+    let tmp = path.with_extension("json.tmp");
+    let write_result = (|| -> std::io::Result<()> {
+        let mut f = std::fs::File::create(&tmp)?;
+        f.write_all(content.as_bytes())?;
+        f.sync_all()
+    })();
+    if let Err(e) = write_result {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(AppError::from(e.to_string()));
+    }
+    std::fs::rename(&tmp, path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        AppError::from(e.to_string())
+    })
 }
