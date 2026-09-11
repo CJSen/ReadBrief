@@ -59,7 +59,10 @@ fn try_open(path: &Path) -> AppResult<Connection> {
 }
 
 /// 按版本号增量迁移 schema（幂等、可重复执行）
-fn migrate(conn: &Connection) -> AppResult<()> {
+///
+/// pub(crate)：测试直接调用它建表，使测试 schema 与生产 migration 同一来源，
+/// 避免测试里手工复制建表语句导致的 schema 漂移（见 history_tests::test_conn）。
+pub(crate) fn migrate(conn: &Connection) -> AppResult<()> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS schema_version (
             version INTEGER NOT NULL

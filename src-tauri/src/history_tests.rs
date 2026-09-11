@@ -3,45 +3,33 @@ mod tests {
     use crate::history;
     use rusqlite::Connection;
 
+    /// 建测试库:直接跑生产 migration,避免手工抄一份建表语句导致 schema 漂移
+    /// (历史上抄的那份少了 v3 的 service_name 列,导致 insert 报 no such column)
     fn test_conn() -> Connection {
         let conn = Connection::open_in_memory().expect("内存数据库");
-        conn.execute_batch(
-            r#"
-            CREATE TABLE history (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                source_text TEXT NOT NULL,
-                summary TEXT NOT NULL,
-                ai_title TEXT,
-                created_at TEXT NOT NULL,
-                model TEXT NOT NULL,
-                prompt_name TEXT,
-                tags TEXT DEFAULT '[]',
-                is_favorite INTEGER NOT NULL DEFAULT 0
-            );
-            CREATE TABLE tags (
-                name TEXT PRIMARY KEY,
-                color TEXT NOT NULL DEFAULT ''
-            );
-            "#,
-        )
-        .expect("建表失败");
+        crate::db::migrate(&conn).expect("建表失败");
         conn
+    }
+
+    /// 创建记录的统一入口:service_name 用固定测试值占位
+    fn create(
+        conn: &Connection,
+        source_text: &str,
+        summary: &str,
+        ai_title: Option<&str>,
+        model: &str,
+        prompt_name: Option<&str>,
+        tags: &[String],
+    ) -> i64 {
+        history::create(conn, source_text, summary, ai_title, model, "测试服务", prompt_name, tags)
+            .expect("创建失败")
     }
 
     #[test]
     fn tag_definitions_with_color() {
         let conn = test_conn();
         // 未定义色时,历史中出现的标签补默认色
-        history::create(
-            &conn,
-            "原文",
-            "总结",
-            None,
-            "gpt",
-            None,
-            &["旧标签".to_string()],
-        )
-        .expect("创建失败");
+        create(&conn, "原文", "总结", None, "gpt", None, &["旧标签".to_string()]);
         let tags = history::all_tags(&conn).expect("标签查询失败");
         assert_eq!(tags.len(), 1);
         assert_eq!(tags[0].name, "旧标签");
@@ -56,7 +44,7 @@ mod tests {
 
         // 删除标签:定义移除 + 历史记录中同步剔除
         history::create_tag(&conn, "待删", "#EF4444").expect("创建待删标签失败");
-        let id2 = history::create(
+        let id2 = create(
             &conn,
             "另一段原文",
             "另一段总结",
@@ -64,8 +52,7 @@ mod tests {
             "gpt",
             None,
             &["待删".to_string(), "技术选型".to_string()],
-        )
-        .expect("创建失败");
+        );
         history::delete_tag(&conn, "待删").expect("删除标签失败");
         let tags = history::all_tags(&conn).expect("标签查询失败");
         assert!(!tags.iter().any(|t| t.name == "待删"));
@@ -85,7 +72,7 @@ mod tests {
     #[test]
     fn history_crud_and_search() {
         let conn = test_conn();
-        let id = history::create(
+        let id = create(
             &conn,
             "这是一段原文",
             "这是一段总结",
@@ -93,8 +80,7 @@ mod tests {
             "gpt",
             Some("默认提示词"),
             &["标签1".to_string()],
-        )
-        .expect("创建失败");
+        );
 
         let list = history::list(&conn, Some("原文")).expect("搜索失败");
         assert_eq!(list.len(), 1);
@@ -123,7 +109,7 @@ mod tests {
         fav: bool,
         tags: &[&str],
     ) -> i64 {
-        let id = history::create(
+        let id = create(
             conn,
             src,
             summary,
@@ -131,8 +117,7 @@ mod tests {
             "gpt",
             None,
             &tags.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
-        )
-        .expect("创建失败");
+        );
         let created = (now - chrono::Duration::days(days_ago)).to_rfc3339();
         conn.execute(
             "UPDATE history SET created_at = ?1, is_favorite = ?2 WHERE id = ?3",
