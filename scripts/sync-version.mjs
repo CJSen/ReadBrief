@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// 单一版本源:根目录 .version。构建时把版本同步到 tauri.conf.json 与 Cargo.toml,
-// 保证打包产物、Rust crate、关于页 getVersion() 全部来自同一处。
+// 单一版本源:根目录 .version。构建时把版本同步到 tauri.conf.json、Cargo.toml 与 README.md,
+// 保证打包产物、Rust crate、关于页 getVersion()、README 徽章全部来自同一处。
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -63,4 +63,22 @@ if (lockVersion !== version) {
   }
 } else {
   console.log(`[sync-version] Cargo.lock 已是最新 (${version})`);
+}
+
+// 4) README.md —— 版本徽章（badge/version-x.y.z-orange）
+const readmePath = resolve(root, "README.md");
+if (existsSync(readmePath)) {
+  const readme = readFileSync(readmePath, "utf8");
+  const nextReadme = readme.replace(
+    /(badge\/version-)\d+\.\d+\.\d+/g,
+    `$1${version}`
+  );
+  if (nextReadme !== readme) {
+    writeFileSync(readmePath, nextReadme);
+    console.log(`[sync-version] README.md -> ${version}`);
+  } else {
+    console.log(`[sync-version] README.md 已是最新 (${version})`);
+  }
+} else {
+  console.warn("[sync-version] 未找到 README.md，跳过");
 }

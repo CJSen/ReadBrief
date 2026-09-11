@@ -9,7 +9,7 @@
 <p align="center">
   <img alt="Platform" src="https://img.shields.io/badge/platform-macOS%2013.0%2B%20%7C%20Windows%2010%2B-blue" />
   <img alt="Built with" src="https://img.shields.io/badge/Tauri-2-24C8DB" />
-  <img alt="Version" src="https://img.shields.io/badge/version-0.10.1-orange" />
+  <img alt="Version" src="https://img.shields.io/badge/version-0.10.8-orange" />
   <img alt="License" src="https://img.shields.io/badge/license-MIT-green" />
 </p>
 
