@@ -97,12 +97,19 @@ pub fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
         .on_menu_event(|app, event| match event.id().as_ref() {
             ID_TOGGLE => {
                 // 划词监听开关:与设置-通用「启用划词监听」联动,点击即切换
-                let mut cfg = crate::config::load_config();
-                cfg.selection_on = !cfg.selection_on;
-                let _ = crate::config::save_config(&cfg);
-                crate::shortcuts::set_capture_paused(!cfg.selection_on);
-                let _ = app.emit("selection-state-changed", cfg.selection_on);
-                refresh_tray(app);
+                // 走 update_with:与前端 config_patch 共用一把读改写锁,避免互相覆盖
+                match crate::config::update_with(|cfg| {
+                    cfg.selection_on = !cfg.selection_on;
+                    Ok(())
+                }) {
+                    Ok(cfg) => {
+                        crate::shortcuts::set_capture_paused(!cfg.selection_on);
+                        let _ = app.emit("selection-state-changed", cfg.selection_on);
+                        refresh_tray(app);
+                    }
+                    // 写盘失败则不改系统状态:保持界面/系统标志与磁盘一致
+                    Err(e) => log::error!("托盘切换划词监听失败: {e}"),
+                }
             }
             "open_main" => {
                 let _ = crate::windows::show_main(app.clone());

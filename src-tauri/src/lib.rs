@@ -59,6 +59,7 @@ pub fn run() {
             ai::ai_list_models,
             commands::config_get,
             commands::config_save,
+            commands::config_patch,
             commands::config_reset,
             commands::set_capture_paused,
             commands::export_data,

@@ -3,10 +3,12 @@ import { createPortal } from "react-dom";
 import type { AppConfig, ApiConfig, ProviderType } from "../lib/config/types";
 import { getServices } from "../lib/config/types";
 import { testConnection, listModels } from "../lib/ai/provider";
+import { patchConfig } from "../lib/config/patchConfig";
 import { invoke } from "@tauri-apps/api/core";
 import { Icon } from "./Icon";
 import { t, useLanguage } from "../lib/i18n";
 import { ParamsOverrideField } from "./ParamsOverrideField";
+import { errText } from "./Toast";
 
 const FORMAT_META: Record<ProviderType, { name: string; desc: string; mark: string }> = {
   openai: { name: "OpenAI 格式", desc: "官方 API 及绝大多数兼容网关", mark: "O" },
@@ -65,16 +67,26 @@ export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
     return () => clearTimeout(timer);
   }, [toast]);
 
-  async function saveAll(next: ApiConfig[]) {
+  /** 落盘服务列表:成功返回 true。失败时提示且不改动上层配置(界面从 cfg 派生,自动回退) */
+  async function saveAll(next: ApiConfig[]): Promise<boolean> {
     // 保证至多一个默认服务:无默认时第一个为默认
     const firstDefaultIdx = next.findIndex((s) => s.isDefault);
     const normalized = next.map((s, i) => ({
       ...s,
       isDefault: firstDefaultIdx === -1 ? i === 0 : i === firstDefaultIdx,
     }));
-    const updated: AppConfig = { ...cfg, services: normalized, api: normalized[0] ?? cfg.api };
-    await invoke("config_save", { cfg: updated });
-    onConfigChange(updated);
+    try {
+      // 只发 services / api:Rust 侧读盘合并,避免用旧快照覆盖其它字段
+      const saved = await patchConfig({
+        services: normalized,
+        api: normalized[0] ?? cfg.api,
+      });
+      onConfigChange(saved);
+      return true;
+    } catch (e) {
+      setToast({ text: `${t("ai.saveFailed")}: ${errText(e)}`, ok: false });
+      return false;
+    }
   }
 
   /** 点「+」直接弹出新增服务弹窗(格式在弹窗内下拉选择,不再两步菜单) */
@@ -103,8 +115,8 @@ export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
     const next = exists
       ? services.map((s) => (s.id === svc.id ? svc : s))
       : [...services, svc];
-    await saveAll(next);
-    setEditing(null);
+    // 失败时保留表单,用户可直接重试(内容不丢)
+    if (await saveAll(next)) setEditing(null);
   }
 
   async function handleDelete(id: string) {
@@ -415,7 +427,8 @@ export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
 interface ServiceFormProps {
   svc: ApiConfig;
   isNew: boolean;
-  onSave: (svc: ApiConfig) => void;
+  /** 保存:失败时不关闭表单,用户可原地重试 */
+  onSave: (svc: ApiConfig) => void | Promise<void>;
   onCancel: () => void;
   /** 测试连接:传表单实时值(而非打开弹窗时的快照),确保改完 key/model 再测的是新值 */
   onTest: (svc: ApiConfig) => Promise<void>;
@@ -537,14 +550,14 @@ function ServiceForm({ svc, isNew, onSave, onCancel, onTest, latency, notify }: 
     // 纯空白归一化为 undefined:未使用本功能的 config.json 不落该字段
     const extraParams = (form.extraParams ?? "").trim() ? form.extraParams : undefined;
     const next: ApiConfig = { ...form, extraParams };
-    onSave(lockedBase ? { ...next, baseUrl: lockedBase } : next);
+    void onSave(lockedBase ? { ...next, baseUrl: lockedBase } : next);
   }
 
   return (
     <div className="rb-svc-form-overlay" onClick={onCancel}>
       <div className="rb-svc-form" onClick={(e) => e.stopPropagation()}>
         <div className="rb-svc-form-hd">
-          <div className="flex ac g9">
+          <div className="flex ac g8">
             <span className="svc-mark pri rb-svc-form-mark">
               {markFor(form.name || fmt.name)}
             </span>

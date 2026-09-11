@@ -9,6 +9,9 @@ pub async fn config_get() -> AppResult<AppConfig> {
         .map_err(|e| AppError::from(e.to_string()))
 }
 
+/// 整份配置覆盖写。**已不建议前端使用**:整份写回会用调用方持有的旧快照
+/// 覆盖其它窗口/托盘期间改过的字段,请改用 config_patch。
+/// 保留用于「恢复默认」等确实要整份替换的场景。
 #[tauri::command]
 pub fn config_save(app: tauri::AppHandle, cfg: AppConfig) -> AppResult<()> {
     config::save_config(&cfg)?;
@@ -19,6 +22,31 @@ pub fn config_save(app: tauri::AppHandle, cfg: AppConfig) -> AppResult<()> {
     // 通知所有窗口配置已变更（Esc 关闭悬浮窗等开关需即时生效）
     let _ = app.emit("config-changed", &cfg);
     Ok(())
+}
+
+/// 字段级保存:前端只发送**变更字段**,由 Rust 读盘 → 合并 → 原子写。
+///
+/// 与 config_save(整份覆盖)的区别:其它窗口 / 托盘在此期间改过的字段不会被
+/// 调用方持有的过期快照覆盖回去。返回合并后的权威配置,调用方应以此更新本地状态。
+#[tauri::command]
+pub fn config_patch(app: tauri::AppHandle, patch: serde_json::Value) -> AppResult<AppConfig> {
+    // 读盘 → 合并 → 原子写,整段持锁(tray 菜单的改动走同一把锁)
+    let cfg = config::update_with(|cfg| {
+        let merged = config::apply_patch(cfg, &patch)?;
+        *cfg = merged;
+        Ok(())
+    })?;
+
+    // 落盘即视为保存成功。以下都是「让改动生效」的动作,失败降级为警告,
+    // 否则已写盘却对用户报错 → 用户重试 → 重复写入
+    if let Err(e) = crate::shortcuts::reload_shortcuts(&app) {
+        log::warn!("配置已保存,但快捷键热更新失败(重启后生效): {e}");
+    }
+    // 诊断开关即时生效(无需重启)
+    crate::apply_diagnostics_level(cfg.diagnostics);
+    // 通知所有窗口配置已变更
+    let _ = app.emit("config-changed", &cfg);
+    Ok(cfg)
 }
 
 #[tauri::command]

@@ -5,6 +5,7 @@ import { useLicense } from "../lib/license/useLicense";
 import { BUILTIN_PROMPTS, BUILTIN_ICONS, TAG_OPTIONS, TAG_LABELS, TAG_TIPS } from "../lib/prompts/builtins";
 import type { PromptTag } from "../lib/prompts/builtins";
 import { t, useLanguage } from "../lib/i18n";
+import { patchConfig } from "../lib/config/patchConfig";
 import { invoke } from "@tauri-apps/api/core";
 import { Icon } from "./Icon";
 import { useToast, errText } from "./Toast";
@@ -53,15 +54,15 @@ export function PromptManager({ cfg, onConfigChange }: PromptManagerProps) {
 
   /** 落盘:成功返回 true。失败时提示且不改动上层状态(旧值保留,用户可重试) */
   async function savePrompts(next: PromptConfig[]): Promise<boolean> {
-    const updated: AppConfig = { ...cfg, prompts: next };
     try {
-      await invoke("config_save", { cfg: updated });
+      // 只发 prompts:Rust 侧读盘合并,避免用旧快照覆盖其它字段
+      const updated = await patchConfig({ prompts: next });
+      onConfigChange(updated);
+      return true;
     } catch (e) {
       showToast({ text: `${t("prompts.saveFailed")}: ${errText(e)}`, ok: false });
       return false;
     }
-    onConfigChange(updated);
-    return true;
   }
 
   /** 关闭编辑器并清空草稿(取消 / 保存成功后调用) */

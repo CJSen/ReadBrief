@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { AppConfig, ApiConfig, ProviderType } from "../lib/config/types";
+import { patchConfig, type ConfigPatch } from "../lib/config/patchConfig";
 import { testConnection, listModels } from "../lib/ai/provider";
 import { t } from "../lib/i18n";
 import {
@@ -12,6 +13,7 @@ import {
 } from "../lib/ai/paramsOverride";
 import { Icon, type IconName } from "./Icon";
 import { ParamsOverrideField } from "./ParamsOverrideField";
+import { useToast, errText } from "./Toast";
 import { resolveShortcutKey, keySymbol } from "../lib/shortcutKey";
 import { isMac } from "../lib/platform";
 import "./Onboarding.css";
@@ -76,6 +78,7 @@ interface OnboardingProps {
 export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
   // 从持久化步骤恢复:中途重启软件后引导从该步继续,而非从头再来
   const [step, setStep] = useState(() => cfg.onboardingStep ?? 0);
+  const { showToast, toastNode } = useToast();
 
   /* ═══ 步骤1:AI 服务表单(零配置可跳过) ═══ */
   /* 预填:若已有默认/首个服务,则使用其数据(再次打开引导时不丢配置、不重复新建) */
@@ -124,16 +127,16 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
   }
 
   /** 离开步骤1:有 API Key 则落库;编辑既有服务时就地更新,避免重复新建。
-   *  返回落库后的完整配置(供步骤持久化复用),无实际写入时返回 null。 */
-  async function commitServiceIfNeeded(): Promise<AppConfig | null> {
-    if (aiSaved) return null;
+   *  返回 false 表示保存失败 → 调用方留在本步让用户重试;已保存过 / 无需保存时返回 true。 */
+  async function commitServiceIfNeeded(): Promise<boolean> {
+    if (aiSaved) return true;
     const key = form.apiKey.trim();
     // 零配置可继续:无任何用户输入时不落库(避免写入一个与默认空 api 重复的空服务)。
     // 但只要填了 Base URL / 名称 / Key 任一,即视为有意配置,即便缺 Key 也保留输入(到设置里再补 Key)。
     const hasInput = Boolean(key || form.baseUrl.trim() || form.name?.trim());
     if (!hasInput) {
       if (editingId) setAiSaved(true);
-      return null;
+      return true;
     }
     const svc: ApiConfig = {
       id: editingId ?? `svc_ob_${Date.now()}`,
@@ -157,18 +160,28 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
       : [...base, svc];
     // api 指向默认服务(优先默认态,否则回退首个),保持与列表一致
     const api = services.find((s) => s.isDefault) ?? services[0] ?? svc;
-    const next: AppConfig = { ...cfg, services, api };
-    await invoke("config_save", { cfg: next });
-    onUpdate(next);
-    setAiSaved(true);
-    return next;
+    try {
+      // 只发 services / api:Rust 侧读盘合并,避免用旧快照覆盖其它字段
+      onUpdate(await patchConfig({ services, api }));
+      setAiSaved(true);
+      return true;
+    } catch (e) {
+      showToast({ text: `${t("onboarding.saveFailed")}: ${errText(e)}`, ok: false });
+      return false;
+    }
   }
 
-  /** 持久化当前引导步骤:重启软件后可从该步继续 */
-  async function persistStep(nextStep: number, base: AppConfig = cfg) {
-    const next: AppConfig = { ...base, onboardingStep: nextStep };
-    await invoke("config_save", { cfg: next }).catch(() => {});
-    onUpdate(next);
+  /** 切到指定步骤:先落盘(失败则留在原步并提示),成功后才更新界面 */
+  async function goStep(nextStep: number) {
+    try {
+      const saved = await patchConfig({ onboardingStep: nextStep });
+      onUpdate(saved);
+      setStep(nextStep);
+      return true;
+    } catch (e) {
+      showToast({ text: `${t("onboarding.saveFailed")}: ${errText(e)}`, ok: false });
+      return false;
+    }
   }
 
   /* ═══ 步骤2:权限 ═══ */
@@ -269,9 +282,13 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
       setLaunchOnStart(!enabled);
       return;
     }
-    const next: AppConfig = { ...cfg, launchOnStart: enabled };
-    await invoke("config_save", { cfg: next }).catch(() => {});
-    onUpdate(next);
+    // 配置落盘失败同样回滚:否则界面显示已开启、系统也注册了,但配置里没记
+    try {
+      onUpdate(await patchConfig({ launchOnStart: enabled }));
+    } catch (e) {
+      setLaunchOnStart(!enabled);
+      showToast({ text: `${t("onboarding.saveFailed")}: ${errText(e)}`, ok: false });
+    }
   }
 
   /* ═══ 步骤3:快捷键录制(summarize) ═══ */
@@ -392,17 +409,9 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
   async function finish() {
     // 收尾前补存 AI 服务:覆盖「第二步填完直接点跳过」「未走 commitServiceIfNeeded」等路径,
     // 确保引导填写的 AI 配置(含未填 Key 的输入)最终落库,而非仅依赖「下一步」离开第二步。
-    let base: AppConfig = cfg;
-    if (!aiSaved) {
-      const saved = await commitServiceIfNeeded();
-      if (saved) base = saved;
-    }
-    const next: AppConfig = {
-      ...base,
-      onboardingDone: true,
-      onboardingStep: undefined,
-      launchOnStart,
-    };
+    // 保存失败则中断收尾(留在引导里重试),避免"界面已关但配置没落盘"。
+    if (!aiSaved && !(await commitServiceIfNeeded())) return;
+
     // 同步开机启动到系统 LaunchAgent:仅当系统真实状态与目标不一致时才写。
     // 此前无条件写入,看似幂等,但 OS 层面重复 enable 会重新 load LaunchAgent,
     // 触发 macOS「登录项」通知;且同一次引导内若拨过开关(toggle 已写过一次)会重复弹。
@@ -416,42 +425,44 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
     const scStripped = scExtraParams ? stripJsonComments(scExtraParams).trim() : "";
     const scParamsValue =
       !scStripped || scStripped === DS_CANONICAL_EXTRA ? undefined : (scExtraParams ?? undefined);
+
+    // onboardingStep 用 null 显式清空:undefined 会被 JSON 丢掉,表达不出"删除该字段"
+    const patch: ConfigPatch = {
+      onboardingDone: true,
+      onboardingStep: null,
+      launchOnStart,
+    };
     if (shortcutAccel !== defaultAccel || scExtraParams !== initialScExtra) {
-      const shortcuts = (base.shortcuts ?? []).map((s) =>
+      patch.shortcuts = (cfg.shortcuts ?? []).map((s) =>
         s.id === "summarize" ? { ...s, accelerator: shortcutAccel, extraParams: scParamsValue } : s,
       );
-      next.shortcuts = shortcuts;
     }
-    await invoke("config_save", { cfg: next });
-    onUpdate(next);
-    onClose();
+
+    try {
+      onUpdate(await patchConfig(patch));
+      onClose();
+    } catch (e) {
+      showToast({ text: `${t("onboarding.saveFailed")}: ${errText(e)}`, ok: false });
+    }
   }
 
   /** 离开权限步骤(第3步):进入快捷键步骤(第4步) */
   async function proceedFromPerms() {
-    const nextStep = 3;
-    setStep(nextStep);
-    await persistStep(nextStep);
+    await goStep(3);
   }
 
   /** 返回上一步(第1步欢迎页无前序,不显示该按钮) */
   async function goPrev() {
     if (step <= 0) return;
-    const nextStep = step - 1;
-    setStep(nextStep);
-    await persistStep(nextStep);
+    await goStep(step - 1);
   }
 
   async function goNext() {
     if (step === 0) {
-      const nextStep = 1;
-      setStep(nextStep);
-      await persistStep(nextStep);
+      await goStep(1);
     } else if (step === 1) {
-      const saved = await commitServiceIfNeeded();
-      const nextStep = 2;
-      setStep(nextStep);
-      await persistStep(nextStep, saved ?? cfg);
+      // 服务配置(若有改动)先落盘;失败则留在本步,不推进
+      if (await commitServiceIfNeeded()) await goStep(2);
     } else if (step === 2) {
       // 权限步骤:辅助功能明确未授权时,弹二次确认拦截,避免用户裸奔划词
       if (accessibility === false) {
@@ -460,9 +471,7 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
       }
       await proceedFromPerms();
     } else if (step === 3) {
-      const nextStep = 4;
-      setStep(nextStep);
-      await persistStep(nextStep);
+      await goStep(4);
     } else {
       await finish();
     }
@@ -931,6 +940,8 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
         {scTipOpen
           ? createPortal(<div className="rb-params-tip-fixed">{t("ai.paramsTip")}</div>, document.body)
           : null}
+
+        {toastNode}
       </div>
     </div>
   );

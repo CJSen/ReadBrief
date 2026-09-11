@@ -5,10 +5,12 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { AppConfig } from "../lib/config/types";
+import { patchConfig } from "../lib/config/patchConfig";
 import { getLanguage, setLanguage, t, useLanguage, type Language } from "../lib/i18n";
 import { applyPreference, applyFontScale, type ThemePreference } from "../lib/theme";
 import { Icon } from "./Icon";
 import { LogoMark } from "./LogoMark";
+import { useToast, errText } from "./Toast";
 import { ShortcutsPage } from "./ShortcutsPage";
 import { PromptManager } from "./PromptManager";
 import { AiServicesPage } from "./AiServicesPage";
@@ -49,6 +51,7 @@ export function AppSettings() {
   const [theme, setThemeState] = useState<ThemePreference>("system");
   /** 设置内「打开引导」:渲染首启引导覆盖层(复用现有 cfg,预填已有数据) */
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const { showToast, toastNode } = useToast();
 
   useEffect(() => {
     invoke<AppConfig>("config_get")
@@ -96,21 +99,50 @@ export function AppSettings() {
     };
   }, []);
 
-  async function saveConfig(next: AppConfig) {
-    await invoke("config_save", { cfg: next });
-    setCfg(next);
+  /**
+   * 保存配置的**变更字段**,返回是否成功。
+   *
+   * 只发 patch:Rust 侧读盘合并,不会用本窗口的旧快照覆盖其它窗口/托盘刚改过的字段。
+   * 失败时提示,但**不代为回滚调用方的 UI** —— 由调用方按各自语义处理返回值
+   * (语言/主题是本地 state,需自行撤销;字号等从 cfg 派生的则无需处理)。
+   */
+  async function saveConfig(patch: Partial<AppConfig>): Promise<boolean> {
+    try {
+      const saved = await patchConfig(patch);
+      setCfg(saved);
+      return true;
+    } catch (e) {
+      showToast({ text: `${t("settings.saveFailed")}: ${errText(e)}`, ok: false });
+      return false;
+    }
   }
 
-  function handleLanguageChange(next: Language) {
+  /** 界面语言:乐观切换,失败回滚 —— 不回滚会出现「界面已切、重启弹回」的假象 */
+  async function handleLanguageChange(next: Language) {
+    const prev = lang;
     setLang(next);
     setLanguage(next);
-    if (cfg) void saveConfig({ ...cfg, language: next });
+    if (await saveConfig({ language: next })) return;
+    setLang(prev);
+    setLanguage(prev);
   }
 
-  function handleThemeChange(next: ThemePreference) {
+  /** 主题:乐观切换,失败回滚(需同时还原 local state 与 DOM 上的主题属性) */
+  async function handleThemeChange(next: ThemePreference) {
+    const prev = theme;
     setThemeState(next);
     applyPreference(next);
-    if (cfg) void saveConfig({ ...cfg, theme: next });
+    if (await saveConfig({ theme: next })) return;
+    setThemeState(prev);
+    applyPreference(prev);
+  }
+
+  /** 字号:选中态由 cfg.fontScale 派生,失败时不更新 cfg 即自动回退,只需撤销 DOM 上的即时应用 */
+  async function handleFontScaleChange(next: number) {
+    const prev = cfg?.fontScale ?? 1.0;
+    applyFontScale(next);
+    if (await saveConfig({ fontScale: next })) return;
+    applyFontScale(prev);
   }
 
   return (
@@ -132,7 +164,11 @@ export function AppSettings() {
       {/* 右侧内容 */}
       <div className="rb-settings-content">
         {section === "general" && cfg ? (
-          <GeneralPage cfg={cfg} onConfigChange={setCfg} onOpenOnboarding={() => setShowOnboarding(true)} />
+          <GeneralPage
+            cfg={cfg}
+            onOpenOnboarding={() => setShowOnboarding(true)}
+            onSave={saveConfig}
+          />
         ) : null}
         {section === "ai" && cfg ? (
           <AiServicesPage cfg={cfg} onConfigChange={setCfg} />
@@ -148,13 +184,10 @@ export function AppSettings() {
             theme={theme}
             lang={lang}
             cfg={cfg}
-            onTheme={handleThemeChange}
-            onLang={handleLanguageChange}
-            onSummaryLang={(s) => void saveConfig({ ...cfg, summaryLanguage: s })}
-            onFontScale={(s) => {
-              applyFontScale(s);
-              void saveConfig({ ...cfg, fontScale: s });
-            }}
+            onTheme={(v) => void handleThemeChange(v)}
+            onLang={(v) => void handleLanguageChange(v)}
+            onSummaryLang={(s) => void saveConfig({ summaryLanguage: s })}
+            onFontScale={(s) => void handleFontScaleChange(s)}
           />
         ) : null}
         {section === "privacy" && cfg ? <PrivacyPage cfg={cfg} onConfigChange={setCfg} /> : null}
@@ -169,6 +202,8 @@ export function AppSettings() {
           onClose={() => setShowOnboarding(false)}
         />
       ) : null}
+
+      {toastNode}
     </div>
   );
 }
@@ -176,12 +211,13 @@ export function AppSettings() {
 /* ═══ 通用 ═══ */
 function GeneralPage({
   cfg,
-  onConfigChange,
   onOpenOnboarding,
+  onSave,
 }: {
   cfg: AppConfig;
-  onConfigChange: (c: AppConfig) => void;
   onOpenOnboarding: () => void;
+  /** 保存变更字段(由 AppSettings 提供,统一失败提示出口) */
+  onSave: (patch: Partial<AppConfig>) => Promise<boolean>;
 }) {
   const [launchOnStart, setLaunchOnStart] = useState(cfg.launchOnStart ?? true);
   const [escClose, setEscClose] = useState(cfg.escClose ?? true);
@@ -235,13 +271,6 @@ function GeneralPage({
     };
   }, []);
 
-  /** 持久化通用设置(部分开关同时联动系统能力) */
-  async function persist(patch: Partial<AppConfig>) {
-    const next = { ...cfg, ...patch };
-    await invoke("config_save", { cfg: next });
-    onConfigChange(next);
-  }
-
   async function toggleLaunch(v: boolean) {
     setLaunchOnStart(v);
     // 写入系统 LaunchAgent(登录时自启);失败则回滚开关
@@ -251,13 +280,17 @@ function GeneralPage({
       setLaunchOnStart(!v);
       return;
     }
-    await persist({ launchOnStart: v });
+    // 配置未落盘时同样回滚:否则界面显示已开启,重启后却失效
+    if (!(await onSave({ launchOnStart: v }))) setLaunchOnStart(!v);
   }
 
   async function toggleSelection(v: boolean) {
     // 划词监听开关 ↔ Rust 暂停标志(快捷键总结 / 托盘状态同步)
     await invoke("set_capture_paused", { paused: !v });
-    await persist({ selectionOn: v });
+    if (!(await onSave({ selectionOn: v }))) {
+      // 配置没写成功就把 Rust 侧标志还原,避免与磁盘状态不一致
+      await invoke("set_capture_paused", { paused: v }).catch(() => {});
+    }
   }
 
   /** 去授权:先弹系统原生辅助功能授权窗(仅首次出现);后端返回弹窗后真实状态,已授权即结束,否则打开系统设置引导手动开启 */
@@ -405,7 +438,9 @@ function GeneralPage({
             onClick={() => {
               const v = !escClose;
               setEscClose(v);
-              void persist({ escClose: v });
+              void onSave({ escClose: v }).then((ok) => {
+                if (!ok) setEscClose(!v);
+              });
             }}
           />
         </div>
@@ -419,7 +454,9 @@ function GeneralPage({
             onClick={() => {
               const v = !clickOutside;
               setClickOutside(v);
-              void persist({ clickOutside: v });
+              void onSave({ clickOutside: v }).then((ok) => {
+                if (!ok) setClickOutside(!v);
+              });
             }}
           />
         </div>
@@ -646,9 +683,14 @@ function PrivacyPage({
 
   async function toggleDiagnostics(v: boolean) {
     setDiagnostics(v);
-    const next = { ...cfg, diagnostics: v };
-    await invoke("config_save", { cfg: next });
-    onConfigChange(next);
+    try {
+      const saved = await patchConfig({ diagnostics: v });
+      onConfigChange(saved);
+    } catch (e) {
+      // 未落盘则回滚开关:避免界面显示已开启、实际重启后失效
+      setDiagnostics(!v);
+      setToast({ text: `${t("settings.saveFailed")}: ${errText(e)}`, ok: false });
+    }
   }
 
   /** 选择新时长:先查将删除条数,弹确认框;确认才落盘,取消不保存 */
@@ -666,11 +708,10 @@ function PrivacyPage({
   async function confirmRetention() {
     if (!cfg || !pending) return;
     const { retention } = pending;
-    const next = { ...cfg, historyRetention: retention };
     setPending(null);
     try {
-      await invoke("config_save", { cfg: next });
-      onConfigChange(next);
+      const saved = await patchConfig({ historyRetention: retention });
+      onConfigChange(saved);
       const deleted = await invoke<number>("history_prune", { retention });
       await invoke("tray_refresh");
       setToast({ text: t("settings.retentionDone", { count: deleted }), ok: true });

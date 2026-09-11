@@ -2,6 +2,14 @@ use crate::error::{AppError, AppResult};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use std::path::PathBuf;
+use std::sync::Mutex;
+
+/// 配置「读-改-写」的进程内互斥锁。
+///
+/// 前端各窗口的 config_patch 与托盘菜单的改动都走 update_with,
+/// 避免两条 read-modify-write 交错时互相覆盖(典型:托盘切换划词监听的
+/// 同时,设置窗口保存主题 —— 两者都基于自己读到的快照写回整份文件)。
+static CONFIG_RMW_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -482,6 +490,45 @@ pub fn save_config(cfg: &AppConfig) -> AppResult<()> {
     }
     let json = serde_json::to_string_pretty(cfg).map_err(|e| AppError::from(e.to_string()))?;
     write_atomic(&path, &json)
+}
+
+/// 字段级补丁:把 `patch`(JSON 对象)的顶层字段合并进 `base`。
+///
+/// 语义与限制:
+/// - 顶层字段**整体替换**(不做嵌套深合并)→ 修改嵌套对象(如 api)需发送完整对象;
+/// - 数组字段一律整体替换 → 「新增/删除列表中的一条」由前端算出新数组后整份发送,
+///   因此本函数能消除的是「用过期快照覆盖**其它**字段」,数组自身的并发写入仍需前端串行化;
+/// - patch 中未出现的字段保持 base 原值 → 这是与 config_save(整份覆盖)的核心区别;
+/// - 未知字段:反序列化时被忽略(serde 默认),不会写入磁盘。
+pub fn apply_patch(base: &AppConfig, patch: &serde_json::Value) -> AppResult<AppConfig> {
+    let mut value = serde_json::to_value(base).map_err(|e| AppError::from(e.to_string()))?;
+    let obj = value
+        .as_object_mut()
+        .ok_or_else(|| AppError::from("配置序列化结果不是对象"))?;
+    let patch_obj = patch
+        .as_object()
+        .ok_or_else(|| AppError::from("config_patch 的 patch 参数必须是 JSON 对象"))?;
+
+    for (key, val) in patch_obj {
+        obj.insert(key.clone(), val.clone());
+    }
+
+    serde_json::from_value(value).map_err(|e| AppError::from(format!("配置补丁无效: {e}")))
+}
+
+/// 原子「读-改-写」:持锁 → 读盘 → 闭包修改 → 原子写 → 返回最终配置。
+///
+/// 所有需要「先读再改再写」的路径(前端 patch、托盘菜单)都必须走这里,
+/// 否则两次读改写交错时会用旧快照覆盖对方的改动。
+pub fn update_with<F>(f: F) -> AppResult<AppConfig>
+where
+    F: FnOnce(&mut AppConfig) -> AppResult<()>,
+{
+    let _guard = CONFIG_RMW_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let mut cfg = load_config();
+    f(&mut cfg)?;
+    save_config(&cfg)?;
+    Ok(cfg)
 }
 
 /// 原子写:先写同目录临时文件,fsync 后 rename 覆盖(同分区 rename 为原子操作)。

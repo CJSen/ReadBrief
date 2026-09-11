@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { AppConfig, ShortcutConfig } from "../lib/config/types";
-import { invoke } from "@tauri-apps/api/core";
+import { patchConfig } from "../lib/config/patchConfig";
 import { BUILTIN_PROMPT_OPTIONS } from "../lib/prompts/builtins";
 import { resolveShortcutKey, keySymbol } from "../lib/shortcutKey";
 import { t, useLanguage } from "../lib/i18n";
@@ -189,14 +189,13 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
 
   /** 落盘快捷键:失败时提示且不改动上层配置(界面从 cfg 派生,自动回退到已保存状态) */
   async function save(next: ShortcutConfig[]) {
-    const updated: AppConfig = { ...cfg, shortcuts: next };
     try {
-      await invoke("config_save", { cfg: updated });
+      // 只发 shortcuts:Rust 侧读盘合并,避免用旧快照覆盖其它字段
+      const updated = await patchConfig({ shortcuts: next });
+      onConfigChange(updated);
     } catch (e) {
       showToast({ text: `${t("shortcuts.saveFailed")}: ${errText(e)}`, ok: false });
-      return;
     }
-    onConfigChange(updated);
   }
 
   function startRecord(id: string) {
