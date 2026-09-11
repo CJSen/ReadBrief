@@ -7,6 +7,7 @@ import { resolveShortcutKey, keySymbol } from "../lib/shortcutKey";
 import { t, useLanguage } from "../lib/i18n";
 import { checkParams, stripJsonComments, DS_CANONICAL_EXTRA } from "../lib/ai/paramsOverride";
 import { Icon } from "./Icon";
+import { useToast, errText } from "./Toast";
 
 const SYSTEM_SHORTCUTS = ["Cmd+Space", "Cmd+Tab", "Ctrl+Space"];
 
@@ -66,6 +67,7 @@ interface ShortcutsPageProps {
 export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
   // 订阅语言变更,切语言时即时重渲染
   useLanguage();
+  const { showToast, toastNode } = useToast();
   const shortcuts = useMemo(() => cfg.shortcuts ?? [], [cfg.shortcuts]);
   const allPrompts = useMemo(
     () => [...BUILTIN_PROMPT_OPTIONS, ...(cfg.prompts ?? []).filter((p) => !p.isBuiltin)],
@@ -185,9 +187,15 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
     }
   }, [recordingId]);
 
+  /** 落盘快捷键:失败时提示且不改动上层配置(界面从 cfg 派生,自动回退到已保存状态) */
   async function save(next: ShortcutConfig[]) {
     const updated: AppConfig = { ...cfg, shortcuts: next };
-    await invoke("config_save", { cfg: updated });
+    try {
+      await invoke("config_save", { cfg: updated });
+    } catch (e) {
+      showToast({ text: `${t("shortcuts.saveFailed")}: ${errText(e)}`, ok: false });
+      return;
+    }
     onConfigChange(updated);
   }
 
@@ -635,7 +643,7 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
             }}
           >
               <div className="rb-dialog-hd">
-                <div className="flex ac g9">
+                <div className="flex ac g8">
                   <span className="rb-dialog-mark">
                     <Icon name="plus" size={14} />
                   </span>
@@ -700,14 +708,14 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
       {confirmDel ? (
         <div className="rb-overlay" onClick={() => setConfirmDel(null)}>
           <div
-            className="rb-dialog"
+            className="rb-dialog rb-dialog-sm"
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => {
               if (e.key === "Escape") setConfirmDel(null);
             }}
           >
               <div className="rb-dialog-hd">
-                <div className="flex ac g9">
+                <div className="flex ac g8">
                   <span className="rb-dialog-mark">
                     <Icon name="trash" size={14} />
                   </span>
@@ -807,6 +815,8 @@ export function ShortcutsPage({ cfg, onConfigChange }: ShortcutsPageProps) {
       {paramsTipOpen
         ? createPortal(<div className="rb-params-tip-fixed">{t("ai.paramsTip")}</div>, document.body)
         : null}
+
+      {toastNode}
     </div>
   );
 }

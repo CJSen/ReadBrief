@@ -7,6 +7,7 @@ import type { PromptTag } from "../lib/prompts/builtins";
 import { t, useLanguage } from "../lib/i18n";
 import { invoke } from "@tauri-apps/api/core";
 import { Icon } from "./Icon";
+import { useToast, errText } from "./Toast";
 
 function HighlightText({ content }: { content: string }) {
   const parts = content.split(/(\{\{(?:text|language)\}\})/g);
@@ -34,44 +35,71 @@ export function PromptManager({ cfg, onConfigChange }: PromptManagerProps) {
   // 订阅语言变更,切语言时即时重渲染
   useLanguage();
   const [creating, setCreating] = useState(false);
+  // 编辑器当前编辑的条目 id:null = 新建态
+  const [editingId, setEditingId] = useState<string | null>(null);
+  // 删除二次确认:{id,name} 非空时展示确认弹窗
+  const [confirmDel, setConfirmDel] = useState<{ id: string; name: string } | null>(null);
   const [newName, setNewName] = useState("");
   const [newContent, setNewContent] = useState("");
   const [newTag, setNewTag] = useState<PromptTag>("summary");
 
   const license = useLicense(cfg);
+  const { showToast, toastNode } = useToast();
 
   const userPrompts = (cfg.prompts ?? []).filter((p) => !p.isBuiltin);
   const shortcuts = cfg.shortcuts ?? [];
   const atLimit = !license.pro && userPrompts.length >= FREE_PROMPT_LIMIT;
   const shortcutCount = shortcuts.filter((s) => s.accelerator).length;
 
-  async function savePrompts(next: PromptConfig[]) {
+  /** 落盘:成功返回 true。失败时提示且不改动上层状态(旧值保留,用户可重试) */
+  async function savePrompts(next: PromptConfig[]): Promise<boolean> {
     const updated: AppConfig = { ...cfg, prompts: next };
-    await invoke("config_save", { cfg: updated });
+    try {
+      await invoke("config_save", { cfg: updated });
+    } catch (e) {
+      showToast({ text: `${t("prompts.saveFailed")}: ${errText(e)}`, ok: false });
+      return false;
+    }
     onConfigChange(updated);
+    return true;
   }
 
-  function handleCreate() {
-    if (!newName.trim() || !newContent.trim()) return;
-    const prompt: PromptConfig = {
-      id: `p${crypto.randomUUID()}`,
-      name: newName.trim(),
-      content: newContent.trim(),
-      model: "",
-      shortcut: null,
-      outputFormat: "md",
-      isBuiltin: false,
-      tag: newTag,
-    };
-    void savePrompts([...userPrompts, prompt]);
+  /** 关闭编辑器并清空草稿(取消 / 保存成功后调用) */
+  function closeEditor() {
+    setCreating(false);
+    setEditingId(null);
     setNewName("");
     setNewContent("");
     setNewTag("summary");
-    setCreating(false);
+  }
+
+  async function handleCreate() {
+    if (!newName.trim() || !newContent.trim()) return;
+    const name = newName.trim();
+    const content = newContent.trim();
+    // 编辑态:就地更新字段,保留 id / model / shortcut(避免绑定该提示词的快捷键悬空)
+    // 新建态:追加新条目
+    const next = editingId
+      ? userPrompts.map((p) => (p.id === editingId ? { ...p, name, content, tag: newTag } : p))
+      : [
+          ...userPrompts,
+          {
+            id: `p${crypto.randomUUID()}`,
+            name,
+            content,
+            model: "",
+            shortcut: null,
+            outputFormat: "md" as const,
+            isBuiltin: false,
+            tag: newTag,
+          },
+        ];
+    // 保存失败不关闭编辑器,草稿保留
+    if (await savePrompts(next)) closeEditor();
   }
 
   async function handleDelete(id: string) {
-    void savePrompts(userPrompts.filter((p) => p.id !== id));
+    await savePrompts(userPrompts.filter((p) => p.id !== id));
   }
 
   async function handleCopy(prompt: PromptConfig) {
@@ -135,10 +163,10 @@ export function PromptManager({ cfg, onConfigChange }: PromptManagerProps) {
           <div className="rb-prompt-actions">
             {!isBuiltin ? (
               <button className="iconbtn" title={t("prompts.edit")} onClick={() => {
+                setEditingId(p.id);
                 setNewName(p.name);
                 setNewContent(p.content);
                 setNewTag((p.tag as PromptTag) ?? "summary");
-                handleDelete(p.id);
                 setCreating(true);
               }}>
                 <Icon name="edit" size={14} />
@@ -152,7 +180,7 @@ export function PromptManager({ cfg, onConfigChange }: PromptManagerProps) {
                 className="iconbtn"
                 title={t("prompts.delete")}
                 style={{ color: "var(--rb-error)", opacity: 0.65 }}
-                onClick={() => void handleDelete(p.id)}
+                onClick={() => setConfirmDel({ id: p.id, name: p.name })}
               >
                 <Icon name="trash" size={14} />
               </button>
@@ -174,7 +202,7 @@ export function PromptManager({ cfg, onConfigChange }: PromptManagerProps) {
         </div>
         <button
           className="btn btn-primary btn-sm"
-          onClick={() => { setNewName(""); setNewContent(""); setNewTag("summary"); setCreating(true); }}
+          onClick={() => { setEditingId(null); setNewName(""); setNewContent(""); setNewTag("summary"); setCreating(true); }}
           disabled={atLimit}
         >
           <Icon name="plus" size={14} />
@@ -182,11 +210,11 @@ export function PromptManager({ cfg, onConfigChange }: PromptManagerProps) {
         </button>
       </div>
 
-      {/* 新建编辑器：仅在点击新建后显示 */}
+      {/* 编辑器:新建 / 编辑两态(编辑就地改,取消不写盘) */}
       {creating ? (
         <div className="rb-prompt-editor">
           <div className="rb-prompt-editor-hd">
-            <span>{t("prompts.newEditorTitle")}</span>
+            <span>{editingId ? t("prompts.editEditorTitle") : t("prompts.newEditorTitle")}</span>
             <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
               <span className="tag tag-gray" style={{ fontSize: 10 }}>{t("prompts.custom")}</span>
               <span
@@ -217,7 +245,7 @@ export function PromptManager({ cfg, onConfigChange }: PromptManagerProps) {
             value={newName}
             onChange={(e) => setNewName(e.currentTarget.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && e.metaKey) handleCreate();
+              if (e.key === "Enter" && e.metaKey) void handleCreate();
             }}
             autoFocus
           />
@@ -297,12 +325,12 @@ export function PromptManager({ cfg, onConfigChange }: PromptManagerProps) {
           <div className="rb-prompt-editor-row">
             <span className="muted" style={{ fontSize: 11 }}>{t("prompts.modelHint")}</span>
             <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-              <button className="btn btn-ghost btn-sm" onClick={() => setCreating(false)}>
+              <button className="btn btn-ghost btn-sm" onClick={closeEditor}>
                 {t("prompts.cancel")}
               </button>
               <button
                 className="btn btn-primary btn-sm"
-                onClick={handleCreate}
+                onClick={() => void handleCreate()}
                 disabled={!newName.trim() || !newContent.trim()}
               >
                 {t("prompts.save")}
@@ -317,6 +345,62 @@ export function PromptManager({ cfg, onConfigChange }: PromptManagerProps) {
         {BUILTIN_PROMPTS.map((p) => renderCard(p, true))}
         {userPrompts.map((p) => renderCard(p, false))}
       </div>
+
+      {/* 删除二次确认:不可撤销,确认后才落盘 */}
+      {confirmDel ? (
+        <div className="rb-overlay" onClick={() => setConfirmDel(null)}>
+          <div
+            className="rb-dialog rb-dialog-sm"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setConfirmDel(null);
+            }}
+          >
+            <div className="rb-dialog-hd">
+              <div className="flex ac g8">
+                <span className="rb-dialog-mark">
+                  <Icon name="trash" size={14} />
+                </span>
+                <div>
+                  <div style={{ fontWeight: 500, fontSize: "var(--rb-text-sm)" }}>
+                    {t("prompts.deleteTitle")}
+                  </div>
+                  <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+                    {t("prompts.deleteDesc")}
+                  </div>
+                </div>
+              </div>
+              <button className="iconbtn" onClick={() => setConfirmDel(null)}>
+                <Icon name="close" size={14} />
+              </button>
+            </div>
+            <div className="rb-dialog-body">
+              <div className="rb-confirm-msg">
+                {t("prompts.confirmDelete", { name: confirmDel.name })}
+              </div>
+            </div>
+            <div className="rb-dialog-foot">
+              <button className="btn btn-sm btn-ghost" onClick={() => setConfirmDel(null)}>
+                {t("prompts.cancel")}
+              </button>
+              <button
+                className="btn btn-sm rb-confirm-del"
+                onClick={() => {
+                  const id = confirmDel.id;
+                  setConfirmDel(null);
+                  // 正在编辑该条目时一并收起编辑器,避免编辑已不存在的条目
+                  if (editingId === id) closeEditor();
+                  void handleDelete(id);
+                }}
+              >
+                {t("prompts.delete")}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {toastNode}
     </div>
   );
 }

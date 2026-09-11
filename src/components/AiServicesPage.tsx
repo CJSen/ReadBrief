@@ -349,12 +349,38 @@ export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
 
       {/* 删除服务二次确认 */}
       {confirmDel ? (
-        <div className="rb-svc-form-overlay" onClick={() => setConfirmDel(null)}>
-          <div className="rb-svc-confirm" onClick={(e) => e.stopPropagation()}>
-            <div className="rb-confirm-msg">
-              {t("ai.confirmDelete", { name: confirmDel.name || FORMAT_META[confirmDel.protocol as ProviderType]?.name || confirmDel.protocol })}
+        <div className="rb-overlay" onClick={() => setConfirmDel(null)}>
+          <div className="rb-dialog rb-dialog-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="rb-dialog-hd">
+              <div className="flex ac g8">
+                <span className="rb-dialog-mark">
+                  <Icon name="trash" size={14} />
+                </span>
+                <div>
+                  <div style={{ fontWeight: 500, fontSize: "var(--rb-text-sm)" }}>{t("ai.deleteTitle")}</div>
+                  <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+                    {t("ai.deleteDesc")}
+                  </div>
+                </div>
+              </div>
+              <button className="iconbtn" onClick={() => setConfirmDel(null)}>
+                <Icon name="close" size={14} />
+              </button>
             </div>
-            <div className="rb-confirm-actions">
+            <div className="rb-dialog-body">
+              <div className="rb-confirm-msg">
+                {t("ai.confirmDelete", {
+                  name:
+                    confirmDel.name ||
+                    FORMAT_META[confirmDel.protocol as ProviderType]?.name ||
+                    confirmDel.protocol,
+                })}
+              </div>
+            </div>
+            <div className="rb-dialog-foot">
+              <button className="btn btn-sm btn-ghost" onClick={() => setConfirmDel(null)}>
+                {t("ai.cancel")}
+              </button>
               <button
                 className="btn btn-sm rb-confirm-del"
                 onClick={() => {
@@ -363,10 +389,7 @@ export function AiServicesPage({ cfg, onConfigChange }: AiServicesPageProps) {
                   void handleDelete(id);
                 }}
               >
-                删除
-              </button>
-              <button className="btn btn-sm btn-ghost rb-confirm-cancel" onClick={() => setConfirmDel(null)}>
-                取消
+                {t("ai.delete")}
               </button>
             </div>
           </div>

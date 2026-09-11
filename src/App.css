@@ -3205,6 +3205,11 @@
   box-shadow: var(--rb-shadow-float);
 }
 
+/* 窄版对话框:仅用于删除确认等短文案场景 */
+.rb-dialog-sm {
+  width: 320px;
+}
+
 .rb-dialog-hd {
   padding: 12px 15px;
   border-bottom: 1px solid var(--rb-border-subtle);
