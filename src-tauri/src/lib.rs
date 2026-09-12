@@ -1,4 +1,5 @@
 pub mod ai;
+pub mod autostart;
 pub mod commands;
 pub mod config;
 pub mod db;
@@ -32,7 +33,7 @@ mod windows_tests;
 mod history_tests;
 
 use history::AppState;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
 
@@ -244,36 +245,59 @@ fn install_panic_hook() {
     }));
 }
 
-/// 启动对账：让系统自启动注册状态对齐配置意图(`launch_on_start`)。
+/// 启动对账：让应用内「开机启动」开关与系统实际注册状态保持一致。
 ///
-/// 背景：Windows 上手动双击新版安装包升级时，NSIS 走 uninstall+reinstall 流程，
-/// 卸载脚本会删除 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\ReadBrief` 注册表项，
-/// 而安装脚本不会重新注册（应用内自动更新 `/UPDATE` 模式则不会删该项）。
-/// 由于 `config.json` 默认不随卸载删除（除非用户勾选「删除应用数据」），
-/// 这里在每次启动用配置意图校正系统状态，使升级后首次启动即自愈。
+/// **权威方向：以系统为准。** 用户可能直接在主机的启动项设置里关掉（或打开）ReadBrief
+/// —— macOS「系统设置 → 通用 → 登录项与扩展 → 允许在后台」、Windows「任务管理器 → 启动」
+/// —— 那才是他的真实意愿，应用不能反过来把它改回去。因此：
+///
+/// - 系统里**完全没注册**、而配置意图为开 → 按配置重建。这是升级/清理导致的丢失，不是意愿：
+///   Windows 手动双击安装包升级时 NSIS 走 uninstall+reinstall，卸载脚本会删掉
+///   `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\ReadBrief`，而 `config.json` 默认保留；
+/// - 其余任何不一致（如 macOS 上注册文件在、却被 launchd 覆盖表标为 `disabled`
+///   = 用户在登录项里关掉了）→ **尊重系统**，把真实状态回写配置并广播，使设置页开关显示实情。
+///
+/// 唯一由应用主动改系统的入口，是用户在应用内显式拨动开关（`autostart_set`）。
 fn reconcile_autostart<R: tauri::Runtime>(app: &tauri::App<R>) {
     use tauri_plugin_autostart::ManagerExt;
+    let label = &app.package_info().name;
     let intended = crate::config::load_config().launch_on_start;
-    let current = match app.autolaunch().is_enabled() {
+
+    let registered = match app.autolaunch().is_enabled() {
         Ok(v) => v,
         Err(e) => {
             log::warn!("读取自启动状态失败，跳过启动对账: {e}");
             return;
         }
     };
-    if intended == current {
+    // 注册项在、却被系统标为禁用（macOS launchd 覆盖表）= 用户在启动项设置里关掉了：
+    // 此时 is_enabled() 仍为 true，只看它会误判为「已开启」。
+    let effective = registered && !crate::autostart::disabled_by_launchd(label);
+    if effective == intended {
         return;
     }
-    let res = if intended {
-        app.autolaunch().enable()
-    } else {
-        app.autolaunch().disable()
-    };
-    match res {
-        Ok(()) => log::info!(
-            "自启动已对齐配置意图: {}",
-            if intended { "开启" } else { "关闭" }
-        ),
-        Err(e) => log::warn!("自启动对账失败(意图={intended}): {e}"),
+
+    // 注册缺失 + 意图为开：按配置重建（升级/清理导致的丢失）
+    if !registered && intended {
+        match app.autolaunch().enable() {
+            Ok(()) => log::info!("自启动注册缺失（升级或清理所致），已按配置重建"),
+            Err(e) => log::warn!("重建自启动注册失败: {e}"),
+        }
+        return;
+    }
+
+    // 系统设置里被改过：以系统为准回写配置（warn 级，任何日志配置下都落盘）
+    match crate::config::update_with(|cfg| {
+        cfg.launch_on_start = effective;
+        Ok(())
+    }) {
+        Ok(cfg) => {
+            log::warn!(
+                "系统启动项设置已变化，应用内开关同步为{}",
+                if effective { "开启" } else { "关闭" }
+            );
+            let _ = app.emit("config-changed", &cfg);
+        }
+        Err(e) => log::warn!("回写自启动配置失败: {e}"),
     }
 }

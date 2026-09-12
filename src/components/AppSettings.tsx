@@ -230,8 +230,9 @@ function GeneralPage({
   const [screenAuthing, setScreenAuthing] = useState(false);
 
   // 辅助功能 / 屏幕录制授权状态(仅 macOS 生效):从系统真实状态读取。
-  // 注:开机启动开关改由配置意图(cfg.launchOnStart)驱动,Rust 启动时已对账系统注册表,
-  // 不再用 autostart_status() 覆盖,避免升级后注册表瞬间缺失导致开关误显示。
+  // 开机启动开关同样**以系统为准**:用户可能直接在主机的启动项设置里关掉 ReadBrief,
+  // 那才是真实意愿,故这里读回系统真实状态而非只看配置乐观显示 —— 否则会出现
+  // 「开关显示开、重启却不自启」的假开启。配置侧由 Rust 启动对账按系统回写。
   useEffect(() => {
     invoke<boolean>("accessibility_status")
       .then(setAccessibility)
@@ -239,6 +240,9 @@ function GeneralPage({
     invoke<boolean>("screen_recording_status")
       .then(setScreenRecording)
       .catch(() => setScreenRecording(null));
+    invoke<boolean>("autostart_status")
+      .then(setLaunchOnStart)
+      .catch(() => {});
   }, []);
 
   // 其它窗口(如主窗口引导)改动了开机启动后,经 config-changed 同步到本页开关,
@@ -247,7 +251,8 @@ function GeneralPage({
     setLaunchOnStart(cfg.launchOnStart ?? true);
   }, [cfg.launchOnStart]);
 
-  // 窗口重新聚焦(重新打开设置 / 从系统设置返回)时再检测一次,避免授权状态陈旧
+  // 窗口重新聚焦(重新打开设置 / 从系统设置返回)时再检测一次,避免授权状态陈旧;
+  // 开机启动同理 —— 用户可能刚从「系统设置 → 登录项」回来,同步真实状态
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     let disposed = false;
@@ -260,6 +265,9 @@ function GeneralPage({
         invoke<boolean>("screen_recording_status")
           .then(setScreenRecording)
           .catch(() => setScreenRecording(null));
+        invoke<boolean>("autostart_status")
+          .then(setLaunchOnStart)
+          .catch(() => {});
       })
       .then((fn) => {
         if (disposed) fn();

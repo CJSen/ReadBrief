@@ -193,22 +193,35 @@ mod tests {
     }
 }
 
-/// 开机启动状态(通用设置「开机启动」)
+/// 开机启动状态(通用设置「开机启动」)—— 返回**系统真实状态**,只读不改。
+///
+/// 权威方向是「系统为准」:用户在主机启动项设置里关掉后,这里返回 false,
+/// 前端据此显示实情;配置侧由 `reconcile_autostart` 在启动时按系统回写。
 #[tauri::command]
 pub fn autostart_status(app: tauri::AppHandle) -> AppResult<bool> {
     use tauri_plugin_autostart::ManagerExt;
-    app.autolaunch()
+    let registered = app
+        .autolaunch()
         .is_enabled()
-        .map_err(|e| AppError::from(e.to_string()))
+        .map_err(|e| AppError::from(e.to_string()))?;
+    // 「注册文件在」≠「登录真会启动」:macOS 上 launchd 覆盖表仍可能把该任务标为 disabled,
+    // 那种状态下登录会被直接跳过,必须一并判断,否则会报出「显示开、重启却不自启」的假状态。
+    Ok(registered && !crate::autostart::disabled_by_launchd(&app.package_info().name))
 }
 
-/// 设置开机启动(写入系统 LaunchAgent)
+/// 设置开机启动(写入系统 LaunchAgent)。
+///
+/// 这是**唯一**由应用主动改系统的入口 —— 对应「用户在软件内拨动开关」,属显式授权。
+/// 启动对账不做这类写入,以免覆盖用户在系统设置里的选择。
 #[tauri::command]
 pub fn autostart_set(app: tauri::AppHandle, enabled: bool) -> AppResult<()> {
     use tauri_plugin_autostart::ManagerExt;
     let autolaunch = app.autolaunch();
     if enabled {
         autolaunch.enable().map_err(|e| AppError::from(e.to_string()))?;
+        // 仅写 plist 不够:覆盖表里残留的 disabled 位会让登录时仍跳过该任务。
+        // 用户此刻是在应用内显式开启,清掉禁用位才是他的意图(「关掉再打开开关」也能救回来)。
+        crate::autostart::ensure_enabled(&app.package_info().name);
     } else {
         autolaunch.disable().map_err(|e| AppError::from(e.to_string()))?;
     }

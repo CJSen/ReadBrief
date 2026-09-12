@@ -192,8 +192,13 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
   /** 已点击过屏幕录制授权(用于提示"需重启生效"),避免首次未授权时误提示 */
   const [screenAttempted, setScreenAttempted] = useState(false);
 
-  /* 开机启动:默认开(与设置中心一致),联动系统 LaunchAgent */
+  /* 开机启动:初值取配置(启动对账会按系统真实状态回写配置,故这里拿到的是权威值) */
   const [launchOnStart, setLaunchOnStart] = useState<boolean>(cfg.launchOnStart ?? true);
+
+  // 配置变更时同步开关(启动对账回写 / 其它窗口改动),避免读到挂载瞬间的旧值后误写回配置
+  useEffect(() => {
+    setLaunchOnStart(cfg.launchOnStart ?? true);
+  }, [cfg.launchOnStart]);
 
   /** 未授权辅助功能时点「下一步」的二次确认弹窗 */
   const [showPermConfirm, setShowPermConfirm] = useState(false);
@@ -412,14 +417,10 @@ export function Onboarding({ cfg, onUpdate, onClose }: OnboardingProps) {
     // 保存失败则中断收尾(留在引导里重试),避免"界面已关但配置没落盘"。
     if (!aiSaved && !(await commitServiceIfNeeded())) return;
 
-    // 同步开机启动到系统 LaunchAgent:仅当系统真实状态与目标不一致时才写。
-    // 此前无条件写入,看似幂等,但 OS 层面重复 enable 会重新 load LaunchAgent,
-    // 触发 macOS「登录项」通知;且同一次引导内若拨过开关(toggle 已写过一次)会重复弹。
-    // 比对「系统真实状态」而非 cfg:保证「引导显示开但系统未注册」时仍会写入,已一致则跳过。
-    const sysEnabled = await invoke<boolean>("autostart_status").catch(() => launchOnStart);
-    if (sysEnabled !== launchOnStart) {
-      await invoke("autostart_set", { enabled: launchOnStart }).catch(() => {});
-    }
+    // 注:开机启动**不再在此处补写系统**。系统启动项以用户设置为准,只有用户在软件内拨动
+    // 开关时才改系统(toggleLaunchOnStart 已即时写入);未经操作就覆盖,会与「用户在系统设置
+    // 里主动关掉」的意愿冲突。配置与系统的一致性由 Rust 启动对账保证(以系统为准回写)。
+
     // 步骤3 快捷键/参数覆盖若有变更则落库
     // 参数保存规则与 ShortcutsPage 一致:剥注释后为空或等于 deepseek 预设 → 不落库(回动态默认)
     const scStripped = scExtraParams ? stripJsonComments(scExtraParams).trim() : "";

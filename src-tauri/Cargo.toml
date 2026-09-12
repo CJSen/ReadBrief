@@ -40,6 +40,8 @@ png = "0.17"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = "0.10"
+# 自启动兜底:launchctl 的域目标需要 gui/<uid> 形式,此处取当前用户 uid
+libc = "0.2"
 objc2 = "0.6"
 objc2-app-kit = "0.3"
 objc2-foundation = "0.3"
