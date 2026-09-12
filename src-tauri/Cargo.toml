@@ -53,6 +53,9 @@ selection = "1.2.0"
 [target.'cfg(windows)'.dependencies]
 # 取词:UIA(UI Automation)优先 + 模拟 Ctrl+C 兜底,与 macOS 同源
 selection = "1.2"
+# 读「任务管理器 → 启动」写入的覆盖值(StartupApproved\Run),判定自启动是否被用户在系统层
+# 禁用 —— 与 macOS 侧读 launchctl 覆盖表对称。版本与 auto-launch 0.5 所依赖的一致,共用产物。
+winreg = "0.10"
 # Win32 API:不激活浮层(NSPanel → TOPMOST+NOACTIVATE+TOOLWINDOW)、光标定位、点击外部关闭钩子
 # 版本必须与 Tauri 所依赖的 windows 对齐(本仓库 Tauri 用 0.61.x),否则 win.hwnd() 返回的 HWND
 # 类型(来自 Tauri 的 windows 版本)与我们 Win32 调用的 HWND 类型分属不同 crate 版本而拒绝编译。

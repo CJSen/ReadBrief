@@ -3350,6 +3350,7 @@ dependencies = [
  "tokio",
  "ts-rs",
  "windows 0.61.3",
+ "winreg 0.10.1",
 ]
 
 [[package]]

@@ -251,11 +251,13 @@ fn install_panic_hook() {
 /// —— macOS「系统设置 → 通用 → 登录项与扩展 → 允许在后台」、Windows「任务管理器 → 启动」
 /// —— 那才是他的真实意愿，应用不能反过来把它改回去。因此：
 ///
-/// - 系统里**完全没注册**、而配置意图为开 → 按配置重建。这是升级/清理导致的丢失，不是意愿：
-///   Windows 手动双击安装包升级时 NSIS 走 uninstall+reinstall，卸载脚本会删掉
-///   `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\ReadBrief`，而 `config.json` 默认保留；
-/// - 其余任何不一致（如 macOS 上注册文件在、却被 launchd 覆盖表标为 `disabled`
-///   = 用户在登录项里关掉了）→ **尊重系统**，把真实状态回写配置并广播，使设置页开关显示实情。
+/// - 系统里**完全没注册**、系统层**无用户禁用的痕迹**、而配置意图为开 → 按配置重建。
+///   这是升级/清理导致的丢失，不是意愿：Windows 手动双击安装包升级时 NSIS 走
+///   uninstall+reinstall，卸载脚本会删掉 `HKCU\...\CurrentVersion\Run\ReadBrief`，
+///   而 `config.json` 默认保留；
+/// - 其余任何不一致（macOS 上注册文件在却被打上 launchd 禁用位；Windows 上
+///   `StartupApproved\Run` 记着禁用值）→ **尊重系统**，把真实状态回写配置并广播，
+///   使设置页开关显示实情。
 ///
 /// 唯一由应用主动改系统的入口，是用户在应用内显式拨动开关（`autostart_set`）。
 fn reconcile_autostart<R: tauri::Runtime>(app: &tauri::App<R>) {
@@ -270,15 +272,20 @@ fn reconcile_autostart<R: tauri::Runtime>(app: &tauri::App<R>) {
             return;
         }
     };
-    // 注册项在、却被系统标为禁用（macOS launchd 覆盖表）= 用户在启动项设置里关掉了：
-    // 此时 is_enabled() 仍为 true，只看它会误判为「已开启」。
-    let effective = registered && !crate::autostart::disabled_by_launchd(label);
+    // 系统层（macOS launchd 覆盖表 / Windows StartupApproved）里的禁用标记 = 用户在主机的
+    // 启动项设置里关掉了。必须单独读：macOS 上 is_enabled() 仍为 true，只看它会误判「已开启」；
+    // Windows 上 is_enabled() 会变 false，只看它又会把「用户禁用」误判成「注册丢失」。
+    let disabled = crate::autostart::disabled_by_system(label);
+    let effective = registered && !disabled;
     if effective == intended {
         return;
     }
 
-    // 注册缺失 + 意图为开：按配置重建（升级/清理导致的丢失）
-    if !registered && intended {
+    // 注册缺失 + 意图为开 + 系统层无禁用痕迹：按配置重建（升级/清理导致的丢失）。
+    // 末项守卫不可省：Windows 上用户禁用启动项后 `Run` 值同样会消失（禁用信息改记在
+    // `StartupApproved\Run`），只看 `registered` 会把「用户禁用」当成「注册丢失」写回去，
+    // 等于撤销用户在任务管理器里的选择。
+    if !registered && intended && !disabled {
         match app.autolaunch().enable() {
             Ok(()) => log::info!("自启动注册缺失（升级或清理所致），已按配置重建"),
             Err(e) => log::warn!("重建自启动注册失败: {e}"),

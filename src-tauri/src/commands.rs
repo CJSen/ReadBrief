@@ -204,12 +204,13 @@ pub fn autostart_status(app: tauri::AppHandle) -> AppResult<bool> {
         .autolaunch()
         .is_enabled()
         .map_err(|e| AppError::from(e.to_string()))?;
-    // 「注册文件在」≠「登录真会启动」:macOS 上 launchd 覆盖表仍可能把该任务标为 disabled,
-    // 那种状态下登录会被直接跳过,必须一并判断,否则会报出「显示开、重启却不自启」的假状态。
-    Ok(registered && !crate::autostart::disabled_by_launchd(&app.package_info().name))
+    // 「注册文件在」≠「登录真会启动」:系统层(macOS launchd 覆盖表 / Windows
+    // StartupApproved\Run)仍可能记着禁用标记,那种状态下登录会被直接跳过,
+    // 必须一并判断,否则会报出「显示开、重启却不自启」的假状态。
+    Ok(registered && !crate::autostart::disabled_by_system(&app.package_info().name))
 }
 
-/// 设置开机启动(写入系统 LaunchAgent)。
+/// 设置开机启动(写入系统自启动注册)。
 ///
 /// 这是**唯一**由应用主动改系统的入口 —— 对应「用户在软件内拨动开关」,属显式授权。
 /// 启动对账不做这类写入,以免覆盖用户在系统设置里的选择。
@@ -219,8 +220,8 @@ pub fn autostart_set(app: tauri::AppHandle, enabled: bool) -> AppResult<()> {
     let autolaunch = app.autolaunch();
     if enabled {
         autolaunch.enable().map_err(|e| AppError::from(e.to_string()))?;
-        // 仅写 plist 不够:覆盖表里残留的 disabled 位会让登录时仍跳过该任务。
-        // 用户此刻是在应用内显式开启,清掉禁用位才是他的意图(「关掉再打开开关」也能救回来)。
+        // 仅写注册文件不够:系统层残留的禁用标记会让登录时仍跳过该任务。
+        // 用户此刻是在应用内显式开启,清掉禁用标记才是他的意图(「关掉再打开开关」也能救回来)。
         crate::autostart::ensure_enabled(&app.package_info().name);
     } else {
         autolaunch.disable().map_err(|e| AppError::from(e.to_string()))?;
