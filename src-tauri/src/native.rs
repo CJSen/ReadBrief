@@ -530,18 +530,17 @@ pub fn show_overlay(app: &AppHandle) {
         position_near_cursor(app, &win, mouse);
     }
 
-    // 5. 显示 + 成为 key window:用 orderFront + makeKeyWindow,不用 makeKeyAndOrderFront。
+    // 5. 显示:用 orderFront,不用 makeKeyAndOrderFront。
     //    关键区别:makeKeyAndOrderFront 会**强制窗口服务同步合成显示**,与上方
     //    setAlphaValue(0.0) 竞速 —— alpha=0 尚未提交时窗口已按 alpha=1 在旧位置合成一帧
     //    → 用户看到「闪一下再到鼠标位置」(闪现根因)。orderFront 是延迟合成,alpha=0 先
     //    生效,窗口变可见时已透明,不会闪。
-    //    makeKeyWindow 让面板成为 key(NonactivatingPanel + canBecomeKeyWindow=YES,不激活应用),
-    //    键盘事件 / Esc / ⌘C / 失焦关闭链路由此恢复。无需 activateIgnoringOtherApps 兜底 ——
-    //    日志实测 isKeyWindow=true(makeKey 成功),且应用已是 Accessory 形态(IME 由 Accessory
-    //    策略保证,见 lib.rs set_activation_policy,与显示调用无关)。
+    //    注意:此处【不再 makeKeyWindow】—— 划词取词(AX 读取 + AppleScript ⌘C 兜底)
+    //    依赖目标应用持有键盘焦点;若面板在取词期间抢走 key 地位,⌘C 会打到浮窗自身
+    //    → 取词失败("No selected element" / clipboard -1700)。成为 key 推迟到取词完成,
+    //    由 float_make_key() 执行(见 shortcuts.rs capture_async)。
     if let Some(ns_window) = float_ns_window(&win) {
         ns_window.orderFront(None);
-        ns_window.makeKeyWindow();
     }
 
     // 6. 光标附近定位(窗口已显示但透明, set_position 此时一定生效)
@@ -570,6 +569,43 @@ pub fn show_overlay(app: &AppHandle) {
     if let Some(ns_window) = float_ns_window(&win) {
         ns_window.setAlphaValue(1.0);
     }
+}
+
+/// 让浮窗成为 key window(划词取词完成后调用,见 show_overlay 内注释)。
+/// macOS:makeKeyWindow + 重设 first responder = WKWebView(恢复键盘 / IME / 失焦关闭链路)。
+/// Windows:activate_float_window(SetForegroundWindow + SetFocus)。
+/// macOS 的 NSWindow 操作必须在主线程(AppKit 约束),经 run_on_main_thread 派发。
+pub fn float_make_key(app: &AppHandle) {
+    #[cfg(target_os = "macos")]
+    {
+        let app2 = app.clone();
+        let _ = app2.clone().run_on_main_thread(move || {
+            use objc2_app_kit::NSResponder;
+            if let Some(win) = app2.get_webview_window("float") {
+                if let Some(ns_window) = float_ns_window(&win) {
+                    ns_window.makeKeyWindow();
+                    if let Some(content_view) = ns_window.contentView() {
+                        if let Some(wk) = find_wkwebview(&content_view) {
+                            let responder: objc2::rc::Retained<NSResponder> = wk.into_super();
+                            ns_window.makeFirstResponder(Some(&responder));
+                        }
+                    }
+                }
+            }
+        });
+    }
+    #[cfg(windows)]
+    {
+        if let Some(win) = app.get_webview_window("float") {
+            if let Ok(hwnd) = win.hwnd() {
+                unsafe {
+                    activate_float_window(hwnd);
+                }
+            }
+        }
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    let _ = app;
 }
 
 /// Windows 上让浮窗「呼出即可用快捷键」:等价于 macOS 的 makeKeyWindow + makeFirstResponder。
@@ -625,9 +661,9 @@ pub fn show_overlay(app: &AppHandle) {
                 0,
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
             );
-            // 等价于 macOS makeKeyWindow + makeFirstResponder:显式置前+聚焦,
-            // 让 WebView 立即持有键盘焦点 → 呼出后无需点击即可用 ⌘/Ctrl+C/R/P 等快捷键。
-            activate_float_window(hwnd);
+            // 等价于 macOS makeKeyWindow + makeFirstResponder 的显式置前+聚焦已【移除】:
+            // activate_float_window 会抢走前台焦点,导致 UIA/Ctrl+C 取词打不到目标应用。
+            // 改为取词完成后由 float_make_key() 置前+聚焦(见 shortcuts.rs capture_async)。
         }
     }
 }

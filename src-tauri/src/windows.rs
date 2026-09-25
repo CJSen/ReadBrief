@@ -67,6 +67,8 @@ pub fn float_set_state(app: tauri::AppHandle, state: u8, fixed: bool) -> AppResu
 #[tauri::command]
 pub fn float_show(app: tauri::AppHandle) -> AppResult<()> {
     show_float(&app);
+    // 前端主动呼出:非取词路径,无焦点竞争,直接成为 key(呼出即可输入)
+    crate::native::float_make_key(&app);
     Ok(())
 }
 
@@ -92,6 +94,8 @@ pub fn float_regenerate(app: tauri::AppHandle, text: String) -> AppResult<()> {
         );
     }
     show_float(&app);
+    // 历史重新生成:无划词取词,直接成为 key
+    crate::native::float_make_key(&app);
     Ok(())
 }
 
@@ -99,6 +103,8 @@ pub fn float_regenerate(app: tauri::AppHandle, text: String) -> AppResult<()> {
 pub fn float_toggle(app: tauri::AppHandle) -> AppResult<()> {
     if FLOAT_VISIBLE.load(Ordering::SeqCst) == 0 {
         show_float(&app);
+        // 非取词路径,直接成为 key
+        crate::native::float_make_key(&app);
     } else {
         hide_float(&app);
     }

@@ -172,6 +172,26 @@ pub fn reload_shortcuts(app: &tauri::AppHandle) -> AppResult<()> {
     Ok(())
 }
 
+/// 后台线程执行取词并把结果派发到浮窗(P0 优化)。
+/// 取词(AX 跨进程读取 / AppleScript ⌘C 兜底)耗时可达数百 ms~1s,
+/// 旧实现同步执行在 show_float 之前 → 浮窗要等取词结束才出现。
+/// 现改为「先显示浮窗,取词异步进行」,结果经 capture-result 到达后由前端填入并自动总结。
+/// 注意:emit("float-shown")(resetSession 新会话)已由调用方先行发出,保证先于 capture-result。
+fn capture_async(app: &tauri::AppHandle, service_id: Option<String>, extra_params: Option<String>, prompt_id: Option<String>) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let mut captured = capture_selection(app.clone());
+        captured.prompt_id = prompt_id;
+        captured.service_id = service_id;
+        // 快捷键级附加参数带到前端,请求时深合并覆盖服务级(见 ai.rs)
+        captured.extra_params = extra_params;
+        dispatch_capture(&app, captured);
+        // 取词结束(无论成败)后才让浮窗成为 key window:
+        // 取词(AX + ⌘C 兜底)依赖目标应用持有键盘焦点,浮窗提前抢 key 会导致取词失败。
+        crate::native::float_make_key(&app);
+    });
+}
+
 fn handle_trigger(app: tauri::AppHandle, action: String, prompt_id: Option<String>, service_id: Option<String>, extra_params: Option<String>) {
     // 只记 action/绑定标识等元数据,不记任何文本内容
     log::info!(
@@ -191,23 +211,19 @@ fn handle_trigger(app: tauri::AppHandle, action: String, prompt_id: Option<Strin
             // 面板已显示时(如总结进行中用户误按全局快捷键)不 reset,避免丢失正在进行的会话数据;
             // 新捕获仍会经 dispatch_capture 更新输入并重新总结。
             let was_visible = crate::windows::is_float_visible();
-            // 预捕获鼠标位置:在 capture_selection(耗时 AX 读取)之前采集,
-            // 避免到 show_overlay 主线程执行时鼠标已移动 → 浮窗跟随鼠标。
+            // 预捕获鼠标位置:在后台取词线程启动前采集,避免浮窗跟随鼠标(见 stash_cursor_position 注释)
             crate::native::stash_cursor_position();
-            let mut captured = capture_selection(app.clone());
-            // 快捷键若绑定了 AI 服务(引用式),经此分支带到前端,
-            // 前端按 service_id 解析出该服务的模型/密钥,改服务配置即自动跟随。
-            captured.service_id = service_id;
-            // 快捷键级附加参数带到前端,请求时深合并覆盖服务级(见 ai.rs)
-            captured.extra_params = extra_params;
+            // 先显示浮窗(P0:取词异步化),再后台线程取词
             crate::windows::show_float(&app);
             if !was_visible {
                 let _ = app.emit("float-shown", ());
             }
-            dispatch_capture(&app, captured);
+            capture_async(&app, service_id, extra_params, None);
         }
         "toggle-float" => {
             crate::windows::show_float(&app);
+            // 非取词路径,无焦点竞争,直接成为 key(呼出即可输入)
+            crate::native::float_make_key(&app);
             let _ = app.emit("toggle-float-window", ());
         }
         // 打开主窗口(状态栏菜单 / 快捷键设置项):仅聚焦主窗口,无需捕获文本
@@ -222,17 +238,12 @@ fn handle_trigger(app: tauri::AppHandle, action: String, prompt_id: Option<Strin
             }
             let was_visible = crate::windows::is_float_visible();
             crate::native::stash_cursor_position();
-            let captured = capture_selection(app.clone());
-            let mut with_prompt = captured;
-            with_prompt.prompt_id = prompt_id;
-            with_prompt.service_id = service_id;
-            // 快捷键级附加参数带到前端,请求时深合并覆盖服务级(见 ai.rs)
-            with_prompt.extra_params = extra_params;
+            // 先显示浮窗(P0:取词异步化),再后台线程取词
             crate::windows::show_float(&app);
             if !was_visible {
                 let _ = app.emit("float-shown", ());
             }
-            dispatch_capture(&app, with_prompt);
+            capture_async(&app, service_id, extra_params, prompt_id);
         }
         _ => {
             // 未知 action:显式告警而非静默吞噬,便于排查配置错误
